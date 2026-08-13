@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#f7f8fa">
+    <title>Circle Grid Composer</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/p5@2.2.3/lib/p5.min.js"></script>
+</head>
+<body>
+    <main id="sketch" aria-label="Generative circle grid"></main>
+    <div id="export-ui"></div>
+    <p id="grid-keyboard-instructions" class="visually-hidden">
+        In the interactive grid composition, use the arrow keys to choose a cell, Enter to cycle its base size, and Space to subdivide a circle.
+    </p>
+    <p id="grid-announcer" class="visually-hidden" aria-live="polite" aria-atomic="true"></p>
+    <script type="module" src="sketch.js"></script>
+</body>
+</html>
