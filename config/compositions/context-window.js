@@ -8,15 +8,18 @@ export const CONTEXT_WINDOW_CONFIG = {
     contextWindow: {
       longSideCells: 8,
       dotMargin: 0.07,
-      palette: "green",
       tokenSeconds: 2.2,
       layerPasses: 8,
       flipSeconds: 0.016,
-      finalSnapshotFlicker: {
-        enabled: true,
-        speed: 1.2,
-        spatialScale: 0.2,
+      // Only the final attention snapshot and the committed dot flicker.
+      flicker: {
         amount: 1,
+        modes: {
+          noise: {
+            speed: 1.2,
+            spatialScale: 0.2,
+          },
+        },
       },
     },
   },

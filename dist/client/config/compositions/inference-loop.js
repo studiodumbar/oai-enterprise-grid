@@ -5,18 +5,25 @@ export const INFERENCE_LOOP_CONFIG = {
     inferenceLoop: {
       longSideCells: 8,
       dotMargin: 0.02,
-      palette: "green",
       tokenSeconds: 2.6,
       layerPasses: 8,
       flipSeconds: 0.016,
-      candidateFlicker: {
-        enabled: true,
-        speed: 0.55,
-        spatialScale: 0.24,
+      // Flicker starts on the selected candidate and follows outward. The
+      // envelope fractions are this composition's own timing; app-wide flicker
+      // defaults live in config/global.js.
+      flicker: {
         amount: 0.9,
-        leadFraction: 0.18,
-        spreadFraction: 0.6,
-        rampFraction: 0.22,
+        modes: {
+          noise: {
+            speed: 0.55,
+            spatialScale: 0.24,
+          },
+        },
+        envelope: {
+          leadFraction: 0.18,
+          spreadFraction: 0.6,
+          rampFraction: 0.22,
+        },
       },
     },
   },

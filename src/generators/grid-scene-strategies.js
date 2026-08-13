@@ -79,7 +79,7 @@ function clampPaletteStep(value) {
   );
 }
 
-function hashUnit(first, second, third = 0) {
+export function hashUnit(first, second, third = 0) {
   let value = Math.imul((first | 0) ^ 0x9e3779b9, 0x85ebca6b);
   value ^= Math.imul((second | 0) ^ 0xc2b2ae35, 0x27d4eb2f);
   value ^= Math.imul((third | 0) ^ 0x165667b1, 0x9e3779b1);
@@ -447,16 +447,16 @@ function createInferenceLoopScene({ layout, cycleIndex, progress, options }) {
   const faces = dimInferenceContext(finalPass, layout.readoutIndex);
   const candidateCount = 1 << (MAX_GRID_FACE_LEVEL * 2);
   const distribution = candidateDistributionAt(cycleIndex, candidateCount);
-  const candidatePaletteMotion = options.candidateFlicker?.enabled === true
+  const candidatePaletteMotion = options.flicker?.enabled === true
     ? {
       kind: "candidate-follow",
       candidateCount,
       selectedIndex: distribution.selectedIndex,
       startProgress: INFERENCE_LOOP_PHASES.parallelEnd,
       endProgress: INFERENCE_LOOP_PHASES.selectionEnd,
-      leadFraction: options.candidateFlicker.leadFraction ?? 0.18,
-      spreadFraction: options.candidateFlicker.spreadFraction ?? 0.6,
-      rampFraction: options.candidateFlicker.rampFraction ?? 0.22,
+      leadFraction: options.flicker.envelope?.leadFraction ?? 0.18,
+      spreadFraction: options.flicker.envelope?.spreadFraction ?? 0.6,
+      rampFraction: options.flicker.envelope?.rampFraction ?? 0.22,
     }
     : null;
   if (phase === "candidates" || phase === "selection") {
@@ -634,7 +634,7 @@ function createContextWindowScene({ layout, cycleIndex, progress, options }) {
   const isFinalSnapshot = snapshotIndex === options.layerPasses - 1
     && (phase === "attention" || phase === "readout");
   let paletteMotion = null;
-  if (options.finalSnapshotFlicker?.enabled === true) {
+  if (options.flicker?.enabled === true) {
     if (isFinalSnapshot) {
       paletteMotion = {
         kind: "context-window-final-snapshot",
@@ -821,7 +821,7 @@ function createToolLoopScene({ layout, cycleIndex, progress, options }) {
     faces[index] = emptyThinkingFace("tool-boundary-whitespace");
   }
   let paletteMotion = null;
-  if (options.highDensityFlicker?.enabled === true) {
+  if (options.flicker?.enabled === true) {
     const indices = [];
     for (let index = 0; index < faces.length; index += 1) {
       if (faces[index].level >= 3) indices.push(index);
@@ -1051,13 +1051,13 @@ function createVoronoiScene({ layout, cycleIndex, progress, options }) {
     faces[selectedSiteIndex] = makeFace(0, 3, "voronoi-commit");
   }
 
-  const boundaryNeighbors = options.regionFlicker?.enabled === true
+  const boundaryNeighbors = options.flicker?.enabled === true
     && (phase === "partition" || phase === "consensus")
     ? visibleVoronoiBoundaryNeighbors(layout, boundaryIndices, faces)
     : [];
   const firmBoundary = new Set(boundaryNeighbors);
   const regionInterior = [];
-  if (options.regionFlicker?.enabled === true) {
+  if (options.flicker?.enabled === true) {
     for (let index = 0; index < faces.length; index += 1) {
       const face = faces[index];
       if (face.level < 0 || firmBoundary.has(index)) continue;
@@ -1238,7 +1238,7 @@ function createLTreeScene({ layout, cycleIndex, progress, options }) {
   const tree = lTreeForLayout(layout, cycleIndex, layerPasses);
   const faces = faceArray(layout, "l-tree-whitespace");
   const selectedPath = new Set(tree.selectedPathIndices);
-  const layerFlicker = options.layerFlicker;
+  const layerFlicker = options.flicker;
   let paletteMotion = null;
   let stepIndex = 0;
 
@@ -1256,7 +1256,7 @@ function createLTreeScene({ layout, cycleIndex, progress, options }) {
       );
     }
     if (layerFlicker?.enabled === true) {
-      const edgeFraction = layerFlicker.layerEdgeFraction ?? 0.2;
+      const edgeFraction = layerFlicker.envelope?.layerEdgeFraction ?? 0.2;
       const layerProgress = growPosition - Math.floor(growPosition);
       paletteMotion = {
         kind: "l-tree-current-layer",
@@ -1291,7 +1291,7 @@ function createLTreeScene({ layout, cycleIndex, progress, options }) {
         kind: "l-tree-terminal-line",
         indices: tree.selectedPathIndices,
         amount: smoothstep01(
-          prunePosition / (layerFlicker.terminalRampFraction ?? 0.24),
+          prunePosition / (layerFlicker.envelope?.terminalRampFraction ?? 0.24),
         ),
       };
     }
@@ -1505,15 +1505,15 @@ function createGameOfLifeScene({ layout, cycleIndex, progress, options }) {
     }
   }
 
-  const birthFlicker = options.birthFlicker;
+  const birthFlicker = options.flicker;
   const paletteMotion = birthFlicker?.enabled === true && bornIndices.length > 0
     ? {
       kind: "game-of-life-births",
       indices: bornIndices,
       amount: smoothstep01(
-        generationProgress / (birthFlicker.edgeFraction ?? 0.18),
+        generationProgress / (birthFlicker.envelope?.edgeFraction ?? 0.18),
       ) * smoothstep01(
-        (1 - generationProgress) / (birthFlicker.edgeFraction ?? 0.18),
+        (1 - generationProgress) / (birthFlicker.envelope?.edgeFraction ?? 0.18),
       ),
     }
     : null;

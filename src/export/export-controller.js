@@ -266,9 +266,14 @@ export function createExportController({
     }
   }
 
-  async function run() {
-    if (exporting) return;
+  // `notify` is on for the panel button and off for the console, which
+  // summarises failures itself instead of stacking alert dialogs.
+  async function run({ notify = true } = {}) {
+    if (exporting) {
+      return { ok: false, error: new Error("An export is already running.") };
+    }
     exporting = true;
+    let failure = null;
     const wasLooping = typeof p.isLooping === "function" ? p.isLooping() : true;
     const exportDate = new Date();
     const base = exportBaseName(exportDate);
@@ -295,8 +300,9 @@ export function createExportController({
         await exportMotion(payload, names, "mp4");
       }
     } catch (error) {
+      failure = error;
       console.error("Export failed:", error);
-      window.alert(`Export failed: ${error.message}`);
+      if (notify) window.alert(`Export failed: ${error.message}`);
     } finally {
       panel.setProgress();
       panel.setLocked(false);
@@ -307,6 +313,7 @@ export function createExportController({
         exporting = false;
       }
     }
+    return failure ? { ok: false, error: failure } : { ok: true };
   }
 
   function restorePayload(saved) {

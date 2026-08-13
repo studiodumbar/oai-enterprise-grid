@@ -3,9 +3,6 @@ import {
   CELLULAR_AUTOMATA_STRATEGIES,
   createCellularAutomataSceneAt,
 } from "./grid-scene-strategies.js";
-import {
-  normalizeOrganicPaletteMotionOptions,
-} from "../visuals/organic-palette-motion.js";
 
 export const DEFAULT_CELLULAR_AUTOMATA_OPTIONS = Object.freeze({
   cycleSeconds: 2.4,
@@ -53,12 +50,9 @@ function validateAutomataOptions(options) {
   if (typeof options.wrapEdges !== "boolean") {
     throw new TypeError("wrapEdges must be a boolean.");
   }
-  if (options.birthFlicker) {
-    normalizeOrganicPaletteMotionOptions(options.birthFlicker);
-    const edgeFraction = options.birthFlicker.edgeFraction ?? 0.18;
-    if (!Number.isFinite(edgeFraction) || edgeFraction <= 0 || edgeFraction > 0.5) {
-      throw new RangeError("birthFlicker.edgeFraction must be between zero and 0.5.");
-    }
+  const edgeFraction = options.flicker?.envelope?.edgeFraction ?? 0.18;
+  if (!Number.isFinite(edgeFraction) || edgeFraction <= 0 || edgeFraction > 0.5) {
+    throw new RangeError("flicker.envelope.edgeFraction must be between zero and 0.5.");
   }
 }
 

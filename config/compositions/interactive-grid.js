@@ -6,7 +6,6 @@ export const INTERACTIVE_GRID_CONFIG = {
       longSideCells: 5,
       dotMargin: 0.07,
       showCellGrid: false,
-      palette: "green",
       colorCycleSeconds: 2,
       colorTransition: {
         // Dot-face motion used inside snake, diamond, and row patterns.

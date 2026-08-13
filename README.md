@@ -191,6 +191,8 @@ footprint test.
 
 The panel in the upper-right uses the application's Canvas2D generators for
 both preview and export; it never records the screen or a real-time animation.
+A fresh session starts on the default delivery format: MP4 motion at 1080p,
+1920x1080 horizontal, 30 fps, with project state embedded.
 Static exports are PNG and standalone SVG. Motion exports are MP4, transparent
 WebM, and a numbered PNG sequence. Resolution and aspect presets update the
 authoritative width and height fields, and video dimensions are rounded down to
@@ -221,13 +223,48 @@ chosen folder when the File System Access API is available, otherwise the app
 downloads one store-only ZIP. Video export requires a browser with a compatible
 WebCodecs encoder and reports a browser-support error when none is available.
 
+### Console commands
+
+Every export control is also reachable from the browser console. The global
+`cg` accepts a command line either as a tagged template or as a plain string,
+because `export` is a reserved word and cannot be a global of its own:
+
+```js
+cg`export --all --mp4`
+cg("export --all --mp4")
+```
+
+`cg`help`` prints the full reference. The commands are `help`, `list`,
+`status`, `use <composition>`, `export [flags]`, and `panel show|hide|toggle`
+(`ui` and `tab` are aliases of `panel`).
+
+Export flags set the same state the panel edits, so the panel stays in sync
+after a console run: `--png`, `--svg`, `--mp4`, `--webm`, `--png-sequence`, or
+`--format <name>` choose the format and switch the workflow between static and
+motion; `--aspect`, `--resolution`, `--width`, and `--height` set the output
+frame; `--fps` applies to motion formats; `--transparent` and `--embed-state`
+take a `--no-` prefix to clear them. Values also accept `--flag=value`.
+
+`--all` exports every canonical composition in turn, skipping legacy aliases,
+and returns to the composition that was live when the command started.
+`--composition a,b` (short `-c`) exports a named subset. A composition that
+cannot produce the requested format — a continuous simulation asked for motion,
+for instance — is reported in the returned summary instead of raising an alert
+dialog, and the remaining compositions still run. `--dry-run` applies the
+settings and returns the plan without exporting.
+
+Each command resolves to a result object (`{ ok, compositions, results, … }`),
+so a failed batch can be inspected in the console. `panel show` and `panel
+hide` mount and unmount the export panel at runtime; the checked-in default
+comes from `ui.showExportPanel` in `config/global.js`.
+
 ## Architecture
 
 ```text
 p5js/
 ├── config.js                     public facade and assembled compatibility exports
 ├── config/
-│   ├── global.js                 canvas, default composition, and palettes
+│   ├── global.js                 canvas, default composition, palette, and palettes
 │   ├── shared.js                 settings reused across composition families
 │   └── compositions/
 │       ├── inference-loop.js     inference-loop settings, instance, and recipes
@@ -317,8 +354,10 @@ cell-transition strategies, so changing between them does not restart the
 simulation.
 
 Configuration is authored at its narrowest scope. `GLOBAL_CONFIG.canvas`,
-`GLOBAL_CONFIG.composition`, and `GLOBAL_CONFIG.palettes` contain app-wide
-values. `SHARED_CONFIG.settings.cellTransitions` contains reusable motion
+`GLOBAL_CONFIG.composition`, `GLOBAL_CONFIG.flicker`, `GLOBAL_CONFIG.palette`,
+and `GLOBAL_CONFIG.palettes` contain app-wide values. `GLOBAL_CONFIG.palette`
+names the palette every composition uses; a composition overrides it only by
+authoring its own `palette` in its settings group. `SHARED_CONFIG.settings.cellTransitions` contains reusable motion
 presets, while the flock settings live with the flock-grid family in
 `config/compositions/flock-grid.js`.
 Every public composition's editable values, configured instance, and recipe
@@ -415,6 +454,7 @@ export const RIPPLE_FIELD_CONFIG = {
   settings: {
     rippleField: {
       longSideCells: 9,
+      // Omit `palette` to inherit GLOBAL_CONFIG.palette.
       palette: "green",
       cycleSeconds: 2.4,
       stepCount: 8,
@@ -448,6 +488,127 @@ once per frame, and draws in plan order. `opacity` on a plan entry is inherited
 Canvas draw alpha. Discrete circle-face state changes still use the blank hinge;
 they do not crossfade outgoing and incoming patterns. Generators that share a
 render plan should draw without clearing the main canvas themselves.
+
+## Flicker modes
+
+Flickering is the per-dot palette agitation every discrete circle-grid
+composition uses. It is split into three parts that change independently:
+
+1. **The mode** decides what each dot does. A mode owns one field —
+   `sampleAt(x, y, time)` returning a normalized `0..1` intensity — plus the
+   settings that field needs. Modes live in `src/visuals/flicker/` and are
+   registered in `src/visuals/flicker/index.js`. **The scope** decides where that
+   field is addressed: `"canvas"` runs one pattern across the whole board, so
+   each cell shows only its own slice of it; `"cell"` restarts the pattern inside
+   every cell, so each cell plays the whole thing and all cells play it
+   identically. A mode never sees the scope — the renderer chooses which
+   coordinates reach `sampleAt`, and hands the field a one-cell grid extent under
+   cell scope. Because every cell then reads the same field, cell scope also
+   offsets each cell's clock by a deterministic slice of `cellStaggerSeconds`, or
+   the whole board pulses in unison; set it to `0` to keep the cells in step.
+2. **The scene mask and envelope** decide which cells flicker this frame and how
+   strongly. Each strategy in `src/generators/grid-scene-strategies.js` returns
+   that as its `paletteMotion` entry, using its own envelope fractions.
+3. **Palette snapping** turns a sample into one authored swatch.
+   `FlickerPalette` does this for every mode, so colors still snap and never
+   ease between values.
+
+### Registered modes
+
+| Mode | Field | Ported from | Distribution |
+| --- | --- | --- | --- |
+| `noise` | One continuous 3D noise field, so neighboring dots agitate together in drifting clouds. | — | `auto` |
+| `echo-ring` | Concentric diamond rings pulse outward from the field center, each ring trailing a softer echo. | `dotm-square-11` + `.dmx-ripple-echo` | `level` |
+| `strobe-stack` | Columns stack upward on a per-column stagger, the full field blinks twice, then the columns drain downward. | `dotm-square-8` | `level` |
+| `block-drop` | Frames drop and pile up from the bottom, then two row-clear beats flash the field before it empties. | `dotm-square-7` | `level` |
+| `prism-bloom` | A symmetric kaleidoscope breathes out through four radial motifs and back, crossfading between them. | `dotm-square-14` | `level` |
+| `crt-glide` | A scanline steps down the field; passed rows keep a decaying phosphor trail with a column-wise warp. | `dotm-square-10` | `level` |
+| `radar-arc` | A rotating arm sweeps the field with a bright beam front, a soft wake, and a faint perimeter ring echo. | `dotm-circular-4` | `level` |
+
+Every ported loader is authored against a fixed 5x5 matrix. `FieldGeometry` in
+`src/visuals/flicker/field-geometry.js` maps a dot's position into that space, so
+a motif keeps its shape whether the field is the whole board or a single cell.
+Modes that read a literal frame mask (`block-drop`, `prism-bloom`) sample the
+nearest of five virtual rows and columns; `radar-arc` uses the loader's centered
+`-2..2` space. Each mode's own numbers — cycle length, stagger, decay, beam width
+— come straight from the loader, and only `baseIntensity` is normally worth
+retuning, since it sets which swatch an unlit dot rests on.
+
+`echo-ring` keeps the loader's own numbers: rings are Manhattan bands around the
+center, each ring lags `ringDelayFraction` (0.14) of a cycle, odd rings lag
+`echoDelayFraction` (0.03) more, and the pulse follows the loader's four
+`ease-in-out` keyframes. `ringCount` (5, as in the loader's 5x5 matrix) is the
+number of bands spanning the field from its center to its furthest corner. Ring
+width is derived from whatever field the mode was handed, so the same value reads
+the same whether that field is the whole board or a single cell — a ring width
+fixed in dots would put an entire cell in one ring under cell scope and flatten
+the pattern.
+
+One authored block controls all of it. App-wide defaults live in
+`GLOBAL_CONFIG.flicker`; a composition overrides only what it needs:
+
+```js
+flicker: {
+  enabled: true,
+  mode: "noise",      // which field agitates the dots
+  scope: "canvas",    // one board-wide pattern, or one pattern per cell
+  amount: 0.9,        // how far a dot may leave its base palette step
+  cellStaggerSeconds: 0.9, // cell scope: spread cell starts so they desynchronize
+  modes: {            // settings owned by each mode, kept side by side so
+    noise: {          // swapping `mode` does not lose the other tunings
+      speed: 0.55,
+      spatialScale: 0.24,
+    },
+  },
+  envelope: {         // this composition's own fade and ramp fractions
+    leadFraction: 0.18,
+    spreadFraction: 0.6,
+    rampFraction: 0.22,
+  },
+}
+```
+
+Root `config.js` merges the global block into every settings group that declares
+`flicker`, so `SETTINGS` — not the composition file alone — is the resolved
+authoring result. Settings for every registered mode are validated when a
+generator is built, which lets `generator.useFlickerMode(name)` swap the field
+mid-composition without an authoring error surfacing at that moment. A legacy
+per-composition block (`candidateFlicker`, `layerFlicker`, `birthFlicker`,
+`highDensityFlicker`, `finalSnapshotFlicker`, `regionFlicker`) still resolves to
+the same shape.
+
+To add a mode, export a descriptor and register it:
+
+```js
+export const SWEEP_FLICKER_MODE = Object.freeze({
+  name: "sweep",
+  // "level" maps the sample straight onto the palette as a brightness, which is
+  // what pattern fields want; "value" bands it so a continuous signal still
+  // revisits every swatch; "rank" spreads a cell's dots evenly across the
+  // palette by sample order; "auto" ranks only while a cell holds at least one
+  // dot per swatch.
+  distribution: "level",
+  defaults: Object.freeze({ columnsPerSecond: 2, softness: 0.25 }),
+  normalize(settings) {
+    // Throw on invalid authored values.
+    return { ...SWEEP_FLICKER_MODE.defaults, ...settings };
+  },
+  createField({ settings, grid, noiseFunction }) {
+    return {
+      sampleAt(x, y, time) { /* return 0..1 */ },
+      resize(nextGrid) {},              // optional: grid extent changed
+      beginFrame({ time, progress, cycleIndex }) {}, // optional: once per update
+    };
+  },
+});
+```
+
+A field must be deterministic — the same arguments always return the same
+sample — so exported frames match the live canvas. Coordinates arrive in finest
+subdivision units across the whole board, and `grid` carries `columns`, `rows`,
+`cellSize`, and `dotsPerCellAxis` for fields that place a sweep, ripple, or route
+across the board. Modes never see palettes, cell masks, or envelopes, so any
+registered mode drops into any composition by name alone.
 
 ## Adding a composition rule
 

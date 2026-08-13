@@ -4,9 +4,6 @@ import {
   candidateFlickerAmountAt,
   createInferenceGridSceneAt,
 } from "./grid-scene-strategies.js";
-import {
-  normalizeOrganicPaletteMotionOptions,
-} from "../visuals/organic-palette-motion.js";
 
 export const DEFAULT_INFERENCE_GRID_OPTIONS = Object.freeze({
   cycleSeconds: 2.4,
@@ -25,22 +22,19 @@ function validateInferenceOptions(options) {
       "tool-loop requires at least 5 long-side cells for both fields and gutters.",
     );
   }
-  if (options.strategy === "inference-loop" && options.candidateFlicker?.enabled) {
+  // Shared flicker settings are already validated; only this strategy's own
+  // envelope needs checking, which the amount function does by construction.
+  if (options.strategy === "inference-loop" && options.flicker?.enabled) {
+    const envelope = options.flicker.envelope ?? {};
     candidateFlickerAmountAt({
       candidateIndex: 0,
       selectedIndex: 0,
       candidateCount: 64,
       progress: 0,
-      leadFraction: options.candidateFlicker.leadFraction,
-      spreadFraction: options.candidateFlicker.spreadFraction,
-      rampFraction: options.candidateFlicker.rampFraction,
+      leadFraction: envelope.leadFraction,
+      spreadFraction: envelope.spreadFraction,
+      rampFraction: envelope.rampFraction,
     });
-  }
-  if (options.strategy === "tool-loop" && options.highDensityFlicker) {
-    normalizeOrganicPaletteMotionOptions(options.highDensityFlicker);
-  }
-  if (options.strategy === "context-window" && options.finalSnapshotFlicker) {
-    normalizeOrganicPaletteMotionOptions(options.finalSnapshotFlicker);
   }
 }
 

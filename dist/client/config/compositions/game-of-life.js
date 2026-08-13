@@ -8,7 +8,6 @@ export const GAME_OF_LIFE_CONFIG = {
     gameOfLife: {
       longSideCells: 12,
       dotMargin: 0.08,
-      palette: "green",
       cycleSeconds: 3,
       generationsPerCycle: 6,
       flipSeconds: 0.1,
@@ -16,12 +15,18 @@ export const GAME_OF_LIFE_CONFIG = {
       birthNeighbors: [1, 3],
       survivalNeighbors: [2, 4],
       wrapEdges: false,
-      birthFlicker: {
-        enabled: true,
-        speed: 3,
-        spatialScale: 0.3,
+      // Newly born cells flicker, fading in and out across each generation.
+      flicker: {
         amount: 0.9,
-        edgeFraction: 0.18,
+        modes: {
+          noise: {
+            speed: 3,
+            spatialScale: 0.3,
+          },
+        },
+        envelope: {
+          edgeFraction: 0.18,
+        },
       },
     },
   },

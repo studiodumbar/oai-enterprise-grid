@@ -11,6 +11,7 @@ import { createExportState } from "./export/export-state.js";
 import { createExportPanel } from "./export/export-panel.js";
 import { createExportController } from "./export/export-controller.js";
 import { createProjectState, createSnapshotHistory } from "./export/project-state.js";
+import { createExportConsole } from "./export/export-console.js";
 
 if (typeof window.p5 !== "function") {
   throw new Error("p5.js did not load. Check the CDN request before starting the sketch.");
@@ -27,6 +28,8 @@ new window.p5(p => {
   let inputLocked = false;
   let exportController = null;
   let exportPanel = null;
+  let exportPanelVisible = false;
+  let consoleCommands = null;
   let history = null;
   let pendingWindowResize = false;
   let resetPreviewDelta = false;
@@ -133,6 +136,34 @@ new window.p5(p => {
     history?.commit(projectSnapshot());
   }
 
+  // The panel object always exists because the export controller reports
+  // progress through it; only its DOM mount is optional, so showing and
+  // hiding it is a matter of (un)mounting the same element.
+  function setExportPanelVisible(visible) {
+    const host = document.getElementById("export-ui");
+    if (!host || !exportPanel) return exportPanelVisible;
+    exportPanelVisible = Boolean(visible);
+    host.hidden = !exportPanelVisible;
+    if (exportPanelVisible) host.append(exportPanel.root);
+    else exportPanel.root.remove();
+    return exportPanelVisible;
+  }
+
+  // Compositions the director lists include legacy aliases; `export --all`
+  // should render each composition once, so aliases are filtered out.
+  function canonicalCompositions() {
+    return director
+      .list()
+      .filter(id => !COMPOSITION_DEFINITIONS[id]?.legacyAliasFor);
+  }
+
+  function useCompositionFromConsole(id) {
+    director.use(id);
+    director.update(currentFrame(0));
+    commitHistory();
+    renderPreview();
+  }
+
   function exposeRuntimeApi() {
     const api = {
       list: () => director.list(),
@@ -152,6 +183,9 @@ new window.p5(p => {
       },
       export: () => exportController?.run(),
       exportState: () => Object.freeze({ ...exportState }),
+      showExportPanel: visible => setExportPanelVisible(visible !== false),
+      exportPanelVisible: () => exportPanelVisible,
+      cli: consoleCommands,
     };
 
     Object.defineProperty(window, "circleGridApp", {
@@ -244,7 +278,7 @@ new window.p5(p => {
       onExport: () => exportController?.run(),
       onStateChange: () => commitHistory(),
     });
-    document.getElementById("export-ui")?.append(exportPanel.root);
+    setExportPanelVisible(GLOBAL_CONFIG.ui.showExportPanel);
     exportController = createExportController({
       p,
       getDirector: () => director,
@@ -305,8 +339,28 @@ new window.p5(p => {
       },
       background: GLOBAL_CONFIG.canvas.background,
     });
+    consoleCommands = createExportConsole({
+      state: exportState,
+      runExport: () => exportController.run({ notify: false }),
+      listCompositions: () => director.list(),
+      canonicalCompositions,
+      activeComposition: () => director.inspect().compositionId,
+      useComposition: useCompositionFromConsole,
+      setPanelVisible: setExportPanelVisible,
+      isPanelVisible: () => exportPanelVisible,
+      syncPanel: () => exportPanel?.sync(),
+      isExporting: () => Boolean(exportController?.exporting),
+      log: message => console.log(message),
+    });
+    Object.defineProperty(window, "cg", {
+      configurable: true,
+      value: consoleCommands,
+    });
     installProjectDropRestore();
     exposeRuntimeApi();
+    console.info(
+      "Circle Grid console ready — run cg`help` for export commands.",
+    );
   };
 
   p.draw = () => {

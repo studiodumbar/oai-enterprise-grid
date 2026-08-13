@@ -6,7 +6,6 @@ export const FLOCK_GRID_CONFIG = {
       longSideCells: 12,
       dotMargin: 0.025,
       showCellGrid: false,
-      palette: "green",
       fieldRadiusInCells: 1,
       fieldGain: 0.72,
       riseSeconds: 0.8,

@@ -8,17 +8,20 @@ export const VORONOI_CONFIG = {
     voronoi: {
       longSideCells: 8,
       dotMargin: 0.06,
-      palette: "green",
       cycleSeconds: 4,
       partitionPasses: 2,
       flipSeconds: 0.032,
       siteCount: 5,
       boundaryWhitespace: 0.08,
-      regionFlicker: {
-        enabled: true,
-        speed: 2,
-        spatialScale: 0.8,
+      // Territory interiors flicker; the uncertain boundary stays white.
+      flicker: {
         amount: 0.3,
+        modes: {
+          noise: {
+            speed: 2,
+            spatialScale: 0.8,
+          },
+        },
       },
     },
   },

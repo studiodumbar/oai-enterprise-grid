@@ -6,17 +6,20 @@
 export const TOOL_LOOP_CONFIG = {
   settings: {
     toolLoop: {
-      longSideCells: 20,
+      longSideCells: 12,
       dotMargin: 0.05,
-      palette: "green",
-      tokenSeconds: 6,
-      layerPasses: 3,
+      tokenSeconds: 8,
+      layerPasses: 4,
       flipSeconds: 0.15,
-      highDensityFlicker: {
-        enabled: true,
-        speed: 5,
-        spatialScale: 12,
+      // The dense 64-circle model field is the only region that flickers.
+      flicker: {
         amount: 1,
+        modes: {
+          noise: {
+            speed: 5,
+            spatialScale: 12,
+          },
+        },
       },
     },
   },

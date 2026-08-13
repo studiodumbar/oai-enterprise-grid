@@ -15,6 +15,20 @@ import {
 } from "../src/export/deterministic-clock.js";
 import { containFit } from "../src/export/contain-fit.js";
 
+test("a fresh export state ships the default delivery format", () => {
+  assert.deepEqual(createExportState(), {
+    mode: "motion",
+    exportFormat: "mp4",
+    aspect: "16:9",
+    resolution: 1920,
+    resW: 1920,
+    resH: 1080,
+    fps: 30,
+    transparentBg: false,
+    embedProjectState: true,
+  });
+});
+
 test("export state constrains formats by workflow and exposes contextual controls", () => {
   const state = createExportState({ mode: "motion", exportFormat: "svg" });
   assert.equal(state.exportFormat, "mp4");
@@ -50,6 +64,7 @@ test("known export-state restoration ignores unknown keys", () => {
   applyKnownExportState(state, {
     resW: 1080,
     resH: 1920,
+    mode: "static",
     exportFormat: "svg",
     futureSetting: "ignored",
   });

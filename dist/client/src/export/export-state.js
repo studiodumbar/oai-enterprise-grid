@@ -11,8 +11,8 @@ export const MAX_EXPORT_DIMENSION = 16384;
 export const MAX_EXPORT_FPS = 120;
 
 export const EXPORT_STATE_DEFAULTS = Object.freeze({
-  mode: EXPORT_MODES.STATIC,
-  exportFormat: "png",
+  mode: EXPORT_MODES.MOTION,
+  exportFormat: "mp4",
   aspect: "16:9",
   resolution: 1920,
   resW: 1920,

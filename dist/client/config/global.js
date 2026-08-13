@@ -1,22 +1,87 @@
-// Values in this file apply to the whole app, regardless of which composition
-// family is active.
 export const GLOBAL_CONFIG = {
   canvas: {
-    background: "#fff",
+    background: "#000",
     maxPixelDensity: 3,
     frameRate: 60,
   },
 
+  ui: {
+    showExportPanel: false,
+  },
+
   composition: {
-    // [] flock,
-    // [x] [] interactive-grid,
-    // [x] [x] inference-loop (or thinking),
-    // [x] [x] game-of-life
-    // [x] [x] l-tree,
-    // [x] [x] voronoi,
-    // [x] [x] tool-loop,
-    // [x] [x] context-window,
-    active: "voronoi",
+    // flock,
+    // interactive-grid,
+    // inference-loop (or thinking),
+    // game-of-life
+    // l-tree,
+    // voronoi,
+    // tool-loop,
+    // context-window,
+    active: "tool-loop",
+  },
+
+  // app-wide palette, composition overrides it
+  palette: "violet",
+
+  flicker: {
+    enabled: true,
+    // noise, echo-ring, strobe-stack, block-drop, prism-bloom, crt-glide, radar-arc
+    mode: "prism-bloom",
+    scope: "cell", // canvas, cell
+    amount: 0.55,  // How far a flickering dot may travel from its base palette step.
+    cellStaggerSeconds: 0.9,
+    modes: {
+      // Drifting clouds 
+      "noise": {
+        speed: 0.18,
+        spatialScale: 0.28,
+      },
+      // diamond rings pulse outward 
+      "echo-ring": {
+        cycleSeconds: .2,
+        ringDelayFraction: 0.14,
+        echoDelayFraction: 0.03,
+        ringCount: 5,
+      },
+      // Columns stack upward on a stagger 
+      "strobe-stack": {
+        cycleSeconds: 1.43,
+        columns: 5,
+        rows: 5,
+        baseIntensity: 0.08,
+      },
+      // Frames drop and pile up 
+      "block-drop": {
+        cycleSeconds: 1.41,
+        baseIntensity: 0.08,
+      },
+      // A kaleidoscope breathing out
+      "prism-bloom": {
+        cycleSeconds: 1.36,
+        blendSeconds: 0.18,
+        baseIntensity: 0.08,
+      },
+      // A scanline steps down the field, leaving a decaying trail
+      "crt-glide": {
+        cycleSeconds: 0.6,
+        rows: 5,
+        decay: 0.72,
+        columnWarp: 0.07,
+        baseIntensity: 0.08,
+        peakIntensity: 1,
+      },
+      // A rotating arm sweeps the field
+      "radar-arc": {
+        cycleSeconds: 1.16,
+        gridSteps: 5,
+        beamWidth: 0.55,
+        wakeWidth: 1.15,
+        ringInnerRadius: 1.6,
+        ringOuterRadius: 2.3,
+        baseIntensity: 0.08,
+      },
+    },
   },
 
   palettes: {

@@ -3,7 +3,6 @@ import {
   PROCEDURAL_TOPOLOGY_STRATEGIES,
   createProceduralTopologySceneAt,
 } from "./grid-scene-strategies.js";
-import { normalizeOrganicPaletteMotionOptions } from "../visuals/organic-palette-motion.js";
 
 export const DEFAULT_PROCEDURAL_TOPOLOGY_OPTIONS = Object.freeze({
   cycleSeconds: 2.4,
@@ -28,22 +27,19 @@ function normalizeProceduralOptions(options) {
 }
 
 function validateProceduralOptions(options) {
-  if (options.strategy === "l-tree" && options.layerFlicker) {
-    normalizeOrganicPaletteMotionOptions(options.layerFlicker);
-    const edgeFraction = options.layerFlicker.layerEdgeFraction ?? 0.2;
+  if (options.strategy === "l-tree") {
+    const envelope = options.flicker?.envelope ?? {};
+    const edgeFraction = envelope.layerEdgeFraction ?? 0.2;
     if (!Number.isFinite(edgeFraction) || edgeFraction <= 0 || edgeFraction > 0.5) {
       throw new RangeError("layerEdgeFraction must be between zero and 0.5.");
     }
-    const terminalRamp = options.layerFlicker.terminalRampFraction ?? 0.24;
+    const terminalRamp = envelope.terminalRampFraction ?? 0.24;
     if (!Number.isFinite(terminalRamp) || terminalRamp <= 0 || terminalRamp > 1) {
       throw new RangeError("terminalRampFraction must be between zero and one.");
     }
     return;
   }
   if (options.strategy !== "voronoi") return;
-  if (options.regionFlicker) {
-    normalizeOrganicPaletteMotionOptions(options.regionFlicker);
-  }
   if (
     !Number.isInteger(options.siteCount)
     || options.siteCount < 2

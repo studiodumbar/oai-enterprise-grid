@@ -1,12 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { INFERENCE_LOOP_CONFIG } from "../config/compositions/inference-loop.js";
-import { CONTEXT_WINDOW_CONFIG } from "../config/compositions/context-window.js";
-import { TOOL_LOOP_CONFIG } from "../config/compositions/tool-loop.js";
-import { VORONOI_CONFIG } from "../config/compositions/voronoi.js";
-import { L_TREE_CONFIG } from "../config/compositions/l-tree.js";
-import { GAME_OF_LIFE_CONFIG } from "../config/compositions/game-of-life.js";
 import { createCatalog } from "../src/catalog.js";
 import {
   COMPOSITION_DEFINITIONS,
@@ -89,13 +83,15 @@ test("organic palette motion always returns configured palette swatches", () => 
   }
 });
 
+// Read the assembled settings rather than the composition modules: app-wide
+// defaults such as the flicker block merge in during config assembly.
 const SETTINGS_BY_STRATEGY = Object.freeze({
-  "inference-loop": INFERENCE_LOOP_CONFIG.settings.inferenceLoop,
-  "context-window": CONTEXT_WINDOW_CONFIG.settings.contextWindow,
-  "tool-loop": TOOL_LOOP_CONFIG.settings.toolLoop,
-  voronoi: VORONOI_CONFIG.settings.voronoi,
-  "l-tree": L_TREE_CONFIG.settings.lTree,
-  "life-like": GAME_OF_LIFE_CONFIG.settings.gameOfLife,
+  "inference-loop": SETTINGS.inferenceLoop,
+  "context-window": SETTINGS.contextWindow,
+  "tool-loop": SETTINGS.toolLoop,
+  voronoi: SETTINGS.voronoi,
+  "l-tree": SETTINGS.lTree,
+  "life-like": SETTINGS.gameOfLife,
 });
 
 const ENGINE_BY_STRATEGY = Object.freeze({
@@ -395,7 +391,7 @@ test("inference loop varies exact whitespace while holding every pass still", ()
 });
 
 test("inference candidate flicker starts at the selection and follows outward", () => {
-  const controls = INFERENCE_LOOP_CONFIG.settings.inferenceLoop.candidateFlicker;
+  const controls = SETTINGS.inferenceLoop.flicker.envelope;
   const candidateCount = 64;
   const selectedIndex = 27;
   const earlyProgress = controls.leadFraction * 0.5;
@@ -809,7 +805,7 @@ test("Game of Life applies B3/S23 simultaneously from eight neighbors", () => {
     second.bornIndices.length + second.survivedIndices.length,
   );
   assert.equal(
-    createGeneratorForStrategy("life-like").paletteMotion.enabled,
+    createGeneratorForStrategy("life-like").flicker.enabled,
     true,
   );
 });
@@ -899,9 +895,18 @@ test("L-tree renderer noise-colors only the active growth layer", () => {
     settingsKey: "lTreeMotionTestSettings",
     options: {
       ...options,
-      layerFlicker: {
-        ...options.layerFlicker,
-        spatialScale: 1,
+      // Pinned to GREEN_PALETTES below, whatever palette config/global.js
+      // currently selects app-wide.
+      palette: "green",
+      // This test covers the noise field itself, so it pins the mode rather
+      // than following whichever mode config/global.js currently authors.
+      flicker: {
+        ...options.flicker,
+        mode: "noise",
+        scope: "canvas",
+        modes: {
+          noise: { ...options.flicker.modes.noise, spatialScale: 1 },
+        },
       },
     },
     runtime: {

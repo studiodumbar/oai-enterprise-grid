@@ -3,7 +3,7 @@ const MEDIABUNNY_URL = "./vendor/mediabunny.mjs";
 let mediabunnyPromise = null;
 
 async function loadMediabunny() {
-  mediabunnyPromise ??= import(MEDIABUNNY_URL);
+  mediabunnyPromise ??= import(/* @vite-ignore */ MEDIABUNNY_URL);
   return mediabunnyPromise;
 }
 

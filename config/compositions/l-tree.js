@@ -8,17 +8,22 @@ export const L_TREE_CONFIG = {
     lTree: {
       longSideCells: 8,
       dotMargin: 0.08,
-      palette: "green",
       cycleSeconds: 3,
       generations: 4,
       flipSeconds: 0.032,
-      layerFlicker: {
-        enabled: true,
-        speed: 25,
-        spatialScale: 3,
+      // The growing layer flickers, then the surviving route ramps up.
+      flicker: {
         amount: 0.88,
-        layerEdgeFraction: 0.5,
-        terminalRampFraction: 0.94,
+        modes: {
+          noise: {
+            speed: 25,
+            spatialScale: 3,
+          },
+        },
+        envelope: {
+          layerEdgeFraction: 0.5,
+          terminalRampFraction: 0.94,
+        },
       },
     },
   },

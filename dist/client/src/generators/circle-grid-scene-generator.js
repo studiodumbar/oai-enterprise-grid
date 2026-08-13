@@ -6,9 +6,13 @@ import {
   candidateFlickerAmountAt,
   emptyGridFace,
   gridFaceSignature,
+  hashUnit,
   minimumSceneHoldFraction,
 } from "./grid-scene-strategies.js";
-import { OrganicPaletteMotion } from "../visuals/organic-palette-motion.js";
+import {
+  createFlicker,
+  resolveFlickerFromOptions,
+} from "../visuals/flicker/index.js";
 
 export const DEFAULT_CIRCLE_GRID_SCENE_OPTIONS = Object.freeze({
   longSideCells: 9,
@@ -105,6 +109,10 @@ export function normalizeCircleGridSceneOptions(options = {}, specification = {}
   if (typeof normalized.palette !== "string" || normalized.palette.trim() === "") {
     throw new TypeError("palette must be a non-empty string.");
   }
+  // Strategies and the renderer read exactly one flicker object, whether the
+  // settings file authored the current `flicker` block or a legacy
+  // per-composition one.
+  normalized.flicker = resolveFlickerFromOptions(normalized);
   specification.validateOptions?.(normalized);
   return normalized;
 }
@@ -291,16 +299,11 @@ export class CircleGridSceneGenerator {
     const noise = typeof runtime.p5?.noise === "function"
       ? runtime.p5.noise.bind(runtime.p5)
       : undefined;
-    this.paletteMotion = new OrganicPaletteMotion(
+    this.flicker = createFlicker({
       palette,
-      this.options.candidateFlicker
-        ?? this.options.layerFlicker
-        ?? this.options.birthFlicker
-        ?? this.options.highDensityFlicker
-        ?? this.options.finalSnapshotFlicker
-        ?? this.options.regionFlicker,
-      noise,
-    );
+      settings: this.options.flicker,
+      noiseFunction: noise,
+    });
     this.paletteIndexScratch = new Uint16Array(
       1 << (MAX_GRID_FACE_LEVEL * 2),
     );
@@ -310,7 +313,7 @@ export class CircleGridSceneGenerator {
       (_, index) => index,
     );
     this.usedPaletteIndices = new Uint8Array(
-      this.paletteMotion.paletteColors.length,
+      this.flicker.paletteColors.length,
     );
     this.paletteMotionTime = 0;
     this.paletteMotionAmount = 0;
@@ -326,6 +329,7 @@ export class CircleGridSceneGenerator {
   resize(viewport) {
     if (this.disposed) return;
     this.layout = createCircleGridSceneLayout(viewport, this.options.longSideCells);
+    this.flicker.resize(this.flickerGrid());
     const count = this.layout.columns * this.layout.rows;
     this.currentFaces = Array.from({ length: count }, () => emptyGridFace());
     this.previousFaces = Array.from({ length: count }, () => emptyGridFace());
@@ -408,8 +412,16 @@ export class CircleGridSceneGenerator {
       this.paletteValues[index] = targetFace.paletteStep
         / (GRID_FACE_PALETTE_STEP_COUNT - 1);
     }
+    this.flicker.beginFrame({
+      time: this.elapsed,
+      progress: this.cycleProgress,
+      cycleIndex: this.cycleIndex,
+    });
+    // `paletteMotion` is the scene's flicker mask and envelope: which cells
+    // flicker this frame and how strongly. The mode decides what each dot
+    // inside those cells does.
     this.paletteMotionMask.fill(0);
-    if (this.paletteMotion.enabled && nextScene.paletteMotion) {
+    if (this.flicker.enabled && nextScene.paletteMotion) {
       for (const index of nextScene.paletteMotion.indices) {
         if (index >= 0 && index < this.paletteMotionMask.length) {
           this.paletteMotionMask[index] = 1;
@@ -478,7 +490,7 @@ export class CircleGridSceneGenerator {
       * 0.5
       * (1 - this.options.dotMargin);
     const hasPaletteMotion = (
-      this.paletteMotion.enabled
+      this.flicker.enabled
       && this.paletteMotionAmount > 0
       && this.paletteMotionMask[index] === 1
     );
@@ -516,13 +528,13 @@ export class CircleGridSceneGenerator {
       * (this.paletteColors.length - 1),
     );
     const basePosition = paletteIndex / Math.max(1, this.paletteColors.length - 1);
-    const amount = this.paletteMotionAmount * this.paletteMotion.options.amount;
+    const amount = this.paletteMotionAmount * this.flicker.amount;
     const finestSubdivisions = 1 << MAX_GRID_FACE_LEVEL;
     const coordinateStep = finestSubdivisions / subdivisions;
     const parentColumn = index % this.layout.columns;
     const parentRow = Math.floor(index / this.layout.columns);
-    const noiseBaseX = parentColumn * finestSubdivisions + coordinateStep * 0.5;
-    const noiseBaseY = parentRow * finestSubdivisions + coordinateStep * 0.5;
+    const noiseBaseX = this.flickerOriginX(index, coordinateStep);
+    const noiseBaseY = this.flickerOriginY(index, coordinateStep);
     const slot = this.layout.cellSize / subdivisions;
     const left = this.layout.offsetX + parentColumn * this.layout.cellSize;
     const top = this.layout.offsetY + parentRow * this.layout.cellSize;
@@ -532,37 +544,43 @@ export class CircleGridSceneGenerator {
     const noiseOrder = this.noiseOrderScratch;
     const usedPaletteIndices = this.usedPaletteIndices;
     usedPaletteIndices.fill(0);
+    const flickerTime = this.flickerTimeFor(index);
 
     for (let glyphIndex = 0; glyphIndex < glyphCount; glyphIndex += 1) {
       const glyphColumn = glyphIndex % subdivisions;
       const glyphRow = Math.floor(glyphIndex / subdivisions);
-      noiseByGlyph[glyphIndex] = this.paletteMotion.sampleAt(
+      noiseByGlyph[glyphIndex] = this.flicker.sampleAt(
         noiseBaseX + glyphColumn * coordinateStep,
         noiseBaseY + glyphRow * coordinateStep,
-        this.paletteMotionTime,
+        flickerTime,
       );
       noiseOrder[glyphIndex] = glyphIndex;
     }
 
-    noiseOrder.length = glyphCount;
-    noiseOrder.sort((first, second) => (
-      noiseByGlyph[first] - noiseByGlyph[second] || first - second
-    ));
-    const paletteCount = this.paletteMotion.paletteColors.length;
+    const paletteCount = this.flicker.paletteColors.length;
+    // "rank" spreads a cell's dots evenly across the palette by sample order,
+    // which fields with no meaningful absolute level (noise) need to use the
+    // whole palette. "auto" keeps that spread only while a cell holds at least
+    // one dot per swatch. Pattern fields — ripples, sweeps, snakes — instead
+    // carry a real per-dot level, so they keep their own samples.
+    const useRankSpread = this.flicker.distribution === "rank"
+      || (this.flicker.distribution === "auto" && glyphCount >= paletteCount);
+    if (useRankSpread) {
+      noiseOrder.length = glyphCount;
+      noiseOrder.sort((first, second) => (
+        noiseByGlyph[first] - noiseByGlyph[second] || first - second
+      ));
+    }
     for (let rank = 0; rank < glyphCount; rank += 1) {
-      const glyphIndex = noiseOrder[rank];
-      const swatchIndex = glyphCount >= paletteCount
-        ? this.paletteMotion.paletteIndexFromSample(
+      const glyphIndex = useRankSpread ? noiseOrder[rank] : rank;
+      const swatchIndex = useRankSpread
+        ? this.flicker.paletteIndexFromSample(
           basePosition,
           Math.min(paletteCount - 1, Math.floor(rank * paletteCount / glyphCount))
             / Math.max(1, paletteCount - 1),
           amount,
         )
-        : this.paletteMotion.paletteIndexFromNoise(
-          basePosition,
-          noiseByGlyph[glyphIndex],
-          amount,
-        );
+        : this.flickerSwatchIndex(basePosition, noiseByGlyph[glyphIndex], amount);
       paletteByGlyph[glyphIndex] = swatchIndex;
       usedPaletteIndices[swatchIndex] = 1;
     }
@@ -573,7 +591,7 @@ export class CircleGridSceneGenerator {
       swatchIndex += 1
     ) {
       if (usedPaletteIndices[swatchIndex] === 0) continue;
-      context.fillStyle = this.paletteMotion.paletteColors[swatchIndex];
+      context.fillStyle = this.flicker.paletteColors[swatchIndex];
       context.beginPath();
       for (let glyphIndex = 0; glyphIndex < glyphCount; glyphIndex += 1) {
         if (paletteByGlyph[glyphIndex] !== swatchIndex) continue;
@@ -617,7 +635,7 @@ export class CircleGridSceneGenerator {
       : 0;
     centers.forEach((center, candidateIndex) => {
       const baseStep = paletteSteps[candidateIndex];
-      const activation = this.paletteMotion.enabled && motion
+      const activation = this.flicker.enabled && motion
         ? candidateFlickerAmountAt({
           candidateIndex,
           selectedIndex: motion.selectedIndex,
@@ -631,20 +649,20 @@ export class CircleGridSceneGenerator {
       if (activation > 0) {
         const glyphColumn = candidateIndex % subdivisions;
         const glyphRow = Math.floor(candidateIndex / subdivisions);
-        const sample = this.paletteMotion.sampleAt(
-          glyphColumn,
-          glyphRow,
-          this.paletteMotionTime,
+        const sample = this.flicker.sampleAt(
+          this.flickerOriginX(index, 0) + glyphColumn,
+          this.flickerOriginY(index, 0) + glyphRow,
+          this.flickerTimeFor(index),
         );
         const paletteIndex = Math.round(
           baseStep / (GRID_FACE_PALETTE_STEP_COUNT - 1)
           * (this.paletteColors.length - 1),
         );
-        context.fillStyle = this.paletteMotion.colorFromNoise(
+        context.fillStyle = this.flicker.paletteColors[this.flickerSwatchIndex(
           paletteIndex / Math.max(1, this.paletteColors.length - 1),
           sample,
-          activation * this.paletteMotion.options.amount,
-        );
+          activation * this.flicker.amount,
+        )];
       } else {
         context.fillStyle = this.paletteColorStep(baseStep);
       }
@@ -653,6 +671,15 @@ export class CircleGridSceneGenerator {
       context.fill();
     });
     context.restore();
+  }
+
+  // A "level" field's sample is a brightness, so it maps straight onto the
+  // palette. Every other field's sample is banded first, which keeps a
+  // continuous signal visiting whole swatches instead of hovering mid-palette.
+  flickerSwatchIndex(basePosition, sample, amount) {
+    return this.flicker.distribution === "level"
+      ? this.flicker.paletteIndexFromSample(basePosition, sample, amount)
+      : this.flicker.paletteIndexFromNoise(basePosition, sample, amount);
   }
 
   paletteColorStep(step) {
@@ -672,6 +699,68 @@ export class CircleGridSceneGenerator {
 
   animationDuration() {
     return this.options.cycleSeconds;
+  }
+
+  // Pattern-based flicker fields need the grid extent to place a sweep, ripple,
+  // or route; noise ignores it. Cell scope hands the field a one-cell board, so
+  // the same pattern fits inside every cell instead of spanning the canvas.
+  flickerGrid() {
+    const dotsPerCellAxis = 1 << MAX_GRID_FACE_LEVEL;
+    if (this.flicker.scope === "cell") {
+      return {
+        columns: 1,
+        rows: 1,
+        cellSize: this.layout.cellSize,
+        dotsPerCellAxis,
+      };
+    }
+    return {
+      columns: this.layout.columns,
+      rows: this.layout.rows,
+      cellSize: this.layout.cellSize,
+      dotsPerCellAxis,
+    };
+  }
+
+  // The dot coordinates handed to sampleAt. Canvas scope addresses the whole
+  // board in finest-subdivision units; cell scope drops the parent offset so
+  // every cell reads the same local field.
+  flickerOriginX(index, coordinateStep) {
+    const half = coordinateStep * 0.5;
+    if (this.flicker.scope === "cell") return half;
+    return (index % this.layout.columns) * (1 << MAX_GRID_FACE_LEVEL) + half;
+  }
+
+  flickerOriginY(index, coordinateStep) {
+    const half = coordinateStep * 0.5;
+    if (this.flicker.scope === "cell") return half;
+    return Math.floor(index / this.layout.columns) * (1 << MAX_GRID_FACE_LEVEL)
+      + half;
+  }
+
+  // Under cell scope every cell reads the same local field, so they would pulse
+  // in unison. Each cell's clock is pushed forward by a fixed slice of the
+  // configured stagger, keyed on its position so the offset never drifts.
+  flickerTimeFor(index) {
+    if (this.flicker.scope !== "cell") return this.paletteMotionTime;
+    const stagger = this.flicker.cellStaggerSeconds;
+    if (stagger === 0) return this.paletteMotionTime;
+    return this.paletteMotionTime + hashUnit(index, this.layout.columns, 977) * stagger;
+  }
+
+  /**
+   * Swap the active flicker mode while the composition runs. Settings for every
+   * registered mode were resolved when this generator was built, so the swap
+   * cannot fail on authored values.
+   */
+  useFlickerMode(name) {
+    this.flicker.useMode(name);
+    this.flicker.resize(this.flickerGrid());
+    return this;
+  }
+
+  availableFlickerModes() {
+    return this.flicker.availableModes();
   }
 
   inspect() {
@@ -699,6 +788,12 @@ export class CircleGridSceneGenerator {
         column: this.layout.readoutIndex % this.layout.columns,
       },
       layout: { ...this.layout },
+      flicker: {
+        enabled: this.flicker.enabled,
+        mode: this.flicker.modeName,
+        scope: this.flicker.scope,
+        amount: this.flicker.amount,
+      },
       levels: this.levels,
       paletteValues: this.paletteValues,
       paletteSteps: this.paletteSteps,

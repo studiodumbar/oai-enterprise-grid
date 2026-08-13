@@ -12,6 +12,7 @@ import { TOOL_LOOP_CONFIG } from "./config/compositions/tool-loop.js";
 import { VORONOI_CONFIG } from "./config/compositions/voronoi.js";
 import { L_TREE_CONFIG } from "./config/compositions/l-tree.js";
 import { GAME_OF_LIFE_CONFIG } from "./config/compositions/game-of-life.js";
+import { mergeFlickerSettings } from "./src/visuals/flicker/index.js";
 
 export { GLOBAL_CONFIG } from "./config/global.js";
 export { SHARED_CONFIG } from "./config/shared.js";
@@ -57,16 +58,45 @@ function mergeUnique(label, sections) {
 
 const compositionConfigs = Object.values(COMPOSITION_BUNDLES);
 
+// A settings group that declares `flicker` inherits the app-wide flicker
+// defaults and overrides only the keys it authored. Groups without flicker are
+// untouched, and the composition config modules stay unmutated.
+function withGlobalFlickerDefaults(settingsGroups) {
+  const resolved = {};
+  for (const [name, group] of Object.entries(settingsGroups)) {
+    resolved[name] = group?.flicker === undefined
+      ? group
+      : {
+        ...group,
+        flicker: mergeFlickerSettings(GLOBAL_CONFIG.flicker, group.flicker),
+      };
+  }
+  return resolved;
+}
+
+// A composition settings group inherits the app-wide palette name and
+// overrides it only by authoring its own `palette`. Global and shared groups
+// are left alone, and the composition config modules stay unmutated.
+function withGlobalPaletteDefault(settingsGroups) {
+  const resolved = {};
+  for (const [name, group] of Object.entries(settingsGroups ?? {})) {
+    resolved[name] = group?.palette === undefined
+      ? { palette: GLOBAL_CONFIG.palette, ...group }
+      : group;
+  }
+  return resolved;
+}
+
 // These assembled aliases preserve the existing director/generator API while
 // authoring stays separated by ownership above.
-export const SETTINGS = mergeUnique("settings group", [
+export const SETTINGS = withGlobalFlickerDefaults(mergeUnique("settings group", [
   {
     canvas: GLOBAL_CONFIG.canvas,
     composition: GLOBAL_CONFIG.composition,
   },
   SHARED_CONFIG.settings,
-  ...compositionConfigs.map(config => config.settings),
-]);
+  ...compositionConfigs.map(config => withGlobalPaletteDefault(config.settings)),
+]));
 
 export const PALETTES = GLOBAL_CONFIG.palettes;
 

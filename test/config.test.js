@@ -140,12 +140,76 @@ function assertDisjointEntries(groups, kind) {
   return ownerByKey;
 }
 
-function assertSameAssembly(actual, groups, kind) {
+// Composition settings groups are the one place the facade builds a merged copy
+// instead of forwarding the bundle's object: the app-wide palette and flicker
+// blocks in config/global.js fill in whatever the composition left unauthored.
+function assertInheritsGlobalDefaults(assembled, authored, name, inheritsPalette) {
+  const {
+    flicker: assembledFlicker,
+    palette: assembledPalette,
+    ...assembledRest
+  } = assembled;
+  const {
+    flicker: authoredFlicker,
+    palette: authoredPalette,
+    ...authoredRest
+  } = authored;
+  assert.deepEqual(
+    assembledRest,
+    authoredRest,
+    `${name} should keep every setting it authored beside palette and flicker.`,
+  );
+  if (inheritsPalette) {
+    assert.equal(
+      assembledPalette,
+      authoredPalette ?? GLOBAL_CONFIG.palette,
+      `${name} should inherit the app-wide palette unless it authored one.`,
+    );
+  } else {
+    assert.equal(assembledPalette, authoredPalette);
+  }
+  if (authoredFlicker === undefined) {
+    assert.equal(
+      assembledFlicker,
+      undefined,
+      `${name} should stay without flicker until it authors one.`,
+    );
+    return;
+  }
+  assert.equal(assembledFlicker.enabled, GLOBAL_CONFIG.flicker.enabled);
+  assert.equal(
+    assembledFlicker.mode,
+    authoredFlicker.mode ?? GLOBAL_CONFIG.flicker.mode,
+  );
+  assert.equal(
+    assembledFlicker.amount,
+    authoredFlicker.amount ?? GLOBAL_CONFIG.flicker.amount,
+  );
+  assert.deepEqual(
+    assembledFlicker.envelope,
+    authoredFlicker.envelope ?? {},
+    `${name} should own its flicker envelope outright.`,
+  );
+  for (const [mode, settings] of Object.entries(GLOBAL_CONFIG.flicker.modes)) {
+    assert.deepEqual(
+      assembledFlicker.modes[mode],
+      { ...settings, ...authoredFlicker.modes?.[mode] },
+      `${name} should override only the flicker "${mode}" values it authored.`,
+    );
+  }
+}
+
+function assertSameAssembly(actual, groups, kind, inheritsGlobals = () => false) {
   const expectedKeys = groups.flatMap(([, entries]) => Object.keys(entries)).sort();
   assert.deepEqual(ownKeys(actual), expectedKeys, `${kind} facade is incomplete.`);
 
-  for (const [, entries] of groups) {
+  for (const [owner, entries] of groups) {
     for (const [key, value] of Object.entries(entries)) {
+      const inheritance = inheritsGlobals(value, owner);
+      if (inheritance) {
+        assertInheritsGlobalDefaults(actual[key], value, key, inheritance.palette);
+        continue;
+      }
       assert.strictEqual(
         actual[key],
         value,
@@ -275,7 +339,10 @@ function assertBundleReferences(
 }
 
 test("config facade preserves explicit global, shared, and bundle ownership", () => {
-  assert.deepEqual(ownKeys(GLOBAL_CONFIG), ["canvas", "composition", "palettes"]);
+  assert.deepEqual(
+    ownKeys(GLOBAL_CONFIG),
+    ["canvas", "composition", "flicker", "palette", "palettes", "ui"],
+  );
   assert.deepEqual(ownKeys(SHARED_CONFIG), ["settings"]);
   assert.deepEqual(ownKeys(SHARED_CONFIG.settings), ["cellTransitions"]);
   assert.deepEqual(ownKeys(COMPOSITION_BUNDLES), ownKeys(EXPECTED_BUNDLE_OWNERSHIP));
@@ -317,10 +384,25 @@ test("config facade preserves explicit global, shared, and bundle ownership", ()
   assertDisjointEntries(settingGroups, "Setting");
   assertDisjointEntries(generatorGroups, "Generator");
   assertDisjointEntries(compositionGroups, "Composition");
-  assertSameAssembly(SETTINGS, settingGroups, "Settings");
+  // Composition-owned groups inherit the app-wide palette; the global and
+  // shared groups keep whatever they authored and only merge flicker.
+  assertSameAssembly(
+    SETTINGS,
+    settingGroups,
+    "Settings",
+    (group, owner) => {
+      const ownedByComposition = owner !== "global" && owner !== "shared";
+      if (!ownedByComposition && group?.flicker === undefined) return false;
+      return { palette: ownedByComposition };
+    },
+  );
   assertSameAssembly(GENERATOR_DEFINITIONS, generatorGroups, "Generator definitions");
   assertSameAssembly(COMPOSITION_DEFINITIONS, compositionGroups, "Composition definitions");
   assert.strictEqual(PALETTES, GLOBAL_CONFIG.palettes);
+  assert.ok(
+    Object.hasOwn(PALETTES, GLOBAL_CONFIG.palette),
+    `The app-wide palette "${GLOBAL_CONFIG.palette}" is missing from PALETTES.`,
+  );
 });
 
 test("public compositions expose the explicit configuration hierarchy", () => {

@@ -3,7 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "vite",
     "build": "node build-site.mjs",
     "test": "node --test"
+  },
+  "devDependencies": {
+    "vite": "^5.4.11"
   }
 }
