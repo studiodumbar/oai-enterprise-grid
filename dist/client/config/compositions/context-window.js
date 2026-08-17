@@ -6,19 +6,38 @@
 export const CONTEXT_WINDOW_CONFIG = {
   settings: {
     contextWindow: {
-      longSideCells: 8,
+      longSideCells: 5,
       dotMargin: 0.07,
-      tokenSeconds: 2.2,
-      layerPasses: 8,
-      flipSeconds: 0.016,
+      tokenSeconds: 2,
+      layerPasses: 2,
+      flipSeconds: 0.015,
       // Only the final attention snapshot and the committed dot flicker.
       flicker: {
         amount: 1,
+        scope: "cell",
+        mode: "prism-bloom",
         modes: {
-          noise: {
-            speed: 1.2,
+         noise: {
+            speed: 2,
             spatialScale: 0.2,
-          },
+         },
+        "crt-glide": {
+            cycleSeconds: .6,
+         },
+        "block-drop": {
+            cycleSeconds: .6,
+         },
+        "prism-bloom": {
+            cycleSeconds: 1.6,
+         },
+        "strobe-stack": {
+            cycleSeconds: 1.2,
+         },
+
+        "echo-ring": {
+            cycleSeconds: .6,
+         },
+
         },
       },
     },

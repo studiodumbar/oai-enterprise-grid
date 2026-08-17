@@ -43,16 +43,16 @@ function validateProceduralOptions(options) {
   if (
     !Number.isInteger(options.siteCount)
     || options.siteCount < 2
-    || options.siteCount > 8
+    || options.siteCount > 16
   ) {
-    throw new RangeError("siteCount must be an integer between 2 and 8.");
+    throw new RangeError("siteCount must be an integer between 2 and 16.");
   }
   if (
     !Number.isFinite(options.boundaryWhitespace)
     || options.boundaryWhitespace < 0
-    || options.boundaryWhitespace >= 0.7
+    || options.boundaryWhitespace >= 1.0 
   ) {
-    throw new RangeError("boundaryWhitespace must be between 0 and 0.7.");
+    throw new RangeError("boundaryWhitespace must be between 0 and 1.0");
   }
 }
 

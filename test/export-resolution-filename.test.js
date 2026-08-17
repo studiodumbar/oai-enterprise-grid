@@ -14,6 +14,7 @@ import {
 import {
   sequencePadding,
   stamp,
+  nameSegment,
   exportBaseName,
   exportFilename,
   exportSequenceFilename,
@@ -47,29 +48,70 @@ test("Export filenames use the exact local MMDD-HHMMSS convention", () => {
   const date = new Date(2026, 7, 12, 14, 30, 5);
   assert.equal(exportStamp(date), "0812-143005");
   assert.equal(stamp(date), "0812-143005");
-  assert.equal(exportBaseName(date), "OAI-0812-143005");
-  assert.equal(exportFilename("png", { date }), "OAI-0812-143005.png");
+  assert.equal(exportBaseName(date), "OAI_0812-143005");
+  assert.equal(exportFilename("png", { date }), "OAI_0812-143005.png");
   assert.equal(
     exportFilename(".PNG", { date, alpha: true }),
-    "OAI-0812-143005-alpha.png",
+    "OAI_0812-143005-alpha.png",
   );
   assert.equal(
     exportFilename("webm", { date, alpha: true }),
-    "OAI-0812-143005-alpha.webm",
+    "OAI_0812-143005-alpha.webm",
   );
   assert.equal(
     exportSequenceFilename(7, { date }),
-    "OAI-0812-143005_0007.png",
+    "OAI_0812-143005_0007.png",
   );
   assert.equal(
     exportSequenceFilename(12, {
-      baseName: "OAI-0812-143005",
+      baseName: "OAI_0812-143005",
       padding: 5,
     }),
-    "OAI-0812-143005_00012.png",
+    "OAI_0812-143005_00012.png",
   );
   assert.equal(sequencePadding(300), 4);
   assert.equal(sequencePadding(10_002), 5);
+});
+
+test("Export filenames carry the composition and flicker mode after the OAI prefix", () => {
+  const date = new Date(2026, 7, 12, 14, 30, 5);
+  assert.equal(
+    exportBaseName(date, { composition: "game-of-life", flicker: "radar-arc" }),
+    "OAI_game-of-life_radar-arc_0812-143005",
+  );
+  assert.equal(
+    exportFilename("png", { date, composition: "voronoi", flicker: "noise" }),
+    "OAI_voronoi_noise_0812-143005.png",
+  );
+  assert.equal(
+    exportFilename("webm", {
+      date,
+      composition: "flock-grid",
+      flicker: "crt-glide",
+      alpha: true,
+    }),
+    "OAI_flock-grid_crt-glide_0812-143005-alpha.webm",
+  );
+  assert.equal(
+    exportSequenceFilename(7, {
+      date,
+      composition: "Game Of Life",
+      flicker: "Echo Ring",
+    }),
+    "OAI_game-of-life_echo-ring_0812-143005_0007.png",
+  );
+  assert.equal(nameSegment("  L/Tree_2 "), "l-tree-2");
+  // Flicker off, unnamed, or unusable segments drop out entirely.
+  assert.equal(
+    exportBaseName(date, { composition: "l-tree" }),
+    "OAI_l-tree_0812-143005",
+  );
+  assert.equal(
+    exportBaseName(date, { flicker: "noise" }),
+    "OAI_noise_0812-143005",
+  );
+  assert.equal(exportBaseName(date, { composition: "///" }), "OAI_0812-143005");
+  assert.equal(exportBaseName(date), "OAI_0812-143005");
 });
 
 test("invalid export sizes and filenames fail clearly", () => {

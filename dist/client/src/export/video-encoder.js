@@ -1,5 +1,14 @@
 const MEDIABUNNY_URL = "./vendor/mediabunny.mjs";
 
+// Editing suites (Adobe Media Encoder, Premiere, Resolve) pull exports apart
+// frame by frame, and they misread the two structures a "quality" WebCodecs
+// encoder is free to emit: B-frames, which need composition-time offsets and an
+// edit list to play back in order, and long groups of pictures, which make a
+// single frame expensive to reach. "realtime" keeps the encoder in display
+// order, and a one-second key-frame interval keeps every frame close to a
+// key frame. Both cost a little compression efficiency at a fixed bitrate.
+const KEY_FRAME_INTERVAL_SECONDS = 1;
+
 let mediabunnyPromise = null;
 
 async function loadMediabunny() {
@@ -33,9 +42,20 @@ export async function createVideoEncoder({
   } = module;
   const alpha = format === "webm";
   const options = { width, height, bitrate: QUALITY_HIGH, framerate: fps };
-  const codec = alpha
+  // The probe has to ask for the same latency mode the encoder will be built
+  // with, or a codec can pass here and fail at configure time. If no encoder
+  // takes display order, fall back to the default so the export still runs.
+  let realtime = !alpha;
+  let codec = alpha
     ? await firstAlphaCodec(module, ["vp9", "vp8", "av1"], options)
-    : await getFirstEncodableVideoCodec(["avc", "vp9", "av1"], options);
+    : await getFirstEncodableVideoCodec(
+      ["avc", "vp9", "av1"],
+      { ...options, latencyMode: "realtime" },
+    );
+  if (!codec && !alpha) {
+    realtime = false;
+    codec = await getFirstEncodableVideoCodec(["avc", "vp9", "av1"], options);
+  }
   if (!codec) {
     throw new Error(
       alpha
@@ -54,6 +74,11 @@ export async function createVideoEncoder({
     codec,
     bitrate: QUALITY_HIGH,
     alpha: alpha ? "keep" : "discard",
+    framerate: fps,
+    keyFrameInterval: KEY_FRAME_INTERVAL_SECONDS,
+    // Transparent WebM is forced back to "quality" by the muxer, since alpha
+    // needs the two-encoder path; only the MP4 route can promise display order.
+    latencyMode: realtime ? "realtime" : undefined,
   });
   output.addVideoTrack(source, { frameRate: fps, alpha: alpha ? "keep" : "discard" });
   await output.start();

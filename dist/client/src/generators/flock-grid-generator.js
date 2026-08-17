@@ -3,7 +3,8 @@ import { Flock } from "./flock.js";
 import { FlockFieldSource } from "../fields/flock-field-source.js";
 import { TypeField } from "../fields/type-field.js";
 import { TypeMaskFieldSource } from "../fields/type-mask-field-source.js";
-import { nearestEquivalentAxisRadians } from "./flock-axis.js";
+import { NativeCircleEndpointTransition } from "../compositions/circle-endpoints.js";
+import { createSceneTransitionModeRegistry } from "../scene-transitions/index.js";
 
 function settingsGroup(settings, name, owner) {
   const group = settings[name];
@@ -12,8 +13,6 @@ function settingsGroup(settings, name, owner) {
   }
   return group;
 }
-
-export { nearestEquivalentAxisRadians };
 
 // Adapter for today's complete visual system. The composition layer only sees
 // the generic generator lifecycle; flock, typography, field mixing, grid, and
@@ -27,6 +26,7 @@ export class FlockGridGenerator {
     cellTransitionTypes,
     palettes,
     shapeRenderer,
+    sceneTransitionTypes,
   }) {
     this.name = name;
     this.definition = definition;
@@ -60,8 +60,6 @@ export class FlockGridGenerator {
     const viewport = runtime.viewport();
     this.typeField = new TypeField(runtime.p5, typographyOptions, viewport);
     this.flock = new Flock(flockOptions);
-    this.flockAxisRadians = 0;
-    this.hasFlockAxis = false;
     this.fieldSources = [
       new FlockFieldSource(this.flock),
       new TypeMaskFieldSource(this.typeField, typographyOptions),
@@ -75,6 +73,13 @@ export class FlockGridGenerator {
       shapeRenderer,
       viewport,
     );
+    this.circleEndpoint = new NativeCircleEndpointTransition({
+      settings: settings?.composition,
+      intro: gridOptions.intro,
+      outro: gridOptions.outro,
+      modeRegistry: sceneTransitionTypes ?? createSceneTransitionModeRegistry(),
+    });
+    this.circleEndpointActive = false;
   }
 
   createCellTransition(transitionDefinition) {
@@ -83,9 +88,11 @@ export class FlockGridGenerator {
         `Generator "${this.name}" needs a cellTransition { type, options } definition.`,
       );
     }
+    const configuredModes = this.settings.cellTransitions?.modes
+      ?? this.settings.cellTransitions;
     const options = typeof transitionDefinition.options === "string"
       ? settingsGroup(
-        this.settings.cellTransitions,
+        configuredModes,
         transitionDefinition.options,
         `Cell transition "${transitionDefinition.type}"`,
       )
@@ -127,6 +134,8 @@ export class FlockGridGenerator {
       frame,
     );
     this.active = true;
+    this.circleEndpoint.reset();
+    this.circleEndpointActive = false;
     this.cellTransition.enter?.(frame);
   }
 
@@ -142,17 +151,7 @@ export class FlockGridGenerator {
     );
     const { width, height } = frame.viewport;
     this.flock.update(frame.dt, width, height, this.typeField, frame.pointer);
-    const nextFlockAxis = this.flock.travelAxisRadians();
-    if (Number.isFinite(nextFlockAxis)) {
-      this.flockAxisRadians = this.hasFlockAxis
-        ? nearestEquivalentAxisRadians(nextFlockAxis, this.flockAxisRadians)
-        : nextFlockAxis;
-      this.hasFlockAxis = true;
-    }
-    this.grid.update(this.fieldSources, frame.dt, {
-      ...frame,
-      motionAxisRadians: this.flockAxisRadians,
-    });
+    this.grid.update(this.fieldSources, frame.dt, frame);
   }
 
   draw(frame, planEntry, context = this.runtime.context()) {
@@ -160,9 +159,21 @@ export class FlockGridGenerator {
     const isDotHidden = this.typographyOptions.textLockup === true
       ? (x, y, radius) => this.typeField.overlapsText(x, y, radius, pulse)
       : undefined;
-    this.flock.draw(context, isDotHidden);
-    this.grid.draw(context, isDotHidden, { guides: !frame?.exporting });
-    this.typeField.draw(context, this.grid.textColor(), pulse);
+    this.circleEndpointActive = this.circleEndpoint?.prepare?.(
+      frame?.compositionEndpoint,
+      this.grid.transitionItems?.() ?? [],
+      this.grid.layout,
+    ) ?? false;
+    if (!this.circleEndpointActive) this.flock.draw(context, isDotHidden);
+    this.grid.draw(context, isDotHidden, {
+      guides: !frame?.exporting,
+      glyphPresentation: this.circleEndpointActive
+        ? item => this.circleEndpoint.presentationsFor(item.id)
+        : undefined,
+    });
+    if (!this.circleEndpointActive) {
+      this.typeField.draw(context, this.grid.textColor(), pulse);
+    }
   }
 
   contentBounds() {
@@ -184,6 +195,15 @@ export class FlockGridGenerator {
 
   animationDuration() {
     return null;
+  }
+
+  endpointAutoDuration(direction) {
+    const transition = direction === "end"
+      ? (this.grid.options.outro ?? this.grid.options.intro)
+      : this.grid.options.intro;
+    return Number.isFinite(transition?.durationSeconds)
+      ? transition.durationSeconds
+      : 1;
   }
 
   resize(viewport) {
@@ -209,13 +229,13 @@ export class FlockGridGenerator {
       type: "flock-grid",
       activeBoids,
       pulse: this.flock.pulseStrength(),
-      flockAxisRadians: this.flockAxisRadians,
       textLockup: this.typographyOptions.textLockup === true,
       grid: this.grid.inspect(),
     };
   }
 
   dispose() {
+    this.circleEndpoint.reset();
     this.grid.dispose();
     this.typeField.dispose();
   }

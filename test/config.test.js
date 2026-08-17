@@ -12,8 +12,15 @@ import {
   COMPOSITION_CONFIGS,
 } from "../config.js";
 import { createCatalog } from "../src/catalog.js";
+import { resolveSceneTransitionSettings } from "../src/scene-transitions/index.js";
+import { resolveCellTransitionSettings } from "../src/cell-transitions/transition-settings.js";
 
 const EXPECTED_BUNDLE_OWNERSHIP = Object.freeze({
+  base: {
+    settings: ["base"],
+    generators: ["baseGrid"],
+    compositions: ["base"],
+  },
   "inference-loop": {
     settings: ["inferenceLoop"],
     generators: ["inferenceLoopGrid"],
@@ -52,11 +59,18 @@ const EXPECTED_BUNDLE_OWNERSHIP = Object.freeze({
   "flock-grid": {
     settings: ["flock", "grid", "typography"],
     generators: ["flockGrid"],
-    compositions: ["flock", "flock-circles", "flock-flip-dots"],
+    compositions: ["flock", "flock-circles"],
   },
 });
 
 const EXPECTED_GRID_HIERARCHY = Object.freeze([
+  {
+    compositionId: "base",
+    generatorInstanceId: "baseGrid",
+    generatorType: "base-composition",
+    settingsKey: "base",
+    strategy: undefined,
+  },
   {
     compositionId: "inference-loop",
     generatorInstanceId: "inferenceLoopGrid",
@@ -118,7 +132,6 @@ const LEGACY_PUBLIC_COMPOSITION_IDS = Object.freeze([
   "interactive-grid",
   "flock",
   "flock-circles",
-  "flock-flip-dots",
 ]);
 
 function ownKeys(value) {
@@ -141,19 +154,33 @@ function assertDisjointEntries(groups, kind) {
 }
 
 // Composition settings groups are the one place the facade builds a merged copy
-// instead of forwarding the bundle's object: the app-wide palette and flicker
-// blocks in config/global.js fill in whatever the composition left unauthored.
+// instead of forwarding the bundle's object: app-wide palette, cell-transition,
+// intro, and flicker values fill in whatever the composition left unauthored.
 function assertInheritsGlobalDefaults(assembled, authored, name, inheritsPalette) {
   const {
+    cellTransitions: assembledCellTransitions,
     flicker: assembledFlicker,
+    intro: assembledIntro,
+    outro: assembledOutro,
     palette: assembledPalette,
     ...assembledRest
   } = assembled;
   const {
+    cellTransitions: authoredCellTransitions,
     flicker: authoredFlicker,
+    intro: authoredIntro,
+    outro: authoredOutro,
     palette: authoredPalette,
     ...authoredRest
   } = authored;
+  assert.deepEqual(
+    assembledCellTransitions,
+    resolveCellTransitionSettings(
+      GLOBAL_CONFIG.cellTransitions,
+      authoredCellTransitions,
+    ),
+    `${name} should override only the cell-transition values it authored.`,
+  );
   assert.deepEqual(
     assembledRest,
     authoredRest,
@@ -168,6 +195,18 @@ function assertInheritsGlobalDefaults(assembled, authored, name, inheritsPalette
   } else {
     assert.equal(assembledPalette, authoredPalette);
   }
+  assert.deepEqual(
+    assembledIntro,
+    resolveSceneTransitionSettings(GLOBAL_CONFIG.intro, authoredIntro),
+    `${name} should override only the intro values it authored.`,
+  );
+  assert.deepEqual(
+    assembledOutro,
+    authoredOutro === undefined
+      ? resolveSceneTransitionSettings(assembledIntro, { fallbackToIntro: true })
+      : resolveSceneTransitionSettings(assembledIntro, authoredOutro),
+    `${name} should inherit intro for an unauthored outro.`,
+  );
   if (authoredFlicker === undefined) {
     assert.equal(
       assembledFlicker,
@@ -256,7 +295,7 @@ function assertTransitionReferences(transition, settings, owner, cellTransitionT
   if (typeof transition.options === "string") {
     assert.ok(
       settings.cellTransitions
-        && Object.hasOwn(settings.cellTransitions, transition.options),
+        && Object.hasOwn(settings.cellTransitions.modes, transition.options),
       `${owner} refers to missing cell-transition options "${transition.options}".`,
     );
   }
@@ -339,12 +378,34 @@ function assertBundleReferences(
 }
 
 test("config facade preserves explicit global, shared, and bundle ownership", () => {
+  assert.equal(typeof GLOBAL_CONFIG.composition.startWithCircle, "boolean");
+  assert.equal(typeof GLOBAL_CONFIG.composition.endWithCircle, "boolean");
+  assert.ok(
+    GLOBAL_CONFIG.composition.startWithCircleDurationSeconds === "auto"
+      || GLOBAL_CONFIG.composition.startWithCircleDurationSeconds > 0,
+  );
+  assert.ok(
+    GLOBAL_CONFIG.composition.endWithCircleDurationSeconds === "auto"
+      || GLOBAL_CONFIG.composition.endWithCircleDurationSeconds > 0,
+  );
+  assert.ok(
+    [1, 2, 4, 8, 16].includes(GLOBAL_CONFIG.composition.circleSubdivision),
+  );
   assert.deepEqual(
     ownKeys(GLOBAL_CONFIG),
-    ["canvas", "composition", "flicker", "palette", "palettes", "ui"],
+    [
+      "canvas",
+      "cellTransitions",
+      "composition",
+      "flicker",
+      "intro",
+      "palette",
+      "palettes",
+      "ui",
+    ],
   );
   assert.deepEqual(ownKeys(SHARED_CONFIG), ["settings"]);
-  assert.deepEqual(ownKeys(SHARED_CONFIG.settings), ["cellTransitions"]);
+  assert.deepEqual(ownKeys(SHARED_CONFIG.settings), []);
   assert.deepEqual(ownKeys(COMPOSITION_BUNDLES), ownKeys(EXPECTED_BUNDLE_OWNERSHIP));
   assert.strictEqual(COMPOSITION_CONFIGS, COMPOSITION_BUNDLES);
 
@@ -362,6 +423,7 @@ test("config facade preserves explicit global, shared, and bundle ownership", ()
 
   const globalSettings = {
     canvas: GLOBAL_CONFIG.canvas,
+    cellTransitions: GLOBAL_CONFIG.cellTransitions,
     composition: GLOBAL_CONFIG.composition,
   };
   const settingGroups = [
@@ -449,9 +511,17 @@ test("public compositions expose the explicit configuration hierarchy", () => {
 test("all configured settings and implementation references resolve", () => {
   const globalSettings = {
     canvas: GLOBAL_CONFIG.canvas,
+    cellTransitions: GLOBAL_CONFIG.cellTransitions,
     composition: GLOBAL_CONFIG.composition,
   };
   const catalog = createCatalog({ palettes: PALETTES });
+
+  for (const mode of Object.keys(GLOBAL_CONFIG.cellTransitions.modes)) {
+    assert.ok(
+      catalog.cellTransitionTypes.has(mode),
+      `Global cell-transition mode "${mode}" is not registered.`,
+    );
+  }
 
   assert.ok(
     Object.hasOwn(COMPOSITION_DEFINITIONS, GLOBAL_CONFIG.composition.active),

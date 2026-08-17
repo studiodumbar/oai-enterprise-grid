@@ -1406,13 +1406,28 @@ export function nextGameOfLifeState(state, layout, rules = {}) {
   return { state: nextState, neighborCounts };
 }
 
-export function initialGameOfLifeStateAt(layout, cycleIndex, density = 0.34) {
+function gameOfLifeCycleSeed(projectSeed, cycleIndex) {
+  const seed = (
+    Number.isInteger(projectSeed)
+    && projectSeed >= 0
+    && projectSeed <= 0xffffffff
+  ) ? projectSeed >>> 0 : 0;
+  return ((cycleIndex >>> 0) ^ Math.imul(seed, 0x9e3779b1)) >>> 0;
+}
+
+export function initialGameOfLifeStateAt(
+  layout,
+  cycleIndex,
+  density = 0.34,
+  projectSeed = 0,
+) {
   const cellCount = layout.columns * layout.rows;
   const aliveCount = cellCount <= 1
     ? cellCount
     : Math.max(1, Math.min(cellCount - 1, Math.round(density * cellCount)));
   const indices = Array.from({ length: cellCount }, (_, index) => index);
-  const aliveIndices = rankedIndices(indices, cycleIndex, 907).slice(0, aliveCount);
+  const cycleSeed = gameOfLifeCycleSeed(projectSeed, cycleIndex);
+  const aliveIndices = rankedIndices(indices, cycleSeed, 907).slice(0, aliveCount);
   const state = new Uint8Array(cellCount);
   for (const index of aliveIndices) state[index] = 1;
   return state;
@@ -1431,6 +1446,7 @@ export function gameOfLifeStateAt({
     layout,
     cycleIndex,
     options.initialDensity,
+    options.projectSeed,
   );
   let previousState = new Uint8Array(state.length);
   let neighborCounts = new Uint8Array(state.length);
@@ -1462,6 +1478,12 @@ export function gameOfLifeGenerationAt(progress, generationCount) {
 }
 
 function createGameOfLifeScene({ layout, cycleIndex, progress, options }) {
+  const projectSeed = (
+    Number.isInteger(options.projectSeed)
+    && options.projectSeed >= 0
+    && options.projectSeed <= 0xffffffff
+  ) ? options.projectSeed >>> 0 : 0;
+  const cycleSeed = gameOfLifeCycleSeed(projectSeed, cycleIndex);
   const generationIndex = gameOfLifeGenerationAt(progress, options.layerPasses);
   const generationPosition = clamp01(progress) * options.layerPasses;
   const generationProgress = generationPosition - generationIndex;
@@ -1488,7 +1510,7 @@ function createGameOfLifeScene({ layout, cycleIndex, progress, options }) {
     if (generationIndex === 0) {
       const seedLevel = Math.min(
         2,
-        Math.floor(hashUnit(cycleIndex, index, 919) * 3),
+        Math.floor(hashUnit(cycleSeed, index, 919) * 3),
       );
       faces[index] = makeFace(seedLevel, 1, "life-seed");
     } else if (!wasAlive) {
@@ -1519,8 +1541,9 @@ function createGameOfLifeScene({ layout, cycleIndex, progress, options }) {
     : null;
 
   return {
-    key: `game-of-life:${cycleIndex}:${generationIndex}`,
+    key: `game-of-life:${projectSeed}:${cycleIndex}:${generationIndex}`,
     phase: "generation",
+    seed: projectSeed,
     stepIndex: generationIndex,
     generationIndex,
     faces,

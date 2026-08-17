@@ -1,5 +1,5 @@
-// The flock variants are one composition family. They intentionally share one
-// configured generator so switching transition recipes keeps the live flock.
+// The flock composition and its compatibility alias share one configured
+// generator, so switching IDs keeps the live flock.
 export const FLOCK_GRID_CONFIG = {
   settings: {
     grid: {
@@ -57,7 +57,7 @@ export const FLOCK_GRID_CONFIG = {
       gridSettings: "grid",
       typographySettings: "typography",
       flockSettings: "flock",
-      cellTransition: { type: "squarify", options: "squarify" },
+      cellTransition: { type: "none", options: "none" },
     },
   },
 
@@ -75,17 +75,6 @@ export const FLOCK_GRID_CONFIG = {
         {
           use: "flockGrid",
           cellTransition: { type: "none", options: "none" },
-        },
-      ],
-    },
-
-    "flock-flip-dots": {
-      rule: "sequence",
-      loop: true,
-      steps: [
-        {
-          use: "flockGrid",
-          cellTransition: { type: "flip-dot", options: "flipDot" },
         },
       ],
     },

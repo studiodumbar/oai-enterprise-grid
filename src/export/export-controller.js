@@ -12,6 +12,7 @@ import { evenSize } from "./resolution.js";
 
 const signature = projectSignature;
 const INACTIVE_POINTER = Object.freeze({ active: false, x: 0, y: 0 });
+const MAX_EXPORT_CYCLES = 100;
 
 function yieldToBrowser() {
   return new Promise(resolve => setTimeout(resolve, 0));
@@ -54,7 +55,14 @@ function pngBytes(blob, metadataPayload) {
   ));
 }
 
-function exportedFrame(time, dt, frameIndex, viewport) {
+export function motionDurationForCycles(duration, cycles = 1) {
+  if (!Number.isSafeInteger(cycles) || cycles < 1 || cycles > MAX_EXPORT_CYCLES) {
+    throw new RangeError(`Export cycles must be an integer between 1 and ${MAX_EXPORT_CYCLES}.`);
+  }
+  return Number.isFinite(duration) && duration > 0 ? duration * cycles : null;
+}
+
+function exportedFrame(time, dt, frameIndex, viewport, exportFrame = {}) {
   return {
     dt,
     compositionDt: dt,
@@ -63,6 +71,22 @@ function exportedFrame(time, dt, frameIndex, viewport) {
     viewport,
     pointer: INACTIVE_POINTER,
     exporting: true,
+    ...exportFrame,
+  };
+}
+
+export function exportNamePartsFromInspection(inspection) {
+  if (!inspection || typeof inspection !== "object") return {};
+  const flickers = Object.values(inspection.generators ?? {})
+    .map(generator => generator?.flicker);
+  const previewFlicker = inspection.compositionId === "base"
+    ? flickers.find(entry => entry?.mode && entry.scope)
+    : null;
+  const flicker = previewFlicker
+    ?? flickers.find(entry => entry?.enabled && entry.mode);
+  return {
+    composition: previewFlicker?.scope ?? inspection.compositionId ?? "",
+    flicker: flicker?.mode ?? "",
   };
 }
 
@@ -97,6 +121,19 @@ export function createExportController({
       }),
       svg: null,
     };
+  }
+
+  // Exports are named after the composition and flicker mode on screen. The
+  // base test card uses its preview scope in place of the internal composition
+  // id, producing prefixes such as OAI_canvas_radar-arc and OAI_cell_noise.
+  function exportNameParts() {
+    let inspection = null;
+    try {
+      inspection = getDirector()?.inspect?.() ?? null;
+    } catch {
+      return {};
+    }
+    return exportNamePartsFromInspection(inspection);
   }
 
   function contentBounds(director, viewport) {
@@ -139,10 +176,10 @@ export function createExportController({
             session.update(exportedFrame(simulationTime, dt, frameIndex, preview.viewport));
           }
         },
-        draw(context, target) {
+        draw(context, target, exportFrame) {
           drawContained(
             session,
-            exportedFrame(target, 0, frameIndex, preview.viewport),
+            exportedFrame(target, 0, frameIndex, preview.viewport, exportFrame),
             context,
             bounds,
             width,
@@ -197,10 +234,10 @@ export function createExportController({
     downloadBlob(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }), names.svg());
   }
 
-  async function exportMotion(payload, names, format) {
+  async function exportMotion(payload, names, format, cycles) {
     const { width, height } = normalizedOutputSize(state, format !== "png-sequence");
     const fps = Math.max(1, Math.round(state.fps));
-    const duration = getDirector().animationDuration();
+    const duration = motionDurationForCycles(getDirector().animationDuration(), cycles);
     if (!(duration > 0)) {
       throw new Error(
         "This composition is a continuous simulation without a finite seamless cycle. Choose a timed grid composition for motion export.",
@@ -232,7 +269,10 @@ export function createExportController({
       for (let index = 0; index < frames; index += 1) {
         const time = frameTimeAt(index, fps);
         fillOutput(context, width, height, alpha, background);
-        session.draw(context, time);
+        session.draw(context, time, {
+          exportFrameIndex: index,
+          exportFrameCount: frames,
+        });
         if (sink) {
           const blob = await canvasToBlob(canvas);
           await sink.write(index, await pngBytes(blob, stampedPayload));
@@ -268,7 +308,7 @@ export function createExportController({
 
   // `notify` is on for the panel button and off for the console, which
   // summarises failures itself instead of stacking alert dialogs.
-  async function run({ notify = true } = {}) {
+  async function run({ notify = true, cycles = 1 } = {}) {
     if (exporting) {
       return { ok: false, error: new Error("An export is already running.") };
     }
@@ -276,13 +316,14 @@ export function createExportController({
     let failure = null;
     const wasLooping = typeof p.isLooping === "function" ? p.isLooping() : true;
     const exportDate = new Date();
-    const base = exportBaseName(exportDate);
+    const parts = { date: exportDate, ...exportNameParts() };
+    const base = exportBaseName(exportDate, parts);
     const names = {
       base,
-      png: alpha => exportFilename("png", { date: exportDate, alpha }),
-      svg: () => exportFilename("svg", { date: exportDate }),
-      mp4: () => exportFilename("mp4", { date: exportDate }),
-      webm: alpha => exportFilename("webm", { date: exportDate, alpha }),
+      png: alpha => exportFilename("png", { ...parts, alpha }),
+      svg: () => exportFilename("svg", parts),
+      mp4: () => exportFilename("mp4", parts),
+      webm: alpha => exportFilename("webm", { ...parts, alpha }),
     };
     panel.setLocked(true);
     panel.setProgress("Preparing export…", 0);
@@ -293,11 +334,11 @@ export function createExportController({
       if (state.exportFormat === "png") await exportPng(payload, names);
       else if (state.exportFormat === "svg") await exportSvg(payload, names);
       else if (state.exportFormat === "png-sequence") {
-        await exportMotion(payload, names, "png-sequence");
+        await exportMotion(payload, names, "png-sequence", cycles);
       } else if (state.exportFormat === "webm") {
-        await exportMotion(payload, names, "webm");
+        await exportMotion(payload, names, "webm", cycles);
       } else {
-        await exportMotion(payload, names, "mp4");
+        await exportMotion(payload, names, "mp4", cycles);
       }
     } catch (error) {
       failure = error;

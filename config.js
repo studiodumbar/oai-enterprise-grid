@@ -1,7 +1,7 @@
-// Public configuration facade. Edit app-wide values in config/global.js,
-// shared visual presets in config/shared.js, and composition-family values in
-// config/compositions/. The flat exports at the bottom remain the runtime
-// contract used by the composition director.
+// Public configuration facade. Edit app-wide values and transition presets in
+// config/global.js, compatibility settings in config/shared.js, and
+// composition-family values in config/compositions/. The flat exports at the
+// bottom remain the runtime contract used by the composition director.
 import { GLOBAL_CONFIG } from "./config/global.js";
 import { SHARED_CONFIG } from "./config/shared.js";
 import { INTERACTIVE_GRID_CONFIG } from "./config/compositions/interactive-grid.js";
@@ -12,7 +12,10 @@ import { TOOL_LOOP_CONFIG } from "./config/compositions/tool-loop.js";
 import { VORONOI_CONFIG } from "./config/compositions/voronoi.js";
 import { L_TREE_CONFIG } from "./config/compositions/l-tree.js";
 import { GAME_OF_LIFE_CONFIG } from "./config/compositions/game-of-life.js";
+import { BASE_CONFIG } from "./config/compositions/base.js";
 import { mergeFlickerSettings } from "./src/visuals/flicker/index.js";
+import { resolveSceneTransitionSettings } from "./src/scene-transitions/index.js";
+import { resolveCellTransitionSettings } from "./src/cell-transitions/transition-settings.js";
 
 export { GLOBAL_CONFIG } from "./config/global.js";
 export { SHARED_CONFIG } from "./config/shared.js";
@@ -27,8 +30,10 @@ export { TOOL_LOOP_CONFIG } from "./config/compositions/tool-loop.js";
 export { VORONOI_CONFIG } from "./config/compositions/voronoi.js";
 export { L_TREE_CONFIG } from "./config/compositions/l-tree.js";
 export { GAME_OF_LIFE_CONFIG } from "./config/compositions/game-of-life.js";
+export { BASE_CONFIG } from "./config/compositions/base.js";
 
 export const COMPOSITION_BUNDLES = Object.freeze({
+  base: BASE_CONFIG,
   "inference-loop": INFERENCE_LOOP_CONFIG,
   "context-window": CONTEXT_WINDOW_CONFIG,
   "tool-loop": TOOL_LOOP_CONFIG,
@@ -74,15 +79,27 @@ function withGlobalFlickerDefaults(settingsGroups) {
   return resolved;
 }
 
-// A composition settings group inherits the app-wide palette name and
-// overrides it only by authoring its own `palette`. Global and shared groups
-// are left alone, and the composition config modules stay unmutated.
-function withGlobalPaletteDefault(settingsGroups) {
+// A composition settings group inherits the app-wide palette, cell transition,
+// intro, and outro. It can override them locally; authored modules stay
+// unmutated.
+function withGlobalCompositionDefaults(settingsGroups) {
   const resolved = {};
   for (const [name, group] of Object.entries(settingsGroups ?? {})) {
-    resolved[name] = group?.palette === undefined
-      ? { palette: GLOBAL_CONFIG.palette, ...group }
-      : group;
+    const cellTransitions = resolveCellTransitionSettings(
+      GLOBAL_CONFIG.cellTransitions,
+      group?.cellTransitions,
+    );
+    const intro = resolveSceneTransitionSettings(GLOBAL_CONFIG.intro, group?.intro);
+    const authoredOutro = group?.outro ?? GLOBAL_CONFIG.outro;
+    resolved[name] = {
+      palette: GLOBAL_CONFIG.palette,
+      ...group,
+      cellTransitions,
+      intro,
+      outro: authoredOutro === undefined
+        ? resolveSceneTransitionSettings(intro, { fallbackToIntro: true })
+        : resolveSceneTransitionSettings(intro, authoredOutro),
+    };
   }
   return resolved;
 }
@@ -93,9 +110,10 @@ export const SETTINGS = withGlobalFlickerDefaults(mergeUnique("settings group", 
   {
     canvas: GLOBAL_CONFIG.canvas,
     composition: GLOBAL_CONFIG.composition,
+    cellTransitions: GLOBAL_CONFIG.cellTransitions,
   },
   SHARED_CONFIG.settings,
-  ...compositionConfigs.map(config => withGlobalPaletteDefault(config.settings)),
+  ...compositionConfigs.map(config => withGlobalCompositionDefaults(config.settings)),
 ]));
 
 export const PALETTES = GLOBAL_CONFIG.palettes;

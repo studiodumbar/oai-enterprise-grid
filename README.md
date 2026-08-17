@@ -11,7 +11,7 @@ do not claim to show private chain-of-thought, exact internal telemetry, or
 literal model layer, head, or token counts. Voronoi, L-tree, and Game of Life
 are separate procedural systems rather than inference representations.
 
-All six share the same strict circle-face renderer and flip-dot grammar. A
+All six share the same strict circle-face renderer and blank-hinge grammar. A
 parent cell can show nothing, 1, 4, 16, or 64 circles. Count, color, and
 whitespace change as a single face:
 the old face switches off, the cell passes through a blank hinge, and the new
@@ -92,6 +92,11 @@ configured number of generations, a new deterministic seed field begins. This
 explores how simple local rules create emergent global behavior; it is not a
 claim that transformer inference is a cellular automaton.
 
+The field is derived from the project's 32-bit seed. The active seed appears as
+`state.generators.gameOfLifeAutomaton.seed` in inspection output and as
+`params.seed` in embedded export metadata. Dropping a stamped export back onto
+the app restores that seed before reconstructing the saved generation.
+
 ## Interactive grid composition
 
 `interactive-grid` is the directly editable grid composition. Click any parent
@@ -123,11 +128,8 @@ forward palette lap before settling on the normally scheduled next color. For
 example, `A → B` becomes `A → B → C → D → A → B` with four colors. Every hop
 shares the same outer `durationSeconds`; enabling the lap does not lengthen the
 transition or reroll the parent cell's pattern.
-The `mode` setting selects either `"flip-dot"` or `"slide"` as the dot-face
-motion within snake, diamond, and row patterns. Flip-dot folds every circle
-edge-on, changes color while hidden, and unfolds with the existing mechanical
-bounce. Slide moves a same-sized circle diagonally from the top-left over the
-outgoing circle. In slide mode, a circular clip contains both faces without
+Slide moves a same-sized circle diagonally from the top-left over the outgoing
+circle during snake, diamond, and row patterns. A circular clip contains both faces without
 painting background-colored mask geometry. This keeps alpha exports genuinely
 transparent. Every visible circle remains an independent recursive control.
 Clicking a circle replaces only that circle with four children, and every child
@@ -148,8 +150,25 @@ Edit `GLOBAL_CONFIG.composition.active` in `config/global.js`:
 ```js
 composition: {
   active: "voronoi", // or one of the compositions below
+  startWithCircle: true,
+  startWithCircleDurationSeconds: "auto",
+  endWithCircle: true,
+  endWithCircleDurationSeconds: "auto",
+  circleSubdivision: 2,
 },
 ```
+
+Each enabled endpoint is part of the composition's native animation: its real
+cells follow that universe's configured intro or outro scene-transition rule.
+The start and end durations are added around the unchanged intermediate
+timeline. A duration of `"auto"` matches the active flicker mode's
+`cycleSeconds`; if that mode has no finite cycle, it uses the corresponding
+intro/outro duration. A positive number keeps an explicit duration in seconds.
+`circleSubdivision` is the subdivision count along each axis of the
+centered parent cell, so `1`, `2`, `4`, `8`, and `16` produce 1, 4, 16, 64,
+and 256 child cells. Motion exports force enabled first and last frames to the
+exact parent-cell state. Continuous flock simulations support the start state,
+but have no finite final frame for an end state.
 
 For quick comparisons, the same choice can be made without editing:
 
@@ -161,6 +180,7 @@ http://localhost:8000/?composition=tool-loop
 http://localhost:8000/?composition=voronoi
 http://localhost:8000/?composition=l-tree
 http://localhost:8000/?composition=game-of-life
+http://localhost:8000/?composition=base
 ```
 
 `inference-loop` is the canonical public ID. `thinking` remains a supported
@@ -174,11 +194,9 @@ circleGridApp.list();
 circleGridApp.use("inference-loop");
 ```
 
-The `flock` composition preserves the existing squarifying animation.
-`flock-circles` is the same generator using the `none` cell-transition strategy;
-`flock-flip-dots` folds each dot edge-on, swaps subdivision while hidden, and
-unfolds the new face with a small cubic-bezier bounce. All three modes reuse the
-same live flock/grid generator rather than restarting the simulation.
+The `flock` composition uses the static circle subdivision renderer.
+`flock-circles` remains as a compatibility composition ID for the same live
+flock/grid generator.
 
 Set `FLOCK_GRID_CONFIG.settings.typography.textLockup` in
 `config/compositions/flock-grid.js` to `true` to create a safe zone around the
@@ -247,6 +265,15 @@ take a `--no-` prefix to clear them. Values also accept `--flag=value`.
 
 `--all` exports every canonical composition in turn, skipping legacy aliases,
 and returns to the composition that was live when the command started.
+`--preview-flicker` exports the `base` composition once for every registered
+flicker mode in both `canvas` and `cell` scope. Motion previews replay three
+times by default; `--repeats N` changes that count. Each pass uses the palette,
+amount, stagger, and per-mode values assembled from `GLOBAL_CONFIG.flicker`.
+For any motion export, `--cycles N` repeats the composition's complete cycle N
+times in one file. In flicker previews, the duration combines both controls:
+`repeats × cycles` flicker cycles.
+Filenames start with the scope and mode, for example
+`OAI_canvas_radar-arc_0814-120000.mp4`.
 `--composition a,b` (short `-c`) exports a named subset. A composition that
 cannot produce the requested format — a continuous simulation asked for motion,
 for instance — is reported in the returned summary instead of raising an alert
@@ -265,7 +292,7 @@ p5js/
 ├── config.js                     public facade and assembled compatibility exports
 ├── config/
 │   ├── global.js                 canvas, default composition, palette, and palettes
-│   ├── shared.js                 settings reused across composition families
+│   ├── shared.js                 compatibility namespace for shared settings
 │   └── compositions/
 │       ├── inference-loop.js     inference-loop settings, instance, and recipes
 │       ├── context-window.js     causal-horizon settings and recipe
@@ -280,6 +307,7 @@ p5js/
 │   ├── sketch.js                 p5 instance lifecycle only
 │   ├── catalog.js                implementation registrations
 │   ├── core/
+│   │   ├── cubic-bezier.js
 │   │   ├── registry.js
 │   │   └── composition-director.js
 │   ├── compositions/
@@ -308,9 +336,15 @@ p5js/
 │   │   └── subdivision-policy.js
 │   ├── cell-transitions/
 │   │   ├── cell-state-buffer.js
-│   │   ├── squarify.js
-│   │   ├── flip-dot.js
+│   │   ├── cell-state-transition.js
+│   │   ├── index.js
+│   │   ├── state-plan.js
+│   │   ├── transition-settings.js
+│   │   ├── sort-selection.js
 │   │   └── none.js
+│   ├── scene-transitions/         intro/outro lifecycle controllers
+│   │   ├── scene-transition.js
+│   │   └── transition-settings.js
 │   └── shapes/
 │       └── rounded-rect.js
 └── test/
@@ -354,12 +388,15 @@ cell-transition strategies, so changing between them does not restart the
 simulation.
 
 Configuration is authored at its narrowest scope. `GLOBAL_CONFIG.canvas`,
-`GLOBAL_CONFIG.composition`, `GLOBAL_CONFIG.flicker`, `GLOBAL_CONFIG.palette`,
-and `GLOBAL_CONFIG.palettes` contain app-wide values. `GLOBAL_CONFIG.palette`
-names the palette every composition uses; a composition overrides it only by
-authoring its own `palette` in its settings group. `SHARED_CONFIG.settings.cellTransitions` contains reusable motion
-presets, while the flock settings live with the flock-grid family in
-`config/compositions/flock-grid.js`.
+`GLOBAL_CONFIG.composition`, `GLOBAL_CONFIG.cellTransitions`,
+`GLOBAL_CONFIG.intro`, `GLOBAL_CONFIG.flicker`, `GLOBAL_CONFIG.palette`, and
+`GLOBAL_CONFIG.palettes` contain app-wide values.
+`GLOBAL_CONFIG.palette` names the palette every composition uses; a composition
+overrides it only by authoring its own `palette` in its settings group.
+`GLOBAL_CONFIG.cellTransitions` contains reusable between-state motion presets,
+while the flock settings live with the flock-grid family in
+`config/compositions/flock-grid.js`. `SHARED_CONFIG` remains as an empty
+compatibility namespace.
 Every public composition's editable values, configured instance, and recipe
 live together in its clearly named file under `config/compositions/`.
 
@@ -403,10 +440,10 @@ catalog, is not a visual generator, and is never used by Game of Life or the
 `cellular-automata` engine.
 
 Composition rules and cell transitions remain separate extension points.
-Composition rules return render plans and choose configured instances;
-cell transitions update per-cell drawing state. Whole-scene algorithm changes
-belong to a generator strategy, while a flip applied to each rendered circle
-belongs to a cell-transition strategy.
+Composition rules return render plans and choose configured instances. Cell
+transitions own between-state glyph motion; `none` also provides the static
+renderer-facing cell pose used by flock. Whole-scene algorithm changes still
+belong to a generator strategy.
 
 ### Inspection metadata
 
@@ -636,6 +673,73 @@ Frames expose capped `dt` for stable simulation and uncapped `compositionDt`
 plus `time` for wall-clock composition timing. `SequenceRule` uses
 `compositionDt`, so a six-second step remains six seconds at a low frame rate.
 
+## Configuring transitions
+
+`cellTransitions` and `intro`/`outro` have separate jobs:
+
+- `cellTransitions` animates changes between scene states while the cycle clock
+  continues to advance.
+- `intro` and `outro` run only at cycle boundaries. Their wall-clock phases
+  pause the cycle and are included in export duration.
+
+The app-wide between-state selection lives in `GLOBAL_CONFIG`:
+
+```js
+cellTransitions: {
+  enabled: true,
+  mode: "sort-selection",
+  durationSeconds: 0.7,
+  modes: {
+    none: { baseKind: "circle" },
+    "sort-selection": {
+      seed: 173,
+      revealFraction: 0.16,
+      arcHeightInCells: 0.32,
+      staggerSeconds: 0.02,
+      timingCurve: [0.65, 0, 0.35, 1],
+    },
+  },
+}
+```
+
+`mode` selects the between-state behavior used by discrete scene generators.
+`none` switches immediately, while `sort-selection` rearranges the complete
+glyph set. The `none` block also configures flock's static circle renderer.
+
+`sort-selection` treats every visible circle as an item, including circles
+inside subdivided cells. On a state change, the previous state's real glyph
+positions and sizes become the next plan's source slots. Selection-sort swaps
+then move them into row-major destinations on paired opposite arcs. The
+transition does not replay the intro or extend `animationDuration()`.
+
+`staggerSeconds` requests spacing between selection movements while
+`durationSeconds` remains the complete transition duration. Dense plans compress
+movement and delay proportionally. `timingCurve: [x1, y1, x2, y2]` uses CSS
+cubic-bezier semantics; `[0, 0, 1, 1]` is linear.
+
+Lifecycle settings contain no `state`/`cycle` trigger:
+
+```js
+intro: {
+  enabled: true,
+  mode: "sort-selection",
+  durationSeconds: 1,
+  modes: {
+    "sort-selection": {
+      seed: 173,
+      revealFraction: 0.6,
+      arcHeightInCells: 0.32,
+      staggerSeconds: 0.02,
+      timingCurve: [0.65, 0, 0.35, 1],
+    },
+  },
+}
+```
+
+When `outro` is absent, it inherits the intro arrangement in reverse without
+adding a duplicate inner phase. A composition can override `cellTransitions`,
+`intro`, or `outro` field by field in its own settings group.
+
 ## Adding a circle animation
 
 A cell transition owns any persistent animation state and writes the shared buffer:
@@ -673,16 +777,10 @@ Persistent timing or spring state should live inside the transition instance.
 Use `scaleX`/`scaleY` to transform a whole parent cell, or
 `glyphScaleX`/`glyphScaleY` when every subdivided dot should move about its own
 center. A transition may also set `paletteValue` from `0` to `1` to hold a face
-color; leaving it at `-1` keeps the grid's live energy color. `flip-dot` uses
-both glyph-local transforms and quantized face colors. Its brightness mapping is deliberately
-reversible: rising energy traverses one 180-degree face swap, and falling energy
-traverses the same poses backward as -180 degrees instead of continuing to 360.
-Set `axisDegrees` to `"auto"` to align every hinge with the flock's dominant
-travel axis. Numeric values still select a fixed angle: 0 is horizontal and 90
-is vertical.
+color; leaving it at `-1` keeps the grid's live energy color.
 
-Register the factory in `src/catalog.js` and add its shared options under
-`SHARED_CONFIG.settings.cellTransitions` in `config/shared.js`. It can be the
+Register the factory in `src/cell-transitions/index.js` and add its shared options under
+`GLOBAL_CONFIG.cellTransitions.modes` in `config/global.js`. It can be the
 generator default or a composition-step override:
 
 ```js

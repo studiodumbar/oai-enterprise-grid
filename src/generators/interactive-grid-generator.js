@@ -1,8 +1,9 @@
 import {
   cubicBezierAt,
-  flipDotPoseAtPhase,
   normalizeBezierCurve,
-} from "../cell-transitions/flip-dot.js";
+} from "../core/cubic-bezier.js";
+import { NativeCircleEndpointTransition } from "../compositions/circle-endpoints.js";
+import { createSceneTransitionModeRegistry } from "../scene-transitions/index.js";
 
 export const EMPTY_CELL_STATE = -1;
 export const INTERACTIVE_GRID_SESSION_STORAGE_KEY =
@@ -10,7 +11,6 @@ export const INTERACTIVE_GRID_SESSION_STORAGE_KEY =
 export const INTERACTIVE_SIZE_LEVELS = Object.freeze([0, 1, 2, 3, 4]);
 export const INTERACTIVE_COLOR_TRANSITION_MODES = Object.freeze([
   "slide",
-  "flip-dot",
 ]);
 export const INTERACTIVE_CELL_COLOR_TRANSITIONS = Object.freeze([
   "snake",
@@ -46,6 +46,12 @@ const IDENTITY_GLYPH_TRANSFORM = Object.freeze({
   rotation: 0,
   offsetX: 0,
   offsetY: 0,
+});
+const IDENTITY_ENDPOINT_PRESENTATION = Object.freeze({
+  offsetX: 0,
+  offsetY: 0,
+  opacity: 1,
+  scale: 1,
 });
 const NO_SUBDIVISION_NODES = new Set();
 const CONNECT_FOUR_ROW_STAGGER_SHARE = 0.35;
@@ -526,6 +532,7 @@ export function normalizeInteractiveColorTransition(config) {
   }
   const timingCurve = normalizeBezierCurve(
     config.timingCurve ?? DEFAULT_INTERACTIVE_COLOR_TIMING_CURVE,
+    "interactiveGrid.colorTransition timingCurve",
   );
   if (timingCurve[1] < 0 || timingCurve[1] > 1 || timingCurve[3] < 0 || timingCurve[3] > 1) {
     throw new RangeError("interactiveGrid.colorTransition timingCurve Y values must be between 0 and 1.");
@@ -558,7 +565,11 @@ export function createInteractiveGridLayout(options, { width, height }) {
   }
   const requested = Math.max(3, Math.round(options.longSideCells));
   const longCells = requested % 2 === 0 ? requested - 1 : requested;
-  const cellSize = Math.max(width, height) / longCells;
+  const minimumShortCells = Math.min(3, longCells);
+  const cellSize = Math.min(
+    Math.max(width, height) / longCells,
+    Math.min(width, height) / minimumShortCells,
+  );
   const fitOdd = size => {
     const count = Math.max(1, Math.floor(size / cellSize));
     return count % 2 === 0 ? Math.max(1, count - 1) : count;
@@ -816,6 +827,7 @@ export class InteractiveGridGenerator {
     runtime,
     palettes,
     shapeRenderer,
+    sceneTransitionTypes,
   }) {
     this.options = options;
     this.runtime = runtime;
@@ -839,11 +851,14 @@ export class InteractiveGridGenerator {
       this.colorTransition.durationSeconds,
       this.paletteColors.length,
     );
-    this.flipDotOptions = settings?.cellTransitions?.flipDot;
-    if (this.colorTransition.mode === "flip-dot" && !this.flipDotOptions) {
-      throw new Error("The flip-dot color mode requires SETTINGS.cellTransitions.flipDot.");
-    }
     this.backgroundColor = settings?.canvas?.background ?? "#fff";
+    this.circleEndpoint = new NativeCircleEndpointTransition({
+      settings: settings?.composition,
+      intro: options.intro,
+      outro: options.outro,
+      modeRegistry: sceneTransitionTypes ?? createSceneTransitionModeRegistry(),
+    });
+    this.circleEndpointActive = false;
     this.layout = null;
     this.baseStates = new Int8Array();
     this.subdivisionTrees = [];
@@ -860,6 +875,8 @@ export class InteractiveGridGenerator {
 
   enter() {
     this.active = true;
+    this.circleEndpoint.reset();
+    this.circleEndpointActive = false;
     const canvas = this.runtime.canvas?.();
     if (canvas?.style) canvas.style.cursor = "pointer";
   }
@@ -1383,6 +1400,11 @@ export class InteractiveGridGenerator {
 
   draw(frame, planEntry, context) {
     const { columns, rows, cellSize, offsetX, offsetY } = this.layout;
+    this.circleEndpointActive = this.circleEndpoint?.prepare?.(
+      frame?.compositionEndpoint,
+      this.endpointTransitionItems(),
+      this.layout,
+    ) ?? false;
     this.ensureColorTransitionPlans(paletteStepAt(
       frame.time,
       this.options.colorCycleSeconds,
@@ -1438,6 +1460,7 @@ export class InteractiveGridGenerator {
     if (transition.pattern === "waterfall" && transitionState.transitioning) {
       this.drawConnectFourColorTrace(
         context,
+        index,
         sequence,
         cellSize,
         marginScale,
@@ -1455,22 +1478,85 @@ export class InteractiveGridGenerator {
         noiseSeed,
         leafIndex,
       );
-      this.drawColorTransitionGlyph(
+      const x = leaf.x * cellSize;
+      const y = leaf.y * cellSize;
+      this.drawWithEndpointPresentation(
         context,
-        leaf.x * cellSize,
-        leaf.y * cellSize,
-        leaf.halfSize * cellSize,
-        leaf.halfSize * cellSize * marginScale,
-        leafState,
+        x,
+        y,
+        this.endpointPresentationFor(index, leaf),
+        () => this.drawColorTransitionGlyph(
+          context,
+          x,
+          y,
+          leaf.halfSize * cellSize,
+          leaf.halfSize * cellSize * marginScale,
+          leafState,
+        ),
       );
     });
   }
 
+  endpointTransitionItems() {
+    const items = [];
+    const { columns, cellSize, offsetX, offsetY } = this.layout;
+    for (let index = 0; index < this.baseStates.length; index += 1) {
+      const level = this.baseStates[index];
+      if (level === EMPTY_CELL_STATE) continue;
+      const row = Math.floor(index / columns);
+      const column = index % columns;
+      const centerX = offsetX + (column + 0.5) * cellSize;
+      const centerY = offsetY + (row + 0.5) * cellSize;
+      for (const leaf of this.leavesForCell(index, level).leaves) {
+        items.push({
+          id: `${index}:${leaf.key}`,
+          x: centerX + leaf.x * cellSize,
+          y: centerY + leaf.y * cellSize,
+          size: leaf.halfSize * cellSize * 2,
+        });
+      }
+    }
+    return items;
+  }
+
+  endpointPresentationFor(index, leaf) {
+    return this.circleEndpointActive
+      ? this.circleEndpoint.presentationsFor(`${index}:${leaf.key}`)
+      : IDENTITY_ENDPOINT_PRESENTATION;
+  }
+
+  drawWithEndpointPresentation(context, x, y, presentation, draw) {
+    if (Array.isArray(presentation)) {
+      for (const item of presentation) {
+        this.drawWithEndpointPresentation(context, x, y, item, draw);
+      }
+      return;
+    }
+    if (presentation.opacity <= 0 || presentation.scale <= 0) return;
+    if (
+      presentation.opacity === 1
+      && presentation.scale === 1
+      && presentation.offsetX === 0
+      && presentation.offsetY === 0
+    ) {
+      draw();
+      return;
+    }
+    context.save();
+    const inheritedAlpha = Number.isFinite(context.globalAlpha) ? context.globalAlpha : 1;
+    context.globalAlpha = inheritedAlpha * presentation.opacity;
+    context.translate(presentation.offsetX, presentation.offsetY);
+    if (presentation.scale !== 1) {
+      context.translate(x, y);
+      context.scale(presentation.scale, presentation.scale);
+      context.translate(-x, -y);
+    }
+    draw();
+    context.restore();
+  }
+
   drawColorTransitionGlyph(context, x, y, boxHalfSize, circleHalfSize, state) {
-    const drawGlyph = this.colorTransition.mode === "flip-dot"
-      ? this.drawFlipDotGlyph
-      : this.drawSlidingGlyph;
-    drawGlyph.call(this, context, x, y, boxHalfSize, circleHalfSize, state);
+    this.drawSlidingGlyph(context, x, y, boxHalfSize, circleHalfSize, state);
   }
 
   drawSolidColorGlyph(context, x, y, circleHalfSize, colorIndex) {
@@ -1489,6 +1575,7 @@ export class InteractiveGridGenerator {
 
   drawConnectFourColorTrace(
     context,
+    index,
     sequence,
     cellSize,
     marginScale,
@@ -1507,45 +1594,53 @@ export class InteractiveGridGenerator {
       const x = leaf.x * cellSize;
       const y = leaf.y * cellSize;
       const circleHalfSize = leaf.halfSize * cellSize * marginScale;
-      if (mix <= 0) {
-        this.drawSolidColorGlyph(
-          context,
-          x,
-          y,
-          circleHalfSize,
-          transitionState.previousIndex,
-        );
-        return;
-      }
-      if (mix >= 1) {
-        this.drawSolidColorGlyph(
-          context,
-          x,
-          y,
-          circleHalfSize,
-          transitionState.currentIndex,
-        );
-        return;
-      }
+      this.drawWithEndpointPresentation(
+        context,
+        x,
+        y,
+        this.endpointPresentationFor(index, leaf),
+        () => {
+          if (mix <= 0) {
+            this.drawSolidColorGlyph(
+              context,
+              x,
+              y,
+              circleHalfSize,
+              transitionState.previousIndex,
+            );
+            return;
+          }
+          if (mix >= 1) {
+            this.drawSolidColorGlyph(
+              context,
+              x,
+              y,
+              circleHalfSize,
+              transitionState.currentIndex,
+            );
+            return;
+          }
 
-      this.drawSolidColorGlyph(
-        context,
-        x,
-        y,
-        circleHalfSize,
-        transitionState.previousIndex,
+          this.drawSolidColorGlyph(
+            context,
+            x,
+            y,
+            circleHalfSize,
+            transitionState.previousIndex,
+          );
+          context.save();
+          const inheritedAlpha = Number.isFinite(context.globalAlpha) ? context.globalAlpha : 1;
+          context.globalAlpha = inheritedAlpha * mix;
+          this.drawSolidColorGlyph(
+            context,
+            x,
+            y,
+            circleHalfSize,
+            transitionState.currentIndex,
+          );
+          context.restore();
+        },
       );
-      context.save();
-      const inheritedAlpha = Number.isFinite(context.globalAlpha) ? context.globalAlpha : 1;
-      context.globalAlpha = inheritedAlpha * mix;
-      this.drawSolidColorGlyph(
-        context,
-        x,
-        y,
-        circleHalfSize,
-        transitionState.currentIndex,
-      );
-      context.restore();
     });
   }
 
@@ -1597,60 +1692,6 @@ export class InteractiveGridGenerator {
     context.fill();
 
     context.restore();
-  }
-
-  drawFlipDotGlyph(context, x, y, boxHalfSize, circleHalfSize, transitionState) {
-    if (!transitionState.transitioning) {
-      context.fillStyle = this.paletteColors[transitionState.currentIndex];
-      context.beginPath();
-      this.shapeRenderer.addPath(
-        context,
-        x,
-        y,
-        circleHalfSize,
-        1,
-        IDENTITY_GLYPH_TRANSFORM,
-      );
-      context.fill();
-      return;
-    }
-
-    const pose = transitionState.flipDotPose ?? flipDotPoseAtPhase(
-      transitionState.progress,
-      this.flipDotOptions,
-    );
-    const requestedAxis = this.flipDotOptions.axisDegrees;
-    const axisDegrees = typeof requestedAxis === "string"
-      && requestedAxis.trim().toLowerCase() === "auto"
-      ? 0
-      : Number(requestedAxis);
-    const axisRadians = Number.isFinite(axisDegrees)
-      ? axisDegrees * Math.PI / 180
-      : 0;
-    const liftInDots = Math.max(0, Number(this.flipDotOptions.liftInDots) || 0);
-    const lift = pose.lift * boxHalfSize * 2 * liftInDots;
-    const colorIndex = transitionState.progress < 0.5
-      ? transitionState.previousIndex
-      : transitionState.currentIndex;
-
-    context.fillStyle = this.paletteColors[colorIndex];
-    context.beginPath();
-    this.shapeRenderer.addPath(
-      context,
-      x,
-      y,
-      circleHalfSize,
-      1,
-      {
-        scaleX: 1,
-        scaleY: pose.projection,
-        scaleAxis: axisRadians,
-        rotation: 0,
-        offsetX: -Math.sin(axisRadians) * lift,
-        offsetY: Math.cos(axisRadians) * lift,
-      },
-    );
-    context.fill();
   }
 
   marginScale() {
@@ -1788,6 +1829,15 @@ export class InteractiveGridGenerator {
 
   animationDuration() {
     return this.options.colorCycleSeconds;
+  }
+
+  endpointAutoDuration(direction) {
+    const transition = direction === "end"
+      ? (this.options.outro ?? this.options.intro)
+      : this.options.intro;
+    return Number.isFinite(transition?.durationSeconds)
+      ? transition.durationSeconds
+      : this.options.colorCycleSeconds;
   }
 
   snapshotProjectState() {
@@ -1928,6 +1978,7 @@ export class InteractiveGridGenerator {
   }
 
   dispose() {
+    this.circleEndpoint.reset();
     this.baseStates = new Int8Array();
     this.subdivisionTrees = [];
     this.leafCaches = [];

@@ -1,42 +1,5 @@
 import { SpatialHash } from "./spatial-hash.js";
 
-const MIN_TRAVEL_SPEED = 1e-6;
-const MIN_AXIS_COHERENCE = 0.05;
-
-export function dominantTravelAxisRadians(
-  boids,
-  minimumCoherence = MIN_AXIS_COHERENCE,
-) {
-  let cosineTotal = 0;
-  let sineTotal = 0;
-  let weightTotal = 0;
-
-  for (const boid of boids) {
-    if (!boid.active) continue;
-    const speedSquared = boid.vx * boid.vx + boid.vy * boid.vy;
-    if (!Number.isFinite(speedSquared) || speedSquared < MIN_TRAVEL_SPEED ** 2) continue;
-
-    const speed = Math.sqrt(speedSquared);
-    const opacity = Number.isFinite(boid.opacity) ? Math.max(0, boid.opacity) : 1;
-    const weight = speed * opacity;
-    if (weight <= 0) continue;
-
-    // Average a hinge as an unoriented axis by doubling each velocity angle.
-    // This makes opposite travel directions reinforce the same visual axis.
-    cosineTotal += (boid.vx * boid.vx - boid.vy * boid.vy) / speedSquared * weight;
-    sineTotal += (2 * boid.vx * boid.vy) / speedSquared * weight;
-    weightTotal += weight;
-  }
-
-  if (weightTotal <= 0) return null;
-  const coherence = Math.hypot(cosineTotal, sineTotal) / weightTotal;
-  if (coherence < minimumCoherence) return null;
-
-  let axis = 0.5 * Math.atan2(sineTotal, cosineTotal);
-  if (axis < 0) axis += Math.PI;
-  return axis;
-}
-
 export class Boid {
   constructor() {
     this.x = 0;
@@ -222,10 +185,6 @@ export class Flock {
     if (!Number.isFinite(age) || age < 0) return 0;
     const decay = Math.max(0.01, this.options.pulseDecaySeconds);
     return Math.exp(-age / decay);
-  }
-
-  travelAxisRadians() {
-    return dominantTravelAxisRadians(this.boids);
   }
 
   repositionUnborn(typeField) {

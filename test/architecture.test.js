@@ -5,21 +5,11 @@ import { FactoryRegistry } from "../src/core/registry.js";
 import { CompositionDirector } from "../src/core/composition-director.js";
 import { SequenceRule } from "../src/compositions/sequence-rule.js";
 import { CellStateBuffer } from "../src/cell-transitions/cell-state-buffer.js";
-import { SquarifyTransition } from "../src/cell-transitions/squarify.js";
 import { NoneTransition } from "../src/cell-transitions/none.js";
-import {
-  cubicBezierAt,
-  FlipDotTransition,
-  flipDotStateAt,
-} from "../src/cell-transitions/flip-dot.js";
 import { GridField } from "../src/fields/grid-field.js";
 import { TypeField } from "../src/fields/type-field.js";
 import { CircleGrid } from "../src/grid/circle-grid.js";
-import { dominantTravelAxisRadians } from "../src/generators/flock.js";
-import {
-  FlockGridGenerator,
-  nearestEquivalentAxisRadians,
-} from "../src/generators/flock-grid-generator.js";
+import { FlockGridGenerator } from "../src/generators/flock-grid-generator.js";
 import { createCatalog } from "../src/catalog.js";
 import {
   SETTINGS,
@@ -267,23 +257,8 @@ test("text lockup masks only dots that overlap the typography", () => {
   assert.equal(SETTINGS.typography.textLockup, true);
 });
 
-test("squarify and none transitions share the same cell-state contract", () => {
+test("none transition maps field energy onto circle subdivision levels", () => {
   const states = new CellStateBuffer(2);
-  const squarify = new SquarifyTransition({
-    animate: true,
-    brightnessTransitionWidth: 0.124,
-    fromKind: "circle",
-    toKind: "square",
-  });
-
-  squarify.resize(2);
-  squarify.updateCell(0, { energy: 0 }, states);
-  squarify.updateCell(1, { energy: 0.25 }, states);
-  assert.equal(states.level[0], 0);
-  assert.equal(states.roundness[0], 1);
-  assert.equal(states.level[1], 1);
-  assert.equal(states.roundness[1], 0);
-
   const none = new NoneTransition({ baseKind: "circle" });
   none.resize(2);
   none.updateCell(0, { energy: 0.99 }, states);
@@ -291,252 +266,6 @@ test("squarify and none transitions share the same cell-state contract", () => {
   assert.equal(states.roundness[0], 1);
   assert.equal(states.scaleX[0], 1);
   assert.equal(states.opacity[0], 1);
-});
-
-test("flip dots make one reversible half-turn with an edge-on subdivision swap", () => {
-  const config = {
-    animate: true,
-    brightnessTransitionWidth: 0.1,
-    bounceCurve: [0.22, 0.72, 0.32, 1.18],
-  };
-  const risingEnergy = [0.15, 0.2, 0.25, 0.3, 0.35];
-  const rising = risingEnergy.map(energy => flipDotStateAt(energy, config));
-
-  assert.deepEqual(
-    rising.map(state => Math.round(state.phase * 100) / 100),
-    [0, 0.25, 0.5, 0.75, 1],
-  );
-  assert.equal(rising[0].level, 0);
-  assert.equal(rising[2].level, 1);
-  assert.ok(Math.abs(rising[2].projection) < 1e-9);
-  assert.equal(rising[0].projection, 1);
-  assert.ok(Math.abs(rising[4].projection - 1) < 1e-9);
-
-  // Falling brightness is the exact reverse pose sequence: conceptually
-  // +180 degrees out and -180 degrees back, never a continued 360-degree spin.
-  const falling = [...risingEnergy]
-    .reverse()
-    .map(energy => flipDotStateAt(energy, config));
-  assert.deepEqual(
-    falling.map(state => state.phase),
-    [...rising].reverse().map(state => state.phase),
-  );
-  assert.ok(falling.every(state => state.phase >= 0 && state.phase <= 1));
-
-  const epsilon = 1e-6;
-  const belowEdge = flipDotStateAt(0.25 - epsilon, config);
-  const atEdge = flipDotStateAt(0.25, config);
-  const aboveEdge = flipDotStateAt(0.25 + epsilon, config);
-  assert.equal(belowEdge.level, 0);
-  assert.equal(atEdge.level, 1);
-  assert.equal(aboveEdge.level, 1);
-  assert.ok(belowEdge.projection > 0);
-  assert.equal(atEdge.projection, 0);
-  assert.ok(aboveEdge.projection > 0);
-
-  let maximum = 0;
-  for (let sample = 0; sample <= 1000; sample += 1) {
-    maximum = Math.max(maximum, cubicBezierAt(sample / 1000, config.bounceCurve));
-  }
-  assert.ok(maximum > 1.03 && maximum < 1.05);
-  assert.equal(cubicBezierAt(0, config.bounceCurve), 0);
-  assert.equal(cubicBezierAt(1, config.bounceCurve), 1);
-
-  const regularPose = flipDotStateAt(0.2, {
-    ...config,
-    direction: 1,
-    projectionPower: 1,
-  });
-  const tunedPose = flipDotStateAt(0.2, {
-    ...config,
-    direction: -1,
-    projectionPower: 2,
-  });
-  assert.ok(Math.abs(tunedPose.projection - regularPose.projection ** 2) < 1e-9);
-  assert.equal(tunedPose.lift, -regularPose.lift);
-
-  const reversedLow = flipDotStateAt(0.1, {
-    ...config,
-    reverseLevelOrder: true,
-  });
-  const reversedHigh = flipDotStateAt(0.9, {
-    ...config,
-    reverseLevelOrder: true,
-  });
-  assert.equal(reversedLow.energyLevel, 0);
-  assert.equal(reversedLow.level, 3);
-  assert.equal(reversedHigh.energyLevel, 3);
-  assert.equal(reversedHigh.level, 0);
-
-  assert.throws(
-    () => cubicBezierAt(0, [2, 0, 0.5, 1]),
-    /X control points/,
-  );
-  assert.throws(
-    () => new FlipDotTransition({ liftInDots: Number.POSITIVE_INFINITY }),
-    /finite non-negative/,
-  );
-  assert.throws(
-    () => new FlipDotTransition({ direction: 0 }),
-    /direction must be 1 or -1/,
-  );
-  assert.throws(
-    () => new FlipDotTransition({ projectionPower: 0 }),
-    /projectionPower must be a finite positive/,
-  );
-  assert.throws(
-    () => new FlipDotTransition({ paletteValues: [0, 1] }),
-    /paletteValues must contain four/,
-  );
-  assert.throws(
-    () => new FlipDotTransition({ reverseLevelOrder: "yes" }),
-    /reverseLevelOrder must be true or false/,
-  );
-  assert.throws(
-    () => new FlipDotTransition({ axisDegrees: "automatic" }),
-    /finite number or "auto"/,
-  );
-});
-
-test("flock travel resolves to a stable unoriented hinge axis", () => {
-  const moving = (vx, vy, options = {}) => ({
-    active: true,
-    opacity: 1,
-    vx,
-    vy,
-    ...options,
-  });
-  const closeTo = (actual, expected) => {
-    assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} is not near ${expected}`);
-  };
-
-  closeTo(
-    dominantTravelAxisRadians([moving(10, 0), moving(-10, 0)]),
-    0,
-  );
-  closeTo(
-    dominantTravelAxisRadians([moving(0, 10), moving(0, -10)]),
-    Math.PI / 2,
-  );
-  closeTo(dominantTravelAxisRadians([moving(10, 10)]), Math.PI / 4);
-  closeTo(dominantTravelAxisRadians([moving(10, -10)]), Math.PI * 3 / 4);
-
-  assert.equal(
-    dominantTravelAxisRadians([
-      moving(10, 0),
-      moving(0, 10),
-      moving(20, 20, { active: false }),
-      moving(0, 0),
-    ]),
-    null,
-  );
-
-  const continued = nearestEquivalentAxisRadians(
-    Math.PI / 180,
-    Math.PI * 179 / 180,
-  );
-  closeTo(continued, Math.PI * 181 / 180);
-});
-
-test("flip-dot transforms each glyph on its selected hinge axis", () => {
-  const states = new CellStateBuffer(1);
-  const layout = { cellSize: 100 };
-  const horizontal = new FlipDotTransition({
-    axisDegrees: 0,
-    brightnessTransitionWidth: 0.1,
-    liftInDots: 0.035,
-    paletteValues: [0, 0.2, 0.8, 1],
-  });
-  horizontal.resize(1, states);
-  horizontal.updateCell(0, { energy: 0.25, layout }, states);
-  assert.equal(states.level[0], 1);
-  assert.equal(states.glyphScaleX[0], 1);
-  assert.equal(states.glyphScaleY[0], 0);
-  assert.equal(states.glyphScaleAxis[0], 0);
-  assert.ok(Math.abs(states.glyphOffsetY[0]) < 1e-6);
-  assert.equal(states.scaleY[0], 1);
-  assert.ok(Math.abs(states.paletteValue[0] - 0.2) < 1e-6);
-  horizontal.updateCell(0, { energy: 0.2, layout }, states);
-  assert.ok(states.glyphOffsetY[0] > 0);
-  horizontal.updateCell(0, { energy: 0.3, layout }, states);
-  assert.ok(states.glyphOffsetY[0] < 0);
-  const skippedEdge = horizontal.updateCell(
-    0,
-    { energy: 0.26, previousEnergy: 0.24, layout },
-    states,
-  );
-  assert.equal(skippedEdge.crossedBoundary, true);
-  assert.equal(states.level[0], 1);
-  assert.equal(states.glyphScaleY[0], 0);
-
-  states.reset();
-  const visibleThresholdSkip = new FlipDotTransition({
-    hideSkippedThresholds: false,
-    quantizePalette: false,
-  });
-  visibleThresholdSkip.resize(1, states);
-  const unhiddenPose = visibleThresholdSkip.updateCell(
-    0,
-    { energy: 0.26, previousEnergy: 0.24, layout },
-    states,
-  );
-  assert.equal(unhiddenPose.crossedBoundary, undefined);
-  assert.ok(states.glyphScaleY[0] > 0);
-  assert.equal(states.paletteValue[0], -1);
-
-  states.reset();
-  const diagonal = new FlipDotTransition({
-    axisDegrees: 45,
-    reverseLevelOrder: true,
-    brightnessTransitionWidth: 0.1,
-    paletteValues: [0, 0.2, 0.8, 1],
-  });
-  diagonal.resize(1, states);
-  diagonal.updateCell(0, { energy: 0.2, layout }, states);
-  assert.equal(states.level[0], 3);
-  assert.ok(Math.abs(states.glyphScaleAxis[0] - Math.PI / 4) < 1e-6);
-  assert.ok(states.glyphOffsetX[0] < 0);
-  assert.ok(states.glyphOffsetY[0] > 0);
-  assert.ok(Math.abs(states.glyphOffsetX[0] + states.glyphOffsetY[0]) < 1e-6);
-
-  diagonal.updateCell(0, { energy: 0.25, layout }, states);
-  assert.equal(states.level[0], 2);
-  assert.equal(states.glyphScaleY[0], 0);
-  assert.ok(Math.abs(states.paletteValue[0] - 0.2) < 1e-6);
-
-  states.reset();
-  const automatic = new FlipDotTransition({
-    axisDegrees: "auto",
-    brightnessTransitionWidth: 0.1,
-    liftInDots: 0.035,
-  });
-  automatic.resize(1, states);
-  automatic.updateCell(
-    0,
-    { energy: 0.2, layout },
-    states,
-    { motionAxisRadians: 0 },
-  );
-  assert.equal(states.glyphScaleAxis[0], 0);
-  assert.ok(states.glyphOffsetY[0] > 0);
-
-  automatic.updateCell(
-    0,
-    { energy: 0.2, layout },
-    states,
-    { motionAxisRadians: Math.PI / 2 },
-  );
-  assert.ok(Math.abs(states.glyphScaleAxis[0] - Math.PI / 2) < 1e-6);
-  assert.ok(states.glyphOffsetX[0] < 0);
-  assert.ok(Math.abs(states.glyphOffsetY[0]) < 1e-6);
-
-  diagonal.updateCell(
-    0,
-    { energy: 0.2, layout },
-    states,
-    { motionAxisRadians: Math.PI / 2 },
-  );
-  assert.ok(Math.abs(states.glyphScaleAxis[0] - Math.PI / 4) < 1e-6);
 });
 
 test("grid fields mix accumulated points and direct sources without p5", () => {
@@ -653,6 +382,29 @@ test("circle grid owns state when a transition resize returns nothing", () => {
   assert.ok(grid.cellState.level.every(value => value === 1));
   assert.ok(grid.cellState.scaleX.every(value => value === 1.5));
   assert.ok(grid.cellState.scaleY.every(value => value === 1));
+});
+
+test("circle grid keeps three short-side cells when five span the long side", () => {
+  const grid = new CircleGrid(
+    {
+      longSideCells: 5,
+      dotMargin: 0,
+      palette: "mono",
+      fieldRadiusInCells: 1,
+      fieldGain: 1,
+      riseSeconds: 0,
+      fallSeconds: 0,
+      showCellGrid: false,
+    },
+    { mono: ["#000000", "#ffffff"] },
+    { updateCell() {} },
+    { addPath() {} },
+    { width: 1000, height: 400 },
+  );
+
+  assert.equal(grid.layout.columns, 5);
+  assert.equal(grid.layout.rows, 3);
+  assert.equal(grid.layout.patternHeight, 400);
 });
 
 test("circle grid forwards transforms around every subdivided glyph", () => {
@@ -781,7 +533,6 @@ test("the configured flock composition runs through the complete adapter", () =>
   const settings = structuredClone(SETTINGS);
   settings.flock.count = 32;
   settings.flock.birthsPerPulse = 8;
-  settings.cellTransitions.flipDot.axisDegrees = "auto";
   const viewport = { width: 800, height: 600 };
   const runtime = {
     p5: fakeP5,
@@ -789,11 +540,9 @@ test("the configured flock composition runs through the complete adapter", () =>
     context: () => context,
   };
   const catalog = createCatalog({ palettes: PALETTES });
-  assert.ok(catalog.cellTransitionTypes.has("flip-dot"));
-  assert.deepEqual(
-    COMPOSITION_DEFINITIONS["flock-flip-dots"].steps[0].cellTransition,
-    { type: "flip-dot", options: "flipDot" },
-  );
+  assert.ok(catalog.cellTransitionTypes.has("none"));
+  assert.ok(catalog.cellTransitionTypes.has("sort-selection"));
+  assert.ok(catalog.sceneTransitionTypes.has("sort-selection"));
   const compositions = {
     ...COMPOSITION_DEFINITIONS,
     faded: {
@@ -811,9 +560,17 @@ test("the configured flock composition runs through the complete adapter", () =>
   });
 
   director.use("flock");
+  director.update({
+    dt: 0,
+    time: 0,
+    frameIndex: 0,
+    viewport,
+    pointer: { active: false, x: 0, y: 0 },
+  });
+  const startDuration = director.endpointAutoDurations().start;
   const frame = {
-    dt: 1 / 60,
-    time: 1 / 60,
+    dt: startDuration + 1 / 60,
+    time: startDuration + 1 / 60,
     frameIndex: 1,
     viewport,
     pointer: { active: false, x: 0, y: 0 },
@@ -861,38 +618,20 @@ test("the configured flock composition runs through the complete adapter", () =>
   const circles = director.generator("flockGrid").inspect().grid.cellState;
   assert.ok(circles.roundness.every(value => value === 1));
 
-  director.use("flock-flip-dots");
-  flockGenerator.flock.travelAxisRadians = () => Math.PI / 2;
-  director.update({ ...frame, frameIndex: 4, viewport });
-  director.draw({ ...frame, frameIndex: 4, viewport });
-  assert.equal(director.generator("flockGrid"), flockGenerator);
-  assert.ok(flockGenerator.grid.cellTransition instanceof FlipDotTransition);
-  assert.equal(flockGenerator.flock, flockIdentity);
-  assert.equal(flockGenerator.flock.boids, boidsIdentity);
-  const flipDots = flockGenerator.inspect().grid.cellState;
-  assert.ok(flipDots.glyphScaleY.every(Number.isFinite));
-  assert.ok(
-    flipDots.glyphScaleAxis.every(
-      axis => Math.abs(axis - Math.PI / 2) < 1e-6,
-    ),
-  );
-
   viewport.width = 900;
   viewport.height = 500;
   director.resize(viewport);
-  const resizedFlipDots = flockGenerator.inspect().grid.cellState;
+  const resizedCircles = flockGenerator.inspect().grid.cellState;
   assert.equal(
-    resizedFlipDots.length,
+    resizedCircles.length,
     flockGenerator.inspect().grid.rows * flockGenerator.inspect().grid.columns,
   );
-  assert.ok(resizedFlipDots.glyphScaleX.every(value => value === 1));
-  assert.ok(resizedFlipDots.glyphScaleY.every(value => value === 1));
-  assert.ok(resizedFlipDots.paletteValue.every(value => value === -1));
+  assert.ok(resizedCircles.roundness.every(value => value === 1));
 
   director.use("flock");
-  director.update({ ...frame, frameIndex: 5, viewport });
+  director.update({ ...frame, frameIndex: 4, viewport });
   assert.equal(director.currentCompositionName, "flock");
-  assert.ok(flockGenerator.grid.cellTransition instanceof SquarifyTransition);
+  assert.ok(flockGenerator.grid.cellTransition instanceof NoneTransition);
   assert.equal(director.generator("flockGrid"), flockGenerator);
   assert.equal(flockGenerator.flock, flockIdentity);
   assert.equal(flockGenerator.flock.boids, boidsIdentity);

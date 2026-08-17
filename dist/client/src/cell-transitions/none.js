@@ -8,6 +8,10 @@ import {
 import {
   roundnessForKind,
 } from "../shapes/rounded-rect.js";
+import {
+  createStatePlan,
+  identityStatePresentation,
+} from "./state-plan.js";
 
 export const DEFAULT_NONE_CONFIG = Object.freeze({
   baseKind: "circle",
@@ -46,6 +50,14 @@ export class NoneTransition {
     output.offsetY[index] = 0;
     output.opacity[index] = 1;
     return level;
+  }
+
+  createPlan(event) {
+    return createStatePlan(event);
+  }
+
+  presentationAt() {
+    return identityStatePresentation();
   }
 
   dispose() {

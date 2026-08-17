@@ -1,8 +1,54 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createExportController } from "../src/export/export-controller.js";
+import {
+  createExportController,
+  exportNamePartsFromInspection,
+  motionDurationForCycles,
+} from "../src/export/export-controller.js";
 import { createExportState } from "../src/export/export-state.js";
+import { exportBaseName } from "../src/export/filename.js";
+
+test("motion cycles multiply the complete animation duration", () => {
+  assert.equal(motionDurationForCycles(2.5, 4), 10);
+  assert.equal(motionDurationForCycles(null, 4), null);
+  assert.throws(() => motionDurationForCycles(2.5, 0), /between 1 and 100/);
+  assert.throws(() => motionDurationForCycles(2.5, 1.5), /between 1 and 100/);
+});
+
+test("base preview filenames use scope in place of the internal composition id", () => {
+  const canvasRadar = exportNamePartsFromInspection({
+    compositionId: "base",
+    generators: {
+      baseGrid: {
+        flicker: {
+          enabled: true,
+          mode: "radar-arc",
+          scope: "canvas",
+        },
+      },
+    },
+  });
+  assert.deepEqual(canvasRadar, {
+    composition: "canvas",
+    flicker: "radar-arc",
+  });
+  assert.equal(
+    exportBaseName(new Date(2026, 7, 14, 12, 0, 0), canvasRadar),
+    "OAI_canvas_radar-arc_0814-120000",
+  );
+  assert.deepEqual(exportNamePartsFromInspection({
+    compositionId: "voronoi",
+    generators: {
+      voronoiGrid: {
+        flicker: { enabled: true, mode: "noise", scope: "cell" },
+      },
+    },
+  }), {
+    composition: "voronoi",
+    flicker: "noise",
+  });
+});
 
 test("export failures still unlock input, restore preview looping, and clear progress", async () => {
   const calls = [];

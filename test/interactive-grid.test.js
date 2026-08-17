@@ -132,6 +132,28 @@ test("interactive grid hit-testing includes inner edges and excludes its bounds"
   assert.equal(interactiveCellIndexAt(null, 100, 100), -1);
 });
 
+test("five-cell interactive grid keeps three rows in a wide viewport", () => {
+  const layout = createInteractiveGridLayout(
+    { longSideCells: 5 },
+    { width: 1000, height: 400 },
+  );
+
+  assert.deepEqual(
+    {
+      columns: layout.columns,
+      rows: layout.rows,
+      patternHeight: layout.patternHeight,
+    },
+    {
+      columns: 5,
+      rows: 3,
+      patternHeight: 400,
+    },
+  );
+  assert.ok(Math.abs(layout.cellSize - 400 / 3) < Number.EPSILON * 100);
+  assert.ok(Math.abs(layout.patternWidth - 2000 / 3) < Number.EPSILON * 1000);
+});
+
 test("16x16 dots remain individually addressable", () => {
   const generator = Object.create(InteractiveGridGenerator.prototype);
   generator.layout = {
@@ -374,9 +396,9 @@ test("palette steps preserve exact swatches and expose a bounded slide phase", (
     /positive integer/,
   );
   assert.deepEqual(
-    normalizeInteractiveColorTransition({ mode: "FLIP-DOT", durationSeconds: 0.2 }),
+    normalizeInteractiveColorTransition({ mode: "SLIDE", durationSeconds: 0.2 }),
     {
-      mode: "flip-dot",
+      mode: "slide",
       cycleThroughPalette: false,
       noise: false,
       durationSeconds: 0.2,
@@ -395,7 +417,7 @@ test("palette steps preserve exact swatches and expose a bounded slide phase", (
   assert.ok(ramped.progress > 0 && ramped.progress < ramped.linearProgress);
   assert.throws(
     () => normalizeInteractiveColorTransition({ mode: "fade", durationSeconds: 0.2 }),
-    /Available modes: slide, flip-dot/,
+    /Available modes: slide/,
   );
   assert.throws(
     () => normalizeInteractiveColorTransition({
@@ -488,7 +510,7 @@ test("palette tours make a full forward lap and land on the scheduled color", ()
   );
 });
 
-test("palette tours replay slide, flip-dot, and waterfall before the original deadline", () => {
+test("palette tours replay slide and waterfall before the original deadline", () => {
   const colors = ["#100000", "#200000", "#300000", "#400000"];
   const generator = Object.create(InteractiveGridGenerator.prototype);
   generator.options = { colorCycleSeconds: 4, dotMargin: 0.1 };
@@ -545,22 +567,7 @@ test("palette tours replay slide, flip-dot, and waterfall before the original de
   assert.equal(glyphs[1].x, -50);
 
   glyphs.length = 0;
-  generator.flipDotOptions = {
-    axisDegrees: 0,
-    direction: 1,
-    foldCurve: [0.42, 0, 0.58, 1],
-    bounceCurve: [0.22, 0.72, 0.32, 1.18],
-    projectionPower: 1,
-    liftInDots: 0,
-  };
-  generator.colorTransition.mode = "flip-dot";
-  generator.drawSubdivideCell(context, 0, 0, 100, 1.25);
-  assert.equal(glyphs[0].color, colors[3]);
-  assert.equal(glyphs[0].transform.scaleY, 0);
-
-  glyphs.length = 0;
   clipCount = 0;
-  generator.colorTransition.mode = "slide";
   generator.colorTransitionPlans = [{ pattern: "waterfall", direction: null }];
   generator.drawSubdivideCell(context, 0, 0, 100, 1.25);
   assert.equal(clipCount, 0);
@@ -945,56 +952,6 @@ test("a circular clip masks both sliding circles without background geometry", (
   assert.deepEqual(fillModes, [{ color: "#abcdef", mode: undefined }]);
 });
 
-test("flip-dot mode reuses the shared edge-on face swap", () => {
-  const generator = Object.create(InteractiveGridGenerator.prototype);
-  generator.options = { colorCycleSeconds: 4, dotMargin: 0.1 };
-  generator.colorTransition = { mode: "flip-dot", durationSeconds: 0.5 };
-  generator.flipDotOptions = {
-    axisDegrees: 0,
-    direction: 1,
-    foldCurve: [0.42, 0, 0.58, 1],
-    bounceCurve: [0.22, 0.72, 0.32, 1.18],
-    projectionPower: 1,
-    liftInDots: 0,
-  };
-  generator.paletteColors = ["#102030", "#abcdef"];
-  generator.subdivisionTrees = [new Set()];
-
-  const glyphs = [];
-  generator.shapeRenderer = {
-    addPath(context, x, y, halfSize, roundness, transform) {
-      glyphs.push({
-        color: context.fillStyle,
-        x,
-        y,
-        halfSize,
-        roundness,
-        transform,
-      });
-    },
-  };
-  const context = {
-    fillStyle: "",
-    beginPath() {},
-    fill() {},
-  };
-
-  generator.drawSubdivideCell(context, 0, 0, 100, 2.125);
-  assert.equal(glyphs[0].color, "#102030");
-  assert.ok(glyphs[0].transform.scaleY > 0 && glyphs[0].transform.scaleY < 1);
-  assert.equal(glyphs[0].transform.scaleAxis, 0);
-
-  glyphs.length = 0;
-  generator.drawSubdivideCell(context, 0, 0, 100, 2.25);
-  assert.equal(glyphs[0].color, "#abcdef");
-  assert.equal(glyphs[0].transform.scaleY, 0);
-
-  glyphs.length = 0;
-  generator.drawSubdivideCell(context, 0, 0, 100, 2.375);
-  assert.equal(glyphs[0].color, "#abcdef");
-  assert.ok(glyphs[0].transform.scaleY > 0);
-});
-
 test("clicking any active cell leaf recurses without cycling its base size", () => {
   const generator = Object.create(InteractiveGridGenerator.prototype);
   generator.active = true;
@@ -1210,9 +1167,7 @@ test("configured catalog exposes the interactive generator and composition", () 
   );
   assert.equal(Object.hasOwn(GENERATOR_DEFINITIONS.interactiveGrid, "flockSettings"), false);
   assert.equal(Object.hasOwn(SETTINGS.interactiveGrid, "behaviorsByLevel"), false);
-  assert.ok(
-    ["flip-dot", "slide"].includes(SETTINGS.interactiveGrid.colorTransition.mode),
-  );
+  assert.equal(SETTINGS.interactiveGrid.colorTransition.mode, "slide");
   assert.deepEqual(
     SETTINGS.interactiveGrid.colorTransition.timingCurve,
     INTERACTIVE_GRID_CONFIG.settings.interactiveGrid.colorTransition.timingCurve,

@@ -74,7 +74,11 @@ export class CircleGrid {
   resize({ width, height }) {
     const requested = Math.max(3, Math.round(this.options.longSideCells));
     const longCells = requested % 2 === 0 ? requested - 1 : requested;
-    const cellSize = Math.max(width, height) / longCells;
+    const minimumShortCells = Math.min(3, longCells);
+    const cellSize = Math.min(
+      Math.max(width, height) / longCells,
+      Math.min(width, height) / minimumShortCells,
+    );
 
     const fitOdd = size => {
       const count = Math.max(1, Math.floor(size / cellSize));
@@ -142,7 +146,7 @@ export class CircleGrid {
     this.meanEnergy = this.energy.length > 0 ? total / this.energy.length : 0;
   }
 
-  draw(context, isGlyphHidden, { guides = true } = {}) {
+  draw(context, isGlyphHidden, { guides = true, glyphPresentation } = {}) {
     const { columns, rows, cellSize, offsetX, offsetY } = this.layout;
     const marginScale = 1 - Math.max(0, Math.min(0.95, this.options.dotMargin));
     const shouldCheckVisibility = typeof isGlyphHidden === "function";
@@ -190,6 +194,7 @@ export class CircleGrid {
             ) continue;
             const glyphX = (subColumn + 0.5) * slot - cellSize * 0.5;
             const glyphY = (subRow + 0.5) * slot - cellSize * 0.5;
+            const glyphIndex = subRow * subdivisions + subColumn;
             if (shouldCheckVisibility) {
               const localX = (glyphX + glyphTransform.offsetX) * parentScaleX;
               const localY = (glyphY + glyphTransform.offsetY) * parentScaleY;
@@ -214,6 +219,43 @@ export class CircleGrid {
               const worldRadius = unscaledRadius * glyphScale * parentScale;
               if (isGlyphHidden(worldX, worldY, worldRadius)) continue;
             }
+            if (typeof glyphPresentation === "function") {
+              const resolvedPresentations = glyphPresentation({
+                id: `${index}:${glyphIndex}`,
+                index,
+                glyphIndex,
+                x: offsetX + (column + 0.5) * cellSize + glyphX,
+                y: offsetY + (row + 0.5) * cellSize + glyphY,
+                size: slot,
+              });
+              const presentations = Array.isArray(resolvedPresentations)
+                ? resolvedPresentations
+                : [resolvedPresentations];
+              for (const presentation of presentations) {
+                if (presentation.opacity <= 0 || presentation.scale <= 0) continue;
+                context.save();
+                context.globalAlpha *= presentation.opacity;
+                context.translate(presentation.offsetX, presentation.offsetY);
+                if (presentation.scale !== 1) {
+                  context.translate(glyphX, glyphY);
+                  context.scale(presentation.scale, presentation.scale);
+                  context.translate(-glyphX, -glyphY);
+                }
+                context.beginPath();
+                this.shapeRenderer.addPath(
+                  context,
+                  glyphX,
+                  glyphY,
+                  halfSize,
+                  this.cellState.roundness[index],
+                  glyphTransform,
+                );
+                context.fill();
+                context.restore();
+              }
+              context.beginPath();
+              continue;
+            }
             this.shapeRenderer.addPath(
               context,
               glyphX,
@@ -235,6 +277,30 @@ export class CircleGrid {
   paletteColor(value) {
     const index = Math.round(clamp01(value) * 255);
     return this.paletteLookup[index];
+  }
+
+  transitionItems() {
+    const items = [];
+    const { columns, rows, cellSize, offsetX, offsetY } = this.layout;
+    for (let row = 0; row < rows; row += 1) {
+      for (let column = 0; column < columns; column += 1) {
+        const index = row * columns + column;
+        const subdivisions = 1 << this.cellState.level[index];
+        const slot = cellSize / subdivisions;
+        for (let subRow = 0; subRow < subdivisions; subRow += 1) {
+          for (let subColumn = 0; subColumn < subdivisions; subColumn += 1) {
+            const glyphIndex = subRow * subdivisions + subColumn;
+            items.push({
+              id: `${index}:${glyphIndex}`,
+              x: offsetX + column * cellSize + (subColumn + 0.5) * slot,
+              y: offsetY + row * cellSize + (subRow + 0.5) * slot,
+              size: slot,
+            });
+          }
+        }
+      }
+    }
+    return items;
   }
 
   textColor() {

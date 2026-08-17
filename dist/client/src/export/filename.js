@@ -32,16 +32,35 @@ export function exportStamp(date = new Date()) {
 
 export const stamp = exportStamp;
 
-export function exportBaseName(date = new Date()) {
-  return `OAI-${exportStamp(date)}`;
+// Composition ids and flicker mode names are already kebab-case, but exports can
+// be triggered from the console with arbitrary strings, so anything unsafe for a
+// filename is folded into single dashes. Underscores separate the name segments,
+// so they are folded too. An empty result drops the segment entirely.
+export function nameSegment(value) {
+  if (value === undefined || value === null) return "";
+  return String(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+// OAI_<composition>_<flicker mode>_MMDD-HHMMSS; missing segments drop out.
+export function exportBaseName(date = new Date(), { composition, flicker } = {}) {
+  return [
+    "OAI",
+    nameSegment(composition),
+    nameSegment(flicker),
+    exportStamp(date),
+  ].filter(Boolean).join("_");
 }
 
 export function exportFilename(
   extension,
-  { date = new Date(), alpha = false } = {},
+  { date = new Date(), alpha = false, composition, flicker } = {},
 ) {
   const suffix = alpha ? "-alpha" : "";
-  return `${exportBaseName(date)}${suffix}.${extensionName(extension)}`;
+  const base = exportBaseName(date, { composition, flicker });
+  return `${base}${suffix}.${extensionName(extension)}`;
 }
 
 export function exportSequenceFilename(
@@ -49,6 +68,8 @@ export function exportSequenceFilename(
   {
     baseName,
     date = new Date(),
+    composition,
+    flicker,
     padding = 4,
     extension = "png",
   } = {},
@@ -59,7 +80,9 @@ export function exportSequenceFilename(
   if (!Number.isSafeInteger(padding) || padding < 4) {
     throw new RangeError("PNG sequence padding must be an integer of at least four.");
   }
-  const root = baseName === undefined ? exportBaseName(date) : String(baseName);
+  const root = baseName === undefined
+    ? exportBaseName(date, { composition, flicker })
+    : String(baseName);
   if (root.length === 0 || /[\\/\0]/.test(root)) {
     throw new TypeError("PNG sequence base name must be a safe non-empty filename.");
   }

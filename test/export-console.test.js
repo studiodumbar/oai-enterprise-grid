@@ -11,8 +11,10 @@ import {
 import { createExportState } from "../src/export/export-state.js";
 import { sizeFromAspect } from "../src/export/resolution.js";
 
-const CANONICAL = ["game-of-life", "voronoi", "l-tree"];
+const CANONICAL = ["base", "game-of-life", "voronoi", "l-tree"];
 const ALL_IDS = [...CANONICAL, "thinking"];
+const FLICKER_MODES = ["noise", "echo-ring", "block-drop"];
+const FLICKER_SCOPES = ["canvas", "cell"];
 
 function createHarness(overrides = {}) {
   const logged = [];
@@ -21,6 +23,11 @@ function createHarness(overrides = {}) {
   const stub = {
     state: overrides.state ?? createExportState(),
     composition: overrides.composition ?? "game-of-life",
+    flickerMode: overrides.flickerMode ?? "block-drop",
+    flickerScope: overrides.flickerScope ?? "canvas",
+    previewRepeats: overrides.previewRepeats ?? 3,
+    exportedPreviews: [],
+    exportOptions: [],
     panelVisible: overrides.panelVisible ?? true,
     synced: 0,
     logged,
@@ -28,8 +35,14 @@ function createHarness(overrides = {}) {
   };
   const cg = createExportConsole({
     state: stub.state,
-    runExport: async () => {
+    runExport: async options => {
+      stub.exportOptions.push(options);
       exported.push({ composition: stub.composition, format: stub.state.exportFormat });
+      stub.exportedPreviews.push({
+        mode: stub.flickerMode,
+        scope: stub.flickerScope,
+        repeats: stub.previewRepeats,
+      });
       const error = failures[stub.composition];
       return error ? { ok: false, error: new Error(error) } : { ok: true };
     },
@@ -38,6 +51,20 @@ function createHarness(overrides = {}) {
     activeComposition: () => stub.composition,
     useComposition: id => {
       stub.composition = id;
+    },
+    previewComposition: "base",
+    listFlickerModes: () => FLICKER_MODES,
+    listFlickerScopes: () => FLICKER_SCOPES,
+    defaultPreviewRepeats: 3,
+    activeFlickerPreview: () => ({
+      mode: stub.flickerMode,
+      scope: stub.flickerScope,
+      repeats: stub.previewRepeats,
+    }),
+    useFlickerPreview: preview => {
+      stub.flickerMode = preview.mode;
+      stub.flickerScope = preview.scope;
+      stub.previewRepeats = preview.repeats;
     },
     setPanelVisible: visible => {
       stub.panelVisible = visible;
@@ -133,8 +160,23 @@ test("export runs the active composition and syncs the panel", async () => {
   assert.equal(result.ok, true);
   assert.deepEqual(result.compositions, ["game-of-life"]);
   assert.deepEqual(stub.exported, [{ composition: "game-of-life", format: "mp4" }]);
+  assert.deepEqual(stub.exportOptions, [{ cycles: 1 }]);
   assert.equal(stub.state.fps, 24);
   assert.equal(stub.synced, 1);
+});
+
+test("motion export cycles are configurable, forwarded, and validated", async () => {
+  const { cg, stub } = createHarness();
+  const result = await cg("export --mp4 --cycles 4");
+
+  assert.equal(result.ok, true);
+  assert.equal(result.cycles, 4);
+  assert.equal(result.results[0].cycles, 4);
+  assert.deepEqual(stub.exportOptions, [{ cycles: 4 }]);
+
+  assert.match((await cg("export --mp4 --cycles 0")).error, /between 1 and 100/);
+  assert.match((await cg("export --mp4 --cycles")).error, /needs a value/);
+  assert.match((await cg("export --png --cycles 2")).error, /only for motion exports/);
 });
 
 test("export --all walks canonical compositions and returns to the starting one", async () => {
@@ -155,10 +197,59 @@ test("export reports per-composition failures without stopping the batch", async
   assert.equal(result.ok, false);
   assert.deepEqual(
     result.results.map(entry => [entry.composition, entry.ok]),
-    [["game-of-life", true], ["voronoi", false], ["l-tree", true]],
+    [["base", true], ["game-of-life", true], ["voronoi", false], ["l-tree", true]],
   );
-  assert.equal(result.results[1].error, "No finite cycle.");
-  assert.equal(stub.exported.length, 3);
+  assert.equal(result.results[2].error, "No finite cycle.");
+  assert.equal(stub.exported.length, 4);
+});
+
+test("export --preview-flicker renders every mode in both scopes and restores the preview", async () => {
+  const { cg, stub } = createHarness({
+    composition: "voronoi",
+    flickerMode: "block-drop",
+    flickerScope: "cell",
+    previewRepeats: 7,
+  });
+  const result = await cg("export --preview-flicker --png");
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.compositions, ["base"]);
+  assert.deepEqual(result.flickers, FLICKER_MODES);
+  assert.deepEqual(result.scopes, FLICKER_SCOPES);
+  assert.equal(result.repeats, 3);
+  const expectedPreviews = FLICKER_SCOPES.flatMap(scope => (
+    FLICKER_MODES.map(mode => ({ mode, scope, repeats: 3 }))
+  ));
+  assert.deepEqual(
+    result.results.map(entry => ({
+      mode: entry.flicker,
+      scope: entry.scope,
+      repeats: entry.repeats,
+    })),
+    expectedPreviews,
+  );
+  assert.deepEqual(stub.exported.map(entry => entry.composition), Array(6).fill("base"));
+  assert.deepEqual(stub.exportedPreviews, expectedPreviews);
+  assert.equal(stub.flickerMode, "block-drop");
+  assert.equal(stub.flickerScope, "cell");
+  assert.equal(stub.previewRepeats, 7);
+  assert.equal(stub.composition, "voronoi");
+});
+
+test("preview repeats are configurable and validated", async () => {
+  const { cg, stub } = createHarness();
+  const result = await cg(
+    "export --preview-flicker --mp4 --repeats 5 --cycles 2 --dry-run",
+  );
+  assert.equal(result.dryRun, true);
+  assert.equal(result.repeats, 5);
+  assert.equal(result.cycles, 2);
+  assert.equal(result.results.length, 0);
+  assert.equal(stub.exported.length, 0);
+
+  assert.match((await cg("export --preview-flicker --repeats 0")).error, /between 1 and 100/);
+  assert.match((await cg("export --preview-flicker --repeats")).error, /needs a value/);
+  assert.match((await cg("export --repeats 3")).error, /only with --preview-flicker/);
 });
 
 test("export --composition validates ids and accepts a comma list", async () => {
@@ -174,6 +265,10 @@ test("export --composition validates ids and accepts a comma list", async () => 
   const both = await cg("export --all -c voronoi");
   assert.equal(both.ok, false);
   assert.match(both.error, /either --all or --composition/);
+
+  const previewAndAll = await cg("export --preview-flicker --all");
+  assert.equal(previewAndAll.ok, false);
+  assert.match(previewAndAll.error, /--preview-flicker by itself/);
 });
 
 test("export --dry-run applies settings but downloads nothing", async () => {

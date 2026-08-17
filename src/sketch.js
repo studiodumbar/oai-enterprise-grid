@@ -12,6 +12,7 @@ import { createExportPanel } from "./export/export-panel.js";
 import { createExportController } from "./export/export-controller.js";
 import { createProjectState, createSnapshotHistory } from "./export/project-state.js";
 import { createExportConsole } from "./export/export-console.js";
+import { flickerModes } from "./visuals/flicker/index.js";
 
 if (typeof window.p5 !== "function") {
   throw new Error("p5.js did not load. Check the CDN request before starting the sketch.");
@@ -161,6 +162,15 @@ new window.p5(p => {
     director.use(id);
     director.update(currentFrame(0));
     commitHistory();
+    renderPreview();
+  }
+
+  function baseGenerator() {
+    return director.generator("baseGrid");
+  }
+
+  function useBaseFlickerPreview(preview) {
+    baseGenerator().useFlickerPreview(preview);
     renderPreview();
   }
 
@@ -341,11 +351,17 @@ new window.p5(p => {
     });
     consoleCommands = createExportConsole({
       state: exportState,
-      runExport: () => exportController.run({ notify: false }),
+      runExport: ({ cycles } = {}) => exportController.run({ notify: false, cycles }),
       listCompositions: () => director.list(),
       canonicalCompositions,
       activeComposition: () => director.inspect().compositionId,
       useComposition: useCompositionFromConsole,
+      previewComposition: "base",
+      listFlickerModes: () => flickerModes.list(),
+      listFlickerScopes: () => ["canvas", "cell"],
+      defaultPreviewRepeats: SETTINGS.base.previewRepeats,
+      activeFlickerPreview: () => baseGenerator().flickerPreviewState(),
+      useFlickerPreview: useBaseFlickerPreview,
       setPanelVisible: setExportPanelVisible,
       isPanelVisible: () => exportPanelVisible,
       syncPanel: () => exportPanel?.sync(),

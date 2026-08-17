@@ -11,26 +11,79 @@ export const GLOBAL_CONFIG = {
 
   composition: {
     // flock,
+    // base, // ok
     // interactive-grid,
-    // inference-loop (or thinking),
+    // inference-loop, // BUG: intro is weird
     // game-of-life
     // l-tree,
     // voronoi,
     // tool-loop,
     // context-window,
-    active: "tool-loop",
+    active: "voronoi",
+    // Endpoints use the composition's native intro/outro rule to rearrange
+    // one centered parent cell. circleSubdivision is the child count per axis:
+    startWithCircle: true,
+    startWithCircleDurationSeconds: 4, // "auto" or a duration
+    endWithCircle: true,
+    endWithCircleDurationSeconds: 2, // "auto" or a duration
+    circleSubdivision: 1, // 1, 2, 4, 8, or 16.
+    // still a bit buggy
   },
 
   // app-wide palette, composition overrides it
-  palette: "violet",
+  palette: "green",
+
+  // Motion between discrete scene states. This runs inside the cycle; it is
+  // independent from the intro/outro phases at the cycle boundaries.
+  cellTransitions: {
+    enabled: true,
+    mode: "sort-selection",
+    durationSeconds: 4,
+    modes: {
+      none: {
+        baseKind: "circle",
+      },
+      "sort-selection": {
+        seed: 13,
+        revealFraction: 0.16,
+        arcHeightInCells: 0.32,
+        staggerSeconds: 0.02,
+        timingCurve: [0.65, 0, 0.35, 1],
+      },
+    },
+  },
+
+  // App-wide cycle entrance. A composition can override any field by adding
+  // its own `intro` block beside its palette/flicker settings.
+  intro: {
+    enabled: true,
+    mode: "sort-selection",
+    durationSeconds: 1,
+    modes: {
+      "sort-selection": {
+        seed: 173,
+        revealFraction: 0.6,
+        arcHeightInCells: 0.32,
+        staggerSeconds: 0.02,
+        // CSS cubic-bezier control points: [x1, y1, x2, y2].
+        timingCurve: [0.65, 0, 0.35, 1],
+      },
+    },
+  },
 
   flicker: {
     enabled: true,
-    // noise, echo-ring, strobe-stack, block-drop, prism-bloom, crt-glide, radar-arc
-    mode: "prism-bloom",
-    scope: "cell", // canvas, cell
-    amount: 0.55,  // How far a flickering dot may travel from its base palette step.
-    cellStaggerSeconds: 0.9,
+    // noise,
+    // echo-ring,
+    // strobe-stack,
+    // block-drop,
+    // prism-bloom,
+    // crt-glide,
+    // radar-arc
+    mode: "echo-ring",
+    scope: "canvas", // canvas, cell
+    amount: 1,  // How far a flickering dot may travel from its base palette step.
+    cellStaggerSeconds: 0.5,
     modes: {
       // Drifting clouds 
       "noise": {
@@ -39,7 +92,7 @@ export const GLOBAL_CONFIG = {
       },
       // diamond rings pulse outward 
       "echo-ring": {
-        cycleSeconds: .2,
+        cycleSeconds: 1,
         ringDelayFraction: 0.14,
         echoDelayFraction: 0.03,
         ringCount: 5,
@@ -58,8 +111,8 @@ export const GLOBAL_CONFIG = {
       },
       // A kaleidoscope breathing out
       "prism-bloom": {
-        cycleSeconds: 1.36,
-        blendSeconds: 0.18,
+        cycleSeconds: 0.75,
+        blendSeconds: 0.38,
         baseIntensity: 0.08,
       },
       // A scanline steps down the field, leaving a decaying trail
@@ -72,14 +125,14 @@ export const GLOBAL_CONFIG = {
         peakIntensity: 1,
       },
       // A rotating arm sweeps the field
-      "radar-arc": {
-        cycleSeconds: 1.16,
+      "radar-arc": { // kinda looks like ass
+        cycleSeconds: 1,
         gridSteps: 5,
         beamWidth: 0.55,
         wakeWidth: 1.15,
         ringInnerRadius: 1.6,
-        ringOuterRadius: 2.3,
-        baseIntensity: 0.08,
+        ringOuterRadius: 1.8,
+        baseIntensity: 0.4,
       },
     },
   },
@@ -94,7 +147,7 @@ export const GLOBAL_CONFIG = {
     blue: ["#012a4f", "#00529d", "#2e7ec6", "#6db9e7"],
     lightBlue: ["#d4ebf7", "#a8ddf0", "#6db9e7", "#2e7ec6", "#0066b3"],
     justBlue: ["#2e7ec6", "#3a89ce", "#5aa0d9", "#7ab7e3", "#9aceee"],
-    green: ["#005122", "#008a3a", "#00b63c", "#7fd3a5"],
+    green: ["#00692a", "#00a240", "#04b84c", "#8cdfad"],
     thinking: ["#dce8e3", "#a7d1c2", "#10a37f", "#08745a", "#123b31"],
     orange: ["#762b0a", "#c73f13", "#ff6b00", "#ffb389"],
     mono: ["#303030", "#666666", "#aaaaaa", "#ffffff"],

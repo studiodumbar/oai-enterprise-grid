@@ -28,6 +28,7 @@ export { containFit, withContainTransform } from "./contain-fit.js";
 export {
   stamp,
   exportStamp,
+  nameSegment,
   exportBaseName,
   exportFilename,
   exportSequenceFilename,

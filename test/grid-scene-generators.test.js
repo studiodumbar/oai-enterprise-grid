@@ -140,6 +140,10 @@ function normalizedOptionsFor(strategy, overrides = {}) {
   const cycleSeconds = authored.cycleSeconds ?? authored.tokenSeconds;
   return {
     ...authored,
+    intro: {
+      ...authored.intro,
+      enabled: false,
+    },
     strategy,
     cycleSeconds,
     stepCount,
@@ -312,6 +316,11 @@ test("scene layout keeps every possible circle on a fixed subdivision grid", () 
     ),
     [],
   );
+
+  const wide = createCircleGridSceneLayout({ width: 1000, height: 400 }, 5);
+  assert.equal(wide.columns, 5);
+  assert.equal(wide.rows, 3);
+  assert.equal(wide.patternHeight, 400);
 });
 
 test("flip faces pass through a blank hinge and never overlap", () => {
@@ -773,14 +782,19 @@ test("Game of Life applies B3/S23 simultaneously from eight neighbors", () => {
   const options = normalizedOptionsFor("life-like");
   const sceneLayout = createCircleGridSceneLayout(LANDSCAPE, options.longSideCells);
   assert.deepEqual(
-    initialGameOfLifeStateAt(sceneLayout, 4, options.initialDensity),
-    initialGameOfLifeStateAt(sceneLayout, 4, options.initialDensity),
+    initialGameOfLifeStateAt(sceneLayout, 4, options.initialDensity, 1234),
+    initialGameOfLifeStateAt(sceneLayout, 4, options.initialDensity, 1234),
+  );
+  assert.notDeepEqual(
+    initialGameOfLifeStateAt(sceneLayout, 4, options.initialDensity, 1234),
+    initialGameOfLifeStateAt(sceneLayout, 4, options.initialDensity, 5678),
   );
   const generationSpan = 1 / options.stepCount;
   const first = sceneAt("life-like", generationSpan * 0.2, 4);
   const held = sceneAt("life-like", generationSpan * 0.8, 4);
   const second = sceneAt("life-like", generationSpan * 1.2, 4);
   assert.equal(first.phase, "generation");
+  assert.equal(first.seed, 0);
   assert.equal(first.generationIndex, 0);
   assert.deepEqual(faceSignatures(first), faceSignatures(held));
   assert.equal(second.generationIndex, 1);
@@ -808,6 +822,35 @@ test("Game of Life applies B3/S23 simultaneously from eight neighbors", () => {
     createGeneratorForStrategy("life-like").flicker.enabled,
     true,
   );
+});
+
+test("Game of Life uses the project seed and reports it in inspection metadata", () => {
+  let projectSeed = 1234;
+  const generator = new CellularAutomataGenerator({
+    name: "seededLifeGenerator",
+    definition: { type: "cellular-automata", strategy: "life-like" },
+    options: {
+      ...SETTINGS.gameOfLife,
+      intro: { ...SETTINGS.gameOfLife.intro, enabled: false },
+    },
+    runtime: {
+      viewport: () => LANDSCAPE,
+      projectSeed: () => projectSeed,
+    },
+    palettes: PALETTES,
+  });
+  generator.enter();
+  generator.update({ compositionDt: 0 });
+  const first = generator.inspect();
+  const firstLevels = [...first.levels];
+
+  projectSeed = 5678;
+  generator.update({ compositionDt: Number.EPSILON });
+  const second = generator.inspect();
+
+  assert.equal(first.seed, 1234);
+  assert.equal(second.seed, 5678);
+  assert.notDeepEqual(firstLevels, [...second.levels]);
 });
 
 function recordingContext() {
@@ -860,6 +903,11 @@ function createGeneratorForStrategy(
     options: {
       ...SETTINGS_BY_STRATEGY[strategy],
       ...overrides,
+      intro: {
+        ...SETTINGS_BY_STRATEGY[strategy].intro,
+        enabled: false,
+        ...overrides.intro,
+      },
     },
     runtime: { viewport: () => viewport },
     palettes,
@@ -1134,7 +1182,16 @@ test("color-only face changes use the same flip instead of easing", () => {
 
   const generator = createGeneratorForStrategy(
     "inference-loop",
-    { overrides: { palette: "green" }, palettes: GREEN_PALETTES },
+    {
+      overrides: {
+        palette: "green",
+        cellTransitions: {
+          ...SETTINGS.inferenceLoop.cellTransitions,
+          enabled: false,
+        },
+      },
+      palettes: GREEN_PALETTES,
+    },
   );
   generator.enter();
   generator.update({ compositionDt: options.cycleSeconds * span * 1.25 });

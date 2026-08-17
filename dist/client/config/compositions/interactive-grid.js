@@ -11,7 +11,7 @@ export const INTERACTIVE_GRID_CONFIG = {
         // Dot-face motion used inside snake, diamond, and row patterns.
         // Every palette step independently rolls one pattern per parent cell;
         // waterfall traces color through stationary dots like a Connect Four drop.
-        mode: "slide", // "slide" or "flip-dot".
+        mode: "slide",
         // Replay the chosen spatial pattern through a full palette lap, then
         // settle on the color that was normally scheduled next.
         cycleThroughPalette: false,

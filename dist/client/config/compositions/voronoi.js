@@ -6,20 +6,36 @@
 export const VORONOI_CONFIG = {
   settings: {
     voronoi: {
-      longSideCells: 8,
-      dotMargin: 0.06,
+      longSideCells: 5,
+      dotMargin: 0.09,
       cycleSeconds: 4,
-      partitionPasses: 2,
+      partitionPasses: 8,
       flipSeconds: 0.032,
       siteCount: 5,
-      boundaryWhitespace: 0.08,
-      // Territory interiors flicker; the uncertain boundary stays white.
+      boundaryWhitespace: 0.99,
       flicker: {
-        amount: 0.3,
+        scope: "canvas",
+        amount: 1,
         modes: {
           noise: {
             speed: 2,
             spatialScale: 0.8,
+          },
+          "echo-ring":{
+            cycleSeconds: 0.55
+          },
+          "strobe-stack":{
+            //BUG: doesnt work with canvas
+            cycleSeconds: 1.25
+          },
+          "prism-bloom":{
+            cycleSeconds: .75 
+          },
+          "crt-glide":{
+            cycleSeconds: 1.5,
+              rows: 25,
+              decay: 0.1, 
+              columnWrap: 0.3
           },
         },
       },

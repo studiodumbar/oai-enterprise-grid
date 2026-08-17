@@ -1,3 +1,9 @@
+import {
+  animationDurationWithCircleEndpoints,
+  circleEndpointTimelineAt,
+  normalizeCircleEndpointSettings,
+} from "../compositions/circle-endpoints.js";
+
 const GENERATOR_LIFECYCLE = [
   "enter",
   "exit",
@@ -7,6 +13,24 @@ const GENERATOR_LIFECYCLE = [
   "input",
   "dispose",
 ];
+
+const AUTO_ENDPOINT_FALLBACK_SECONDS = 1;
+
+function compositionGeneratorIds(definition) {
+  const ids = [];
+  const visit = (value) => {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+    if (typeof value.use === "string") ids.push(value.use);
+    if (value.steps !== undefined) visit(value.steps);
+    if (value.layers !== undefined) visit(value.layers);
+  };
+  visit(definition?.steps ?? definition?.layers);
+  return ids;
+}
 
 function requireObject(value, label) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -70,6 +94,15 @@ export class CompositionDirector {
     if (typeof this.runtime.context !== "function") {
       throw new TypeError("Runtime must provide context().");
     }
+    this.circleEndpoints = normalizeCircleEndpointSettings(this.settings.composition ?? {});
+    this.endpointElapsed = 0;
+    this.endpointCoreElapsed = 0;
+    this.endpointState = circleEndpointTimelineAt(
+      0,
+      null,
+      this.circleEndpoints,
+      { start: AUTO_ENDPOINT_FALLBACK_SECONDS, end: AUTO_ENDPOINT_FALLBACK_SECONDS },
+    );
 
     this.generators = new Map();
     this.activeGeneratorIds = new Set();
@@ -124,15 +157,39 @@ export class CompositionDirector {
 
     this.currentCompositionName = name;
     this.currentRule = nextRule;
+    this.endpointElapsed = 0;
+    this.endpointCoreElapsed = 0;
+    this.endpointState = circleEndpointTimelineAt(
+      0,
+      null,
+      this.circleEndpoints,
+      this.endpointAutoDurations(),
+    );
     return this;
   }
 
   update(frame) {
     this.assertUsable();
-    this.lastFrame = frame;
     if (!this.currentRule) return [];
 
-    const nextPlan = this.validatePlan(this.currentRule.update(frame));
+    const outerDt = frame?.compositionDt ?? frame?.dt ?? 0;
+    if (!Number.isFinite(outerDt) || outerDt < 0) {
+      throw new RangeError("Composition frame dt must be finite and non-negative.");
+    }
+    this.endpointElapsed += outerDt;
+    const endpointState = circleEndpointTimelineAt(
+      this.endpointElapsed,
+      this.coreAnimationDuration(),
+      this.circleEndpoints,
+      this.endpointAutoDurations(),
+    );
+    const coreDt = Math.max(0, endpointState.coreTime - this.endpointCoreElapsed);
+    this.endpointCoreElapsed = endpointState.coreTime;
+    this.endpointState = endpointState;
+    const mappedFrame = this.frameForCore(frame, endpointState, coreDt);
+    this.lastFrame = mappedFrame;
+
+    const nextPlan = this.validatePlan(this.currentRule.update(mappedFrame));
     const nextIds = new Set(nextPlan.map(entry => entry.use));
 
     // Instantiate every entering generator before changing the active set. A
@@ -144,13 +201,13 @@ export class CompositionDirector {
     for (const id of this.activeGeneratorIds) {
       if (!nextIds.has(id)) {
         const entries = this.renderPlan.filter(entry => entry.use === id);
-        this.callGenerator(id, "exit", frame, entries);
+        this.callGenerator(id, "exit", mappedFrame, entries);
       }
     }
     for (const id of nextIds) {
       if (!this.activeGeneratorIds.has(id)) {
         const entries = nextPlan.filter(entry => entry.use === id);
-        this.callGenerator(id, "enter", frame, entries);
+        this.callGenerator(id, "enter", mappedFrame, entries);
       }
     }
 
@@ -161,7 +218,7 @@ export class CompositionDirector {
     // advanced exactly once per frame.
     for (const id of nextIds) {
       const entries = nextPlan.filter(entry => entry.use === id);
-      this.callGenerator(id, "update", frame, entries);
+      this.callGenerator(id, "update", mappedFrame, entries);
     }
     return this.renderPlan.slice();
   }
@@ -177,6 +234,10 @@ export class CompositionDirector {
       throw new TypeError("runtime.context() must return a context with save() and restore().");
     }
 
+    this.drawPlan(drawable, this.frameForDraw(frame), context);
+  }
+
+  drawPlan(drawable, frame, context) {
     for (const entry of drawable) {
       const generator = this.generator(entry.use);
       context.save();
@@ -188,6 +249,41 @@ export class CompositionDirector {
         context.restore();
       }
     }
+  }
+
+  frameForCore(frame, endpointState, coreDt) {
+    const endpoint = endpointState.phase === "start" || endpointState.phase === "end"
+      ? { ...endpointState }
+      : null;
+    return {
+      ...frame,
+      dt: Math.min(coreDt, Number.isFinite(frame?.dt) ? frame.dt : coreDt),
+      compositionDt: coreDt,
+      endpointDt: frame?.compositionDt ?? frame?.dt ?? 0,
+      time: endpointState.coreTime,
+      compositionEndpoint: endpoint,
+    };
+  }
+
+  frameForDraw(frame) {
+    let endpointState = this.endpointState;
+    const isLastExportFrame = frame?.exporting === true
+      && Number.isSafeInteger(frame.exportFrameIndex)
+      && Number.isSafeInteger(frame.exportFrameCount)
+      && frame.exportFrameCount > 0
+      && frame.exportFrameIndex === frame.exportFrameCount - 1;
+    if (isLastExportFrame && this.circleEndpoints.endWithCircle) {
+      const automaticDurations = this.endpointAutoDurations();
+      endpointState = {
+        ...endpointState,
+        phase: "end",
+        progress: 1,
+        durationSeconds: this.circleEndpoints.endWithCircleDurationSeconds === "auto"
+          ? automaticDurations.end
+          : this.circleEndpoints.endWithCircleDurationSeconds,
+      };
+    }
+    return this.frameForCore(frame, endpointState, 0);
   }
 
   input(type, payload = {}) {
@@ -303,6 +399,37 @@ export class CompositionDirector {
   }
 
   animationDuration() {
+    return animationDurationWithCircleEndpoints(
+      this.coreAnimationDuration(),
+      this.circleEndpoints,
+      this.endpointAutoDurations(),
+    );
+  }
+
+  endpointAutoDurations() {
+    const activeIds = [...this.activeGeneratorIds];
+    const configuredIds = compositionGeneratorIds(
+      this.compositionDefinitions.get(this.currentCompositionName),
+    );
+    const ids = activeIds.length > 0 ? activeIds : configuredIds;
+    const durationFor = (direction) => {
+      const configuredDuration = direction === "start"
+        ? this.circleEndpoints.startWithCircleDurationSeconds
+        : this.circleEndpoints.endWithCircleDurationSeconds;
+      if (configuredDuration !== "auto") return configuredDuration;
+      const orderedIds = direction === "start" ? ids : [...ids].reverse();
+      for (const id of orderedIds) {
+        const generator = this.generator(id);
+        if (typeof generator.endpointAutoDuration !== "function") continue;
+        const duration = generator.endpointAutoDuration(direction);
+        if (Number.isFinite(duration) && duration > 0) return duration;
+      }
+      return AUTO_ENDPOINT_FALLBACK_SECONDS;
+    };
+    return { start: durationFor("start"), end: durationFor("end") };
+  }
+
+  coreAnimationDuration() {
     this.assertUsable();
     const durations = [];
     for (const id of this.activeGeneratorIds) {
@@ -320,12 +447,24 @@ export class CompositionDirector {
     if (!Number.isFinite(time) || time < 0) {
       throw new RangeError("Composition seek time must be finite and non-negative.");
     }
+    const endpointState = circleEndpointTimelineAt(
+      time,
+      this.coreAnimationDuration(),
+      this.circleEndpoints,
+      this.endpointAutoDurations(),
+    );
     for (const id of this.activeGeneratorIds) {
       const generator = this.generator(id);
-      if (typeof generator.seek === "function" && generator.seek(time) === false) {
+      if (
+        typeof generator.seek === "function"
+        && generator.seek(endpointState.coreTime) === false
+      ) {
         throw new Error(`Generator "${id}" could not seek to the restored time.`);
       }
     }
+    this.endpointElapsed = time;
+    this.endpointCoreElapsed = endpointState.coreTime;
+    this.endpointState = endpointState;
     return this;
   }
 

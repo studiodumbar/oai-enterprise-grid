@@ -374,7 +374,12 @@ test("scope decides whether the pattern spans the board or repeats per cell", ()
     });
     generator.enter();
     // Land mid-generation, where newly born cells are at full flicker strength.
-    generator.update({ compositionDt: generator.options.cycleSeconds * 0.25 });
+    generator.update({
+      compositionDt: (generator.intro.settings.enabled
+        ? generator.intro.settings.durationSeconds
+        : 0)
+        + generator.options.cycleSeconds * 0.25,
+    });
     generator.paletteMotionTime = 0.37;
 
     const byCell = new Map();
@@ -442,7 +447,12 @@ test("a cell-scoped cell resolves into every ring instead of one flat block", ()
     palettes: { green: GREEN },
   });
   generator.enter();
-  generator.update({ compositionDt: generator.options.cycleSeconds * 0.25 });
+  generator.update({
+    compositionDt: (generator.intro.settings.enabled
+      ? generator.intro.settings.durationSeconds
+      : 0)
+      + generator.options.cycleSeconds * 0.25,
+  });
 
   const index = generator.scene.paletteMotion.indices.find(
     candidate => generator.currentFaces[candidate].level >= 2,
@@ -718,6 +728,7 @@ test("the shipped catalog registers every mode and each composition selects one"
     ([, group]) => group?.flicker !== undefined,
   );
   assert.deepEqual(flickering.map(([name]) => name).sort(), [
+    "base",
     "contextWindow",
     "gameOfLife",
     "inferenceLoop",

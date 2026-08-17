@@ -27,6 +27,10 @@ const FORMAT_ALIASES = Object.freeze({
 });
 
 const PANEL_ACTIONS = Object.freeze(["show", "hide", "toggle"]);
+const DEFAULT_PREVIEW_REPEATS = 3;
+const MAX_PREVIEW_REPEATS = 100;
+const DEFAULT_EXPORT_CYCLES = 1;
+const MAX_EXPORT_CYCLES = 100;
 
 export const CONSOLE_HELP = `Circle Grid console
 
@@ -43,6 +47,9 @@ Commands
 
 Export flags
   --all                         export every composition, one after another
+  --preview-flicker             export base for every flicker in canvas + cell scope
+  --repeats N                   replay each flicker 1-${MAX_PREVIEW_REPEATS} times (default: ${DEFAULT_PREVIEW_REPEATS})
+  --cycles N                    repeat each motion-export cycle 1-${MAX_EXPORT_CYCLES} times
   --composition a,b   -c a,b    export the named compositions
   --png --svg                   still formats
   --mp4 --webm --png-sequence   motion formats
@@ -57,7 +64,9 @@ Export flags
 
 Examples
   cg\`export --mp4 --fps 60\`
+  cg\`export --mp4 --cycles 4\`
   cg\`export --all --png --aspect 9:16 --resolution 4K\`
+  cg\`export --preview-flicker --mp4 --repeats 3\`
   cg\`export -c voronoi,l-tree --svg\`
   cg\`panel hide\``;
 
@@ -241,8 +250,26 @@ export function applyExportFlags(state, flags) {
 // `--all` walks the canonical compositions only: the director also lists legacy
 // aliases (`thinking` for `inference-loop`), and exporting those would render
 // the same composition twice.
-function targetCompositions(flags, { list, canonical, active }) {
+function targetCompositions(flags, {
+  list,
+  canonical,
+  active,
+  previewComposition,
+}) {
   const named = flags.composition ?? flags.c;
+  const previewFlicker = flags["preview-flicker"];
+  if (previewFlicker !== undefined && previewFlicker !== true) {
+    fail("--preview-flicker does not take a value.");
+  }
+  if (previewFlicker === true && (flags.all === true || named !== undefined)) {
+    fail("Use --preview-flicker by itself, without --all or --composition.");
+  }
+  if (previewFlicker === true) {
+    if (!list.includes(previewComposition)) {
+      fail(`Flicker preview composition "${previewComposition}" is not registered.`);
+    }
+    return [previewComposition];
+  }
   if (flags.all === true && named !== undefined) {
     fail("Use either --all or --composition, not both.");
   }
@@ -260,6 +287,35 @@ function targetCompositions(flags, { list, canonical, active }) {
     }
   }
   return ids;
+}
+
+function previewRepeatCount(flags, previewFlicker, fallback = DEFAULT_PREVIEW_REPEATS) {
+  const authored = flags.repeats ?? flags.replays;
+  if (flags.repeats !== undefined && flags.replays !== undefined) {
+    fail("Use either --repeats or --replays, not both.");
+  }
+  if (!previewFlicker && authored !== undefined) {
+    fail("--repeats is available only with --preview-flicker.");
+  }
+  if (!previewFlicker) return null;
+  if (authored === undefined) return boundedInteger(
+    fallback,
+    "Default preview repeats",
+    1,
+    MAX_PREVIEW_REPEATS,
+  );
+  if (authored === true) fail("--repeats needs a value, e.g. --repeats 3.");
+  return boundedInteger(authored, "--repeats", 1, MAX_PREVIEW_REPEATS);
+}
+
+function exportCycleCount(flags, mode) {
+  const authored = flags.cycles;
+  if (authored === undefined) return DEFAULT_EXPORT_CYCLES;
+  if (mode !== EXPORT_MODES.MOTION) {
+    fail("--cycles is available only for motion exports.");
+  }
+  if (authored === true) fail("--cycles needs a value, e.g. --cycles 3.");
+  return boundedInteger(authored, "--cycles", 1, MAX_EXPORT_CYCLES);
 }
 
 function panelAction(parsed) {
@@ -282,6 +338,12 @@ export function createExportConsole({
   canonicalCompositions = listCompositions,
   activeComposition,
   useComposition,
+  previewComposition = "base",
+  listFlickerModes = () => [],
+  listFlickerScopes = () => ["canvas", "cell"],
+  defaultPreviewRepeats = DEFAULT_PREVIEW_REPEATS,
+  activeFlickerPreview = () => null,
+  useFlickerPreview,
   setPanelVisible,
   isPanelVisible,
   syncPanel,
@@ -306,9 +368,41 @@ export function createExportConsole({
       list,
       canonical: canonicalCompositions(),
       active: startedOn,
+      previewComposition,
     });
+    const previewFlicker = parsed.flags["preview-flicker"] === true;
+    const flickers = previewFlicker ? listFlickerModes() : [];
+    const scopes = previewFlicker ? [...new Set(listFlickerScopes())] : [];
+    const repeats = previewRepeatCount(
+      parsed.flags,
+      previewFlicker,
+      defaultPreviewRepeats,
+    );
+    const cycles = exportCycleCount(parsed.flags, state.mode);
+    if (previewFlicker && flickers.length === 0) {
+      fail("No flicker modes are registered for preview.");
+    }
+    if (previewFlicker && scopes.length === 0) {
+      fail("No flicker scopes are registered for preview.");
+    }
+    if (previewFlicker && typeof useFlickerPreview !== "function") {
+      fail("Flicker preview mode switching is unavailable.");
+    }
+    const jobs = previewFlicker
+      ? scopes.flatMap(scope => flickers.map(flicker => ({
+        composition: previewComposition,
+        flicker,
+        scope,
+        repeats,
+        cycles,
+      })))
+      : targets.map(composition => ({ composition, flicker: null, cycles }));
     const plan = {
       compositions: targets,
+      flickers,
+      scopes,
+      repeats,
+      cycles,
       format: state.exportFormat,
       size: `${state.resW}x${state.resH}`,
       fps: state.mode === EXPORT_MODES.MOTION ? state.fps : null,
@@ -316,32 +410,59 @@ export function createExportConsole({
     };
 
     if (parsed.flags["dry-run"] === true) {
-      log(`Dry run: would export ${targets.length} composition(s) as ${state.exportFormat}.`);
+      log(
+        previewFlicker
+          ? `Dry run: would export ${jobs.length} flicker preview(s), ${repeats} flicker repeat(s) across ${cycles} cycle(s) each, as ${state.exportFormat}.`
+          : `Dry run: would export ${targets.length} composition(s), ${cycles} cycle(s) each, as ${state.exportFormat}.`,
+      );
       return { ok: true, dryRun: true, ...plan, results: [] };
     }
 
     const results = [];
+    let startingPreview = null;
+    let previewPrepared = false;
     try {
-      for (const [index, composition] of targets.entries()) {
+      if (previewFlicker) {
+        if (previewComposition !== activeComposition()) useComposition(previewComposition);
+        startingPreview = activeFlickerPreview();
+        if (!startingPreview || typeof startingPreview !== "object") {
+          fail("The active flicker preview state is unavailable.");
+        }
+        previewPrepared = true;
+      }
+      for (const [index, job] of jobs.entries()) {
+        const { composition, flicker, scope } = job;
         if (composition !== activeComposition()) useComposition(composition);
-        log(`Exporting ${composition} (${index + 1}/${targets.length}) as ${state.exportFormat}…`);
-        const result = await runExport();
+        if (flicker !== null) {
+          useFlickerPreview({ mode: flicker, scope, repeats });
+        }
+        const label = flicker === null ? composition : `${scope} / ${flicker}`;
+        log(`Exporting ${label} (${index + 1}/${jobs.length}) as ${state.exportFormat}…`);
+        const result = await runExport({ cycles });
         const ok = result?.ok !== false;
         results.push({
           composition,
+          cycles,
+          ...(flicker === null ? {} : { flicker, scope, repeats }),
           ok,
           error: ok ? null : (result?.error?.message ?? String(result?.error ?? "Export failed.")),
         });
-        if (!ok) log(`Failed: ${composition} — ${results.at(-1).error}`);
+        if (!ok) log(`Failed: ${label} — ${results.at(-1).error}`);
       }
     } finally {
+      if (previewPrepared && startingPreview) {
+        if (activeComposition() !== previewComposition) useComposition(previewComposition);
+        useFlickerPreview(startingPreview);
+      }
       if (activeComposition() !== startedOn) useComposition(startedOn);
     }
 
     const failed = results.filter(result => !result.ok);
     log(
       failed.length === 0
-        ? `Exported ${results.length} composition(s) as ${state.exportFormat}.`
+        ? previewFlicker
+          ? `Exported ${results.length} flicker preview(s) as ${state.exportFormat}.`
+          : `Exported ${results.length} composition(s) as ${state.exportFormat}.`
         : `Exported ${results.length - failed.length}/${results.length}; ${failed.length} failed.`,
     );
     return { ok: failed.length === 0, ...plan, results };

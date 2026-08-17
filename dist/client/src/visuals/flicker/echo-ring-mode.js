@@ -1,4 +1,4 @@
-import { cubicBezierAt } from "../../cell-transitions/flip-dot.js";
+import { cubicBezierAt } from "../../core/cubic-bezier.js";
 
 // Echo Ring, ported from the dot-matrix loader of the same name:
 // matrix/public/r/dotm-square-11.tsx picks a dot's ring from its Manhattan
