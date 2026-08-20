@@ -13,6 +13,7 @@ import { createExportController } from "./export/export-controller.js";
 import { createProjectState, createSnapshotHistory } from "./export/project-state.js";
 import { createExportConsole } from "./export/export-console.js";
 import { flickerModes } from "./visuals/flicker/index.js";
+import { configureDebug, debug, resolveDebugChannels } from "./debug/index.js";
 
 if (typeof window.p5 !== "function") {
   throw new Error("p5.js did not load. Check the CDN request before starting the sketch.");
@@ -70,6 +71,12 @@ new window.p5(p => {
     return query.get("composition") || GLOBAL_CONFIG.composition.active;
   }
 
+  function syncDocumentTitle() {
+    const composition = director?.inspect().compositionId
+      ?? activeCompositionFromConfig();
+    document.title = `OAI//${composition}`;
+  }
+
   function createDirectorForRuntime(runtimeOverride) {
     const catalog = createCatalog({ palettes: GLOBAL_CONFIG.palettes });
     const next = new CompositionDirector({
@@ -78,6 +85,8 @@ new window.p5(p => {
       compositionDefinitions: COMPOSITION_DEFINITIONS,
       generatorTypes: catalog.generatorTypes,
       compositionRules: catalog.compositionRules,
+      sceneTransitionTypes: catalog.sceneTransitionTypes,
+      palettes: GLOBAL_CONFIG.palettes,
       runtime: runtimeOverride,
     });
     next.resize(runtimeOverride.viewport());
@@ -129,6 +138,7 @@ new window.p5(p => {
     director.restoreProjectState(snapshot.director);
     director.update(currentFrame(0));
     director.seek(elapsed);
+    syncDocumentTitle();
     Object.assign(exportState, snapshot.export);
     exportPanel?.sync();
   }
@@ -161,6 +171,7 @@ new window.p5(p => {
   function useCompositionFromConsole(id) {
     director.use(id);
     director.update(currentFrame(0));
+    syncDocumentTitle();
     commitHistory();
     renderPreview();
   }
@@ -181,6 +192,7 @@ new window.p5(p => {
         if (inputLocked) return director.inspect().compositionId;
         director.use(name);
         director.update(currentFrame(0));
+        syncDocumentTitle();
         commitHistory();
         return name;
       },
@@ -204,8 +216,17 @@ new window.p5(p => {
     });
   }
 
+  syncDocumentTitle();
+
   p.setup = async () => {
     if (document.fonts?.ready) await document.fonts.ready;
+
+    configureDebug({
+      channels: resolveDebugChannels({
+        search: window.location.search,
+        config: GLOBAL_CONFIG.debug,
+      }),
+    });
 
     const canvas = p.createCanvas(p.windowWidth, p.windowHeight);
     canvas.parent("sketch");
@@ -281,6 +302,7 @@ new window.p5(p => {
     director = createDirectorForRuntime(runtime);
     director.use(activeCompositionFromConfig());
     director.update(currentFrame(0));
+    syncDocumentTitle();
     history = createSnapshotHistory(projectSnapshot());
 
     exportPanel = createExportPanel({
@@ -341,6 +363,7 @@ new window.p5(p => {
         }
         director.update(currentFrame(0));
         director.seek(elapsed);
+        syncDocumentTitle();
       },
       renderPreview,
       setInputLocked: value => {
@@ -391,6 +414,7 @@ new window.p5(p => {
     const dt = Math.min(compositionDt, 1 / 30);
     elapsed += compositionDt;
     frameIndex += 1;
+    debug.setFrame(frameIndex);
     pointer.active = pointerActive
       && p.mouseX >= 0
       && p.mouseX <= p.width

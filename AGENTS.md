@@ -1,0 +1,352 @@
+# AGENTS.md
+
+Entry point for any coding agent working in this repository. Read this file
+before reading source. `CLAUDE.md` points here; this is the single source.
+
+---
+
+## 1. What this project is
+
+A p5.js generative-art composer. It renders **discrete grids of dots** that
+animate through named **compositions** (voronoi, l-tree, game-of-life,
+inference-loop, tool-loop, context-window, interactive-grid, base, flock) and
+exports them as PNG, MP4, SVG, or PNG sequences with deterministic,
+seam-perfect loops.
+
+The point of the codebase is **composability**: any visual effect should be
+combinable with any other to produce new results. Effects that only work in one
+composition are bugs, not features.
+
+Plain ES modules. No TypeScript. No build step for development — `vite` serves
+`src/` directly, p5.js comes from a CDN in `index.html`. `dist/` is a build
+output produced by `npm run build`; never hand-edit it.
+
+---
+
+## 2. Run, test, verify
+
+```sh
+npm run dev              # vite dev server
+npm test                 # node --test test/*.test.js
+npm run build            # regenerate dist/ from source
+```
+
+`npm test` must stay scoped to `test/*.test.js`. A bare `node --test` walks the
+whole repo and tries to execute `matrix/`'s TypeScript files, which Node cannot
+parse.
+
+**`matrix/` is reference material, not part of this app.** It is a separate
+Next.js project kept in-tree as a source of dot-matrix loader patterns that get
+ported into `src/visuals/flicker/`. Never import from it, never edit it, never
+let the test runner reach it.
+
+---
+
+## 3. Debugging rule (mandatory)
+
+**Every subsystem must be observable through `console.log` without a browser.**
+
+This is a standing rule, not a suggestion. `src/debug/` lands in Stage 1 of
+`REFACTOR_PLAN.md`; until then, build it before you instrument — do not add bare
+`console.log` calls in the meantime and do not defer the instrumentation.
+
+When you add or change behavior:
+
+1. Emit a debug line on every **state transition** — phase change, plan
+   creation, cycle boundary, scene commit, generator enter/exit, config
+   resolution failure. Not on every frame; on every *change*.
+2. Use the shared channel API. Never write a bare `console.log` into `src/`.
+
+```js
+import { debug } from "../debug/index.js";
+
+debug.timeline("phase=%s progress=%.3f cycle=%d core=%.3f", phase, p, i, t);
+debug.transition("plan created mode=%s targets=%d sources=%d", m, n, s);
+```
+
+3. One line per event, machine-parseable, stable key order, so two runs can be
+   diffed:
+
+```
+[cg:timeline]   f=0142 phase=intro   p=0.412 cycle=0 core=0.000
+[cg:transition] f=0142 mode=sort-selection targets=341 sources=341 paired=341
+```
+
+4. Channels: `timeline`, `transition`, `plan`, `cells`, `draw`, `config`,
+   `export`. Enable with any of:
+   - `?debug=timeline,transition` in the URL
+   - `GLOBAL_CONFIG.debug.channels` in `config/global.js`
+   - `` cg`debug timeline transition` `` in the browser console
+5. Rate-limit by construction: `timeline` logs once per phase change, `cells`
+   samples every N frames. A channel that floods is a broken channel.
+6. Debug output must be capturable in Node. `debug.sink` is replaceable so
+   tests can assert on the log stream itself.
+
+**Why this rule exists:** an agent asked to fix "intro looks glitchy" currently
+has no way to see the phase, the progress, the plan, or the pairing. It has to
+guess. Guessing is how the current half-finished features got that way.
+
+To debug a composition headlessly:
+
+```sh
+node --input-type=module -e "
+  import { runFrames } from './src/debug/headless.js';
+  const log = await runFrames({ composition: 'voronoi', frames: 240,
+                                channels: ['timeline', 'transition'] });
+  console.log(log);
+"
+```
+
+---
+
+## 4. Domain glossary
+
+Use these words exactly. Most confusion in this codebase is vocabulary drift.
+
+| Term | Meaning |
+|---|---|
+| **composition** | A named, user-selectable piece: `voronoi`, `l-tree`, … Defined in `config/compositions/`. |
+| **composition rule** | Chooses which generators are on screen over time. Today only `SequenceRule`. |
+| **render plan** | The array a rule returns each frame: `[{ use: "generatorId", opacity }]`. |
+| **generator** | Owns simulation + drawing for one visual system. Lives in `src/generators/`. |
+| **scene / face** | One discrete state of a grid — the dot pattern at one step. Generators animate *between* scenes. |
+| **cell** | One parent grid square. Subdivides into 1, 4, 16, or 64 glyphs. |
+| **glyph** | One drawn dot. Identified by a stable string id, e.g. `"3:12"` = cell 3, glyph 12. |
+| **level** | Subdivision depth of a cell: 0, 1, 2, 3 → 1, 4, 16, 64 glyphs. |
+| **energy** | Scalar field value per cell, drives level and palette. |
+| **flicker** | Per-glyph palette modulation. A registry of modes in `src/visuals/flicker/`. |
+| **palette** | Ordered color ramp. Global default, overridable per composition. |
+| **arrangement** | A transition mode that moves glyphs from source positions to target positions. |
+| **presentation** | What an arrangement returns per glyph: `{ offsetX, offsetY, opacity, scale }`. |
+| **phase** | Where the timeline is: `intro`, `body`, or `outro`. |
+| **endpoint** | Legacy name for the intro/outro circle. Being replaced by *phase*. |
+
+---
+
+## 5. Architecture map
+
+```
+index.html            p5 from CDN, mounts #sketch
+sketch.js             2-line stable entry → src/sketch.js
+src/sketch.js         Browser host ONLY. p5 lifecycle, canvas events, wall
+                      clock, undo, drag-drop restore, window.circleGridApp,
+                      window.cg. Nothing here is testable in Node — keep logic
+                      out of it.
+
+config.js             Public config facade. Assembles SETTINGS,
+                      GENERATOR_DEFINITIONS, COMPOSITION_DEFINITIONS.
+config/global.js      App-wide: canvas, palette, palettes, flicker, transitions,
+                      active composition, debug.
+config/shared.js      Cross-composition settings.
+config/compositions/  One file per composition family. Each exports settings +
+                      generatorDefinitions + compositionDefinitions.
+
+src/core/
+  composition-director.js  Owns composition selection, generator instances,
+                           the render plan, and the timeline. No p5 dependency.
+  registry.js              Strict name→factory registry.
+  canvas-pointer-input.js  Pointer event → grid coordinate routing.
+  cubic-bezier.js          CSS-style timing curves.
+
+src/generators/       One class per visual system. See §6 for the contract.
+src/grid/             CircleGrid (cell/glyph geometry) + subdivision policy.
+src/fields/           Energy sources: grid field, type mask, flock field.
+src/shapes/           Rounded-rect / circle renderer.
+src/visuals/flicker/  Flicker mode registry + 7 modes. This is the cleanest
+                      registry in the repo — copy its shape for new registries.
+src/compositions/     Composition rules.
+src/composition-endpoints/  Resolves global endpoint defaults with local
+                      composition overrides. `dijkstra` searches and cleans up
+                      on the parent-cell grid.
+src/transitions/      The shared arrangement pool. index.js is the registry:
+                      every mode declares which phases (intro | outro | state)
+                      it supports, plus its defaults. fade.js and
+                      text-reveal.js are the modes; arrangement-items.js
+                      normalizes an event; presentations.js and overlay.js are
+                      the two ports; phase-overlay.js is the director-side
+                      driver for modes that draw content of their own.
+                      Landed early out of Stage 2; the rest of that stage still
+                      has to fold in the two settings resolvers and the four
+                      applyPresentation copies.
+src/export/           PNG / MP4 / SVG / ZIP export, project-state snapshot and
+                      restore, the `cg` console CLI. Deterministic by design.
+
+Not yet created — see REFACTOR_PLAN.md for which stage lands each:
+src/debug/            Debug channels, sink, headless frame driver.  (Stage 1)
+src/cell-state/       The per-cell buffer writer, split out of the
+                      transition registry.                          (Stage 2)
+src/timeline/         The single clock: intro | body | outro.        (Stage 3)
+
+Until those land, the equivalent code lives in src/scene-transitions/,
+src/cell-transitions/, src/compositions/circle-endpoints.js, and the new
+src/composition-endpoints/ registry — overlapping subsystems that Stages 2-3
+collapse into the above.
+
+test/                 node:test. 19 files. architecture.test.js encodes the
+                      architectural invariants — read it before changing shape.
+```
+
+---
+
+## 6. Contracts you must not break
+
+### Generator lifecycle
+
+The director calls, in this order, and the architecture test pins it:
+
+```
+resize → enter → update → draw → exit → dispose
+```
+
+Every method is optional except that a generator that draws must implement
+`draw(frame, planEntry, context)`. The director validates that any method
+present is a function.
+
+Optional capability methods:
+
+| Method | Purpose |
+|---|---|
+| `inspect()` | Machine-readable state. Must be JSON-serializable — copy typed arrays, never return live buffers. |
+| `animationDuration()` | Length of one loop in seconds, or `null` for continuous. Export depends on this. |
+| `seek(time)` | Restore to a time. Return `false` to reject. |
+| `snapshotProjectState()` / `restoreProjectState(state)` | Export / undo support. Must round-trip. |
+| `contentBounds()` | Bounding box for export framing. |
+
+### Determinism
+
+Export must produce identical bytes for identical inputs.
+
+- **No `Date.now()`, no `Math.random()` in any render or simulation path.**
+  Seeded randomness only, from `runtime.projectSeed()`.
+- Simulation advances in fixed steps; export drives the clock, the clock does
+  not read wall time.
+- Anything not captured by `snapshotProjectState()` does not exist during
+  export — the export session builds a *fresh* director from a snapshot.
+
+### Render plan
+
+`rule.update(frame)` returns an array of `{ use, opacity? }`. The director
+validates every entry: `use` must name a known generator, `opacity` must be in
+`[0, 1]`. `globalAlpha` is multiplied, never assigned, and always restored.
+
+### Config layering
+
+Composition settings inherit app-wide defaults and override by key. Authored
+config modules are never mutated — resolution produces new objects. A missing
+`SETTINGS.<key>` referenced by a definition is a startup error, not a silent
+default.
+
+## 7. House rules
+
+1. **Read `REFACTOR_PLAN.md` before structural work.** It says what is
+   deliberately mid-migration.
+2. **One concept, one implementation.** Before adding a helper, grep for it.
+   `clamp01` currently exists in 12 files; do not make it 13.
+3. **No compatibility aliases without a caller.** An alias whose only consumer
+   is a test asserting the alias exists is dead code with a bodyguard.
+4. **No barrel files unless something imports them.** `src/export/index.js`
+   re-exports 29 symbols and is imported by nothing.
+5. **No `export default`.** The repo has 32 of them and zero default imports.
+   Named exports only.
+6. **Fail loudly at startup, not silently at frame 4000.** An unsupported
+   combination of composition + effect must throw during setup with a message
+   naming both sides and listing valid alternatives.
+7. **Never hand-edit `dist/`.** Run `npm run build`.
+8. **Do not touch `src/generators/flock*.js` or `config/compositions/flock-grid.js`.**
+   See §8.
+9. Comment *why*, not *what*. Match the surrounding density — this codebase
+   uses short prose comments above non-obvious blocks, not line-by-line noise.
+
+---
+
+## 8. Known exemptions and mid-migration state
+
+**flock is out of scope and must not be modified.** It stays on the legacy
+`NativeCircleEndpointTransition` path and constructs no `SceneTransition`.
+Consequences:
+
+- Architecture tests exempt flock from the stage/transition contract.
+- `NativeCircleEndpointTransition` stays alive solely for flock until its owner
+  decides otherwise.
+- When developing transition work, switch `GLOBAL_CONFIG.composition.active`
+  to a migrated composition — flock will not show the new behavior.
+
+**Intro/outro status.** Two modes are authorable at the cycle boundaries.
+`fade` reveals the centered parent cell over `revealFraction` of the phase, then
+crossfades into the composition. `text` hides a centered string behind a mirrored ladder
+of subdivided cells and takes the ladder apart to show it: expand outward from
+one big centre dot, uncover centre-first, hold the text for `visibleSeconds`,
+then collapse the ladder inward to the single centre dot again. Every change is a
+cut — the mode never fades or slides, and the composition cuts in as the phase
+ends. It is the one mode that draws through the overlay port, and the only one
+that needs a palette (it remaps the composition's palette across the ladder's
+levels, or across the dots inside each cell). `sort-selection` is `state`-only — driven from
+one centered circle it degenerates into an offscreen slide-in. The generator's
+own per-cycle intro/outro still runs on its own clock beside the endpoint, which
+is Stage 3 work.
+
+Composition endpoints are configured separately in `circleEndpoints`. Voronoi
+currently overrides the global native fallback with `dijkstra`: its retained
+level-0 parent cell is selected from the far edge of the winning basin, searches
+across parent-cell neighbors, blinks, then runs a ramped subdivision cleanup
+ending at the centre. `trailLength` maps `0..1` onto the computed path: zero
+changes one cleanup cell at a time, while one overlaps subdivision across every
+removable path cell. It does not alter pathfinding or blink visibility.
+Shared mode defaults live under `GLOBAL_CONFIG.composition.circleEndpoints`;
+composition values override them by key.
+
+**Half-finished features.** The remaining `intro`/`outro` defects are the
+timeline ones — two layers deciding the cycle restarts, and durations derived
+from mutable runtime state. Do not patch them case by case; see
+`REFACTOR_PLAN.md`. Specifically, do not "fix" a composition by adding a guard
+that special-cases it — that is how the current three-competing-drivers
+situation arose.
+
+---
+
+## 9. Common tasks
+
+**Add a flicker mode** → `src/visuals/flicker/<name>-mode.js`, register in
+`flicker-mode-registry.js`, add defaults to `GLOBAL_CONFIG.flicker.modes`, add a
+case to `test/flicker.test.js`. Follow `noise-mode.js` as the template.
+
+**Add an arrangement (transition) mode** → `src/transitions/<name>.js`
+implementing `createPlan(event)` and `presentationAt(plan, id, progress)`, then
+add a descriptor to `ARRANGEMENT_MODES` in `src/transitions/index.js` with its
+`phases` and `defaults`. Follow `fade.js` as the template, and normalize the
+event with `normalizeArrangementItems` rather than reading it yourself.
+
+Aim for all three phases — `intro`, `outro`, `state`. A mode that cannot express
+one leaves it out of `phases`; every consumer then refuses that pairing at
+startup, naming the mode, the phase, and the modes that do support it. That
+declaration is the only sanctioned way to be phase-specific — never a runtime
+guard in a generator.
+
+A mode that needs more than one pose per glyph — a crossfade shows the source and
+the target together — also implements
+`presentationsAt(plan, id, progress) -> presentation[]`. Renderers read poses
+through `presentationsFrom()`, so a single-pose mode needs nothing extra.
+
+A mode whose phase owns content that is in no scene — `text` draws a ladder of
+cells and a string — implements the overlay port as well:
+
+```js
+drawOverlay(plan, progress, context)   // once per frame, above the render plan
+```
+
+`createPhaseOverlay()` builds the driver from the composition's `intro`/`outro`
+settings and the director calls it, so the overlay reaches every composition
+including the ones whose generators carry no transition wiring. A mode without
+`drawOverlay` produces no driver and costs nothing. The overlay is handed the
+viewport, not a generator layout: it takes its cell size from the composition's
+`longSideCells`, falling back to the mode's own setting.
+
+**Add a composition** → new file in `config/compositions/`, export the three
+blocks, import it in `config.js`. Reuse an existing generator type where
+possible; a new generator type is a much larger commitment.
+
+**Change timing** → do not add a clock. There is one timeline owner. Read
+`src/timeline/` first.
+
+**Debug a visual glitch** → enable the relevant channels, run the headless
+driver for the composition, diff the log across frames. Do not read pixels.

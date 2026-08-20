@@ -120,6 +120,9 @@ export function gridFaceSignature(face) {
       detail.stage,
       detail.seed,
       detail.selectedIndex,
+      Array.isArray(detail.visibleGlyphIndices)
+        ? detail.visibleGlyphIndices.join(",")
+        : "",
     ].join(":")
     : "";
   return [face.level, face.paletteStep, face.role, detailKey].join("|");
@@ -977,6 +980,44 @@ function selectedVoronoiSiteOrder(assignments, sites, cycleIndex) {
   return selectedOrder;
 }
 
+function voronoiEndpointCellIndex(
+  layout,
+  assignments,
+  selectedSiteOrder,
+  boundaryIndices,
+) {
+  const centerColumn = Math.round(layout.columns * 0.5 - 0.5);
+  const centerRow = Math.round(layout.rows * 0.5 - 0.5);
+  let selectedIndex = null;
+  let selectedDistance = -1;
+  let selectedConfidence = -1;
+  for (const assignment of assignments) {
+    if (
+      assignment.winnerOrder !== selectedSiteOrder
+      || boundaryIndices.has(assignment.index)
+    ) continue;
+    const distance = Math.abs(indexColumn(layout, assignment.index) - centerColumn)
+      + Math.abs(indexRow(layout, assignment.index) - centerRow);
+    if (
+      distance > selectedDistance
+      || (distance === selectedDistance && assignment.confidence > selectedConfidence)
+      || (
+        distance === selectedDistance
+        && assignment.confidence === selectedConfidence
+        && assignment.index < selectedIndex
+      )
+    ) {
+      selectedIndex = assignment.index;
+      selectedDistance = distance;
+      selectedConfidence = assignment.confidence;
+    }
+  }
+  if (selectedIndex === null) {
+    throw new Error("Voronoi endpoint needs one visible cell in the winning basin.");
+  }
+  return selectedIndex;
+}
+
 function createVoronoiScene({ layout, cycleIndex, progress, options }) {
   const phase = voronoiPhaseAt(progress);
   const partitionPosition = progress
@@ -1006,6 +1047,18 @@ function createVoronoiScene({ layout, cycleIndex, progress, options }) {
     cycleIndex,
   );
   const selectedSiteIndex = sites[selectedSiteOrder];
+  const endpointCellIndex = voronoiEndpointCellIndex(
+    layout,
+    assignments,
+    selectedSiteOrder,
+    boundaryIndices,
+  );
+  const endpointPreparationProgress = phase === "commit" || phase === "settle"
+    ? clamp01(
+      (progress - VORONOI_PHASES.consensusEnd)
+        / (1 - VORONOI_PHASES.consensusEnd),
+    )
+    : null;
   const siteOrderByIndex = new Map(
     sites.map((siteIndex, siteOrder) => [siteIndex, siteOrder]),
   );
@@ -1048,7 +1101,13 @@ function createVoronoiScene({ layout, cycleIndex, progress, options }) {
         : makeFace(0, 0, "voronoi-rejected-site");
     }
   } else {
-    faces[selectedSiteIndex] = makeFace(0, 3, "voronoi-commit");
+    // The endpoint starts from this exact parent cell, so the handoff is a cut
+    // with no resize or positional flight before grid-level pathfinding.
+    faces[endpointCellIndex] = makeFace(
+      0,
+      3,
+      "voronoi-commit",
+    );
   }
 
   const boundaryNeighbors = options.flicker?.enabled === true
@@ -1087,10 +1146,15 @@ function createVoronoiScene({ layout, cycleIndex, progress, options }) {
     requestedSiteCount: options.siteCount,
     actualSiteCount,
     selectedSiteIndex,
+    endpointCellIndex,
+    ...(endpointPreparationProgress === null
+      ? {}
+      : { endpointPreparationProgress }),
     selectedSiteOrder,
     boundaryIndices: [...boundaryIndices],
     territoryByIndex: assignments.map(assignment => assignment.winnerOrder),
     boundaryWhitespace: boundaryRatio,
+    transitionStyle: phase === "commit" || phase === "settle" ? "cut" : "animate",
     ...(paletteMotion ? { paletteMotion } : {}),
     toolEnabled: false,
   };

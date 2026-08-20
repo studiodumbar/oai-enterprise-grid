@@ -1,0 +1,23 @@
+# composition: context-window
+# frames: 900
+
+[cg:timeline] f=0000 phase=start cycle=0 duration=6.000 paused=yes
+[cg:plan] f=0000 enter=contextWindowGrid
+[cg:plan] f=0000 render=[contextWindowGrid@1.00]
+[cg:transition] f=0000 endpoint=start mode=text cycle=0 targets=64 sources=1 padded=0 subdivision=1 unpaired=63
+[cg:transition] f=0000 overlay=intro mode=text
+[cg:timeline] f=0360 phase=core cycle=0 duration=2.000 paused=no
+[cg:transition] f=0360 overlay=- mode=-
+[cg:timeline] f=0480 phase=end cycle=0 duration=3.000 paused=yes
+[cg:transition] f=0480 endpoint=end mode=fade cycle=0 targets=1 sources=1 padded=0 subdivision=1 unpaired=0
+[cg:transition] f=0480 overlay=outro mode=-
+[cg:timeline] f=0659 phase=start cycle=1 duration=6.000 paused=no
+[cg:transition] f=0659 scene=outro mode=fade targets=1 sources=0 duration=3.000 key=context:0:quiet:1:5x3
+[cg:transition] f=0659 endpoint=start mode=text cycle=1 targets=1 sources=1 padded=0 subdivision=1 unpaired=0
+[cg:transition] f=0659 overlay=intro mode=text
+[cg:timeline] f=0660 phase=start cycle=1 duration=6.000 paused=yes
+
+# draw volume
+blankFrames=3
+firstDrawnFrame=0
+totalFill=153820

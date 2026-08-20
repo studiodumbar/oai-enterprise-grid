@@ -1,20 +1,46 @@
 
-[] refactor for better understanding
 
-[] debug mode
+[ === pen == ]
 
-[] new features fail within different modes ([x] its ok, if [o] its broken)
+[] composition name in the tab name
+[] More organic feel, less computer
+    [] night sky
+    [] water ripples
+    [] autora
+[] Too dense
+[] Scanning worked well
+[] Clear movements that feel organic
+
+
+[ === wip === ]
+
+[o] Try out x4 or x5 times slower
+[o] typeface
+
+
+
+[ === arc === ]
+
+[x] Extra pallete shade 
+[x] refactor for better understanding
+[x] debug mode
+[x] new intro / outro modules
+[x] new features fail within different modes ([x] its ok, if [o] its broken)
     [intro] [outro] name [sort selection]
-    [o] [o] voronoi [x]
-    [] [] flock [x] // different universe type of thing, needs a major remake
-    [o] [o] base [x] 
-    [o] [o] interactive-grid [x] 
-    [o] [o] inference-loop [o]
-    [o] [o] game-of-life [o glitchy but ok, overlaps existent]
-    [o?] [x] l-tree [o overlaps on top of existent dots]
-    [o] [x but glitchy and tehre is a move] voronoi [overlaps] 
-    [x other things are also present somehow] [x] tool-loop [dots overlap] 
-    [x] [x] context-window [x] 
+    [] voronoi 
+    [] l-tree 
+    [] flock 
+       [] different universe type of thing, needs a major remake
+    [] base  
+    [] interactive-grid  
+    [] inference-loop   
+    [] game-of-life 
+    [] voronoi 
+    [] tool-loop
+       [] one circle goes back and forth, very weird bug
+    [] context-window 
+
+
 
 
 

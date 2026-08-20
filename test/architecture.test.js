@@ -126,15 +126,40 @@ test("composition director switches generators through lifecycle contracts", () 
   director.resize({ width: 640, height: 480 });
   director.update({ dt: 0 });
   director.draw({ dt: 0 });
+  // The inspection record is the debug surface: identity metadata per
+  // generator, plus the timeline state that decides how intro/outro render.
   assert.deepEqual(director.inspect(), {
     compositionId: "demo",
     renderPlan: [{ use: "first", opacity: 0.5 }],
+    // No arrangement registry was passed, so no intro/outro mode can draw
+    // content of its own here.
+    phaseOverlay: null,
     generators: {
       first: {
         generatorInstanceId: "first",
         generatorType: "fake",
         settingsKey: "firstOptions",
         strategy: "demo-strategy",
+      },
+    },
+    timeline: {
+      phase: "core",
+      progress: null,
+      durationSeconds: null,
+      cycleIndex: 0,
+      coreTime: 0,
+      outerElapsed: 0,
+      coreElapsed: 0,
+      coreDuration: null,
+      rule: {
+        stepIndex: 0,
+        stepCount: 2,
+        use: "first",
+        elapsedSeconds: 0,
+        stepDurationSeconds: 1,
+        cycleSeconds: null,
+        loop: false,
+        holding: false,
       },
     },
   });
@@ -542,7 +567,20 @@ test("the configured flock composition runs through the complete adapter", () =>
   const catalog = createCatalog({ palettes: PALETTES });
   assert.ok(catalog.cellTransitionTypes.has("none"));
   assert.ok(catalog.cellTransitionTypes.has("sort-selection"));
-  assert.ok(catalog.sceneTransitionTypes.has("sort-selection"));
+  // One shared pool, with each mode declaring the phases it can run in.
+  assert.ok(catalog.sceneTransitionTypes.has("fade"));
+  assert.deepEqual(
+    catalog.sceneTransitionTypes.namesForPhase("intro"),
+    ["fade", "text"],
+  );
+  assert.deepEqual(
+    catalog.sceneTransitionTypes.namesForPhase("outro"),
+    ["fade", "text"],
+  );
+  assert.deepEqual(
+    catalog.cellTransitionTypes.namesForPhase("state"),
+    ["fade", "sort-selection", "none"],
+  );
   const compositions = {
     ...COMPOSITION_DEFINITIONS,
     faded: {

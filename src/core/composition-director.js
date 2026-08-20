@@ -1,8 +1,10 @@
 import {
   animationDurationWithCircleEndpoints,
   circleEndpointTimelineAt,
-  normalizeCircleEndpointSettings,
 } from "../compositions/circle-endpoints.js";
+import { createPhaseOverlay } from "../transitions/phase-overlay.js";
+import { debug } from "../debug/index.js";
+import { resolveCompositionEndpointSettings } from "../composition-endpoints/index.js";
 
 const GENERATOR_LIFECYCLE = [
   "enter",
@@ -80,6 +82,8 @@ export class CompositionDirector {
     compositionDefinitions,
     generatorTypes,
     compositionRules,
+    sceneTransitionTypes = null,
+    palettes = null,
     runtime,
   }) {
     this.settings = requireObject(settings, "Settings");
@@ -90,11 +94,20 @@ export class CompositionDirector {
     );
     this.generatorTypes = requireRegistry(generatorTypes, "Generator type registry");
     this.compositionRules = requireRegistry(compositionRules, "Composition rule registry");
+    // Optional: without it an intro/outro mode still places glyphs, it just
+    // cannot draw content of its own. See src/transitions/phase-overlay.js.
+    this.sceneTransitionTypes = sceneTransitionTypes;
+    // The palette table an overlay resolves its colors against. Generators get
+    // theirs from the catalog; the overlay is not a generator.
+    this.palettes = palettes;
     this.runtime = requireObject(runtime, "Runtime");
     if (typeof this.runtime.context !== "function") {
       throw new TypeError("Runtime must provide context().");
     }
-    this.circleEndpoints = normalizeCircleEndpointSettings(this.settings.composition ?? {});
+    this.compositionEndpoints = resolveCompositionEndpointSettings(
+      this.settings.composition ?? {},
+    );
+    this.circleEndpoints = this.compositionEndpoints.timeline;
     this.endpointElapsed = 0;
     this.endpointCoreElapsed = 0;
     this.endpointState = circleEndpointTimelineAt(
@@ -108,6 +121,7 @@ export class CompositionDirector {
     this.activeGeneratorIds = new Set();
     this.currentCompositionName = null;
     this.currentRule = null;
+    this.phaseOverlay = null;
     this.renderPlan = [];
     this.viewport = null;
     this.lastFrame = undefined;
@@ -143,6 +157,10 @@ export class CompositionDirector {
     if (!nextRule || typeof nextRule.update !== "function") {
       throw new TypeError(`Composition rule "${ruleType}" must return an object with update().`);
     }
+    const nextCompositionEndpoints = resolveCompositionEndpointSettings(
+      this.settings.composition ?? {},
+      this.phaseSettingsGroup(name)?.circleEndpoints ?? {},
+    );
 
     for (const id of this.activeGeneratorIds) {
       const entries = this.renderPlan.filter(entry => entry.use === id);
@@ -157,6 +175,8 @@ export class CompositionDirector {
 
     this.currentCompositionName = name;
     this.currentRule = nextRule;
+    this.compositionEndpoints = nextCompositionEndpoints;
+    this.circleEndpoints = nextCompositionEndpoints.timeline;
     this.endpointElapsed = 0;
     this.endpointCoreElapsed = 0;
     this.endpointState = circleEndpointTimelineAt(
@@ -165,7 +185,40 @@ export class CompositionDirector {
       this.circleEndpoints,
       this.endpointAutoDurations(),
     );
+    this.buildPhaseOverlay();
     return this;
+  }
+
+  /**
+   * The intro/outro settings of the named composition. A definition with
+   * several generators takes the first one that authors a phase, which is the
+   * same group its endpoint transitions read. Read from the definition rather
+   * than the live plan, because a rule has not chosen one yet at use() time.
+   */
+  phaseSettingsGroup(name) {
+    const definition = this.compositionDefinitions.get(name);
+    for (const id of compositionGeneratorIds(definition)) {
+      const key = this.generatorDefinitions.get(id)?.settingsKey;
+      const group = key ? this.settings[key] : undefined;
+      if (group?.intro !== undefined) return group;
+    }
+    return undefined;
+  }
+
+  buildPhaseOverlay(name = this.currentCompositionName) {
+    const group = this.phaseSettingsGroup(name);
+    this.phaseOverlay = group === undefined
+      ? null
+      : createPhaseOverlay({
+        intro: group.intro,
+        outro: group.outro,
+        modeRegistry: this.sceneTransitionTypes,
+        longSideCells: group.longSideCells ?? null,
+        palette: group.palette ?? null,
+        palettes: this.palettes,
+        background: this.settings.canvas?.background ?? null,
+      });
+    if (this.phaseOverlay && this.viewport) this.phaseOverlay.resize(this.viewport);
   }
 
   update(frame) {
@@ -184,6 +237,18 @@ export class CompositionDirector {
       this.endpointAutoDurations(),
     );
     const coreDt = Math.max(0, endpointState.coreTime - this.endpointCoreElapsed);
+    // The core clock is paused during an endpoint by zeroing this delta rather
+    // than by a flag, so a nonzero coreDt outside the core phase means two
+    // layers are both advancing the cycle. Worth seeing.
+    debug.timeline(
+      "phase=%s cycle=%d duration=%s paused=%s",
+      endpointState.phase,
+      endpointState.cycleIndex,
+      endpointState.durationSeconds === null
+        ? "-"
+        : endpointState.durationSeconds.toFixed(3),
+      endpointState.phase !== "core" && coreDt === 0 ? "yes" : "no",
+    );
     this.endpointCoreElapsed = endpointState.coreTime;
     this.endpointState = endpointState;
     const mappedFrame = this.frameForCore(frame, endpointState, coreDt);
@@ -201,15 +266,22 @@ export class CompositionDirector {
     for (const id of this.activeGeneratorIds) {
       if (!nextIds.has(id)) {
         const entries = this.renderPlan.filter(entry => entry.use === id);
+        debug.plan("exit=%s", id);
         this.callGenerator(id, "exit", mappedFrame, entries);
       }
     }
     for (const id of nextIds) {
       if (!this.activeGeneratorIds.has(id)) {
         const entries = nextPlan.filter(entry => entry.use === id);
+        debug.plan("enter=%s", id);
         this.callGenerator(id, "enter", mappedFrame, entries);
       }
     }
+
+    debug.plan(
+      "render=[%s]",
+      nextPlan.map(entry => `${entry.use}@${(entry.opacity ?? 1).toFixed(2)}`).join(" "),
+    );
 
     this.activeGeneratorIds = nextIds;
     this.renderPlan = nextPlan;
@@ -228,13 +300,17 @@ export class CompositionDirector {
     const drawable = this.renderPlan.filter(
       entry => typeof this.generator(entry.use).draw === "function",
     );
-    if (drawable.length === 0) return;
+    if (drawable.length === 0 && this.phaseOverlay === null) return;
 
     if (!context || typeof context.save !== "function" || typeof context.restore !== "function") {
       throw new TypeError("runtime.context() must return a context with save() and restore().");
     }
 
-    this.drawPlan(drawable, this.frameForDraw(frame), context);
+    const drawFrame = this.frameForDraw(frame);
+    if (drawable.length > 0) this.drawPlan(drawable, drawFrame, context);
+    // The phase overlay sits above the composition: during an intro it is what
+    // the composition is being revealed from.
+    this.phaseOverlay?.draw(drawFrame.compositionEndpoint, context);
   }
 
   drawPlan(drawable, frame, context) {
@@ -306,6 +382,7 @@ export class CompositionDirector {
     for (const generator of this.generators.values()) {
       if (typeof generator.resize === "function") generator.resize(viewport);
     }
+    this.phaseOverlay?.resize(viewport);
     return this;
   }
 
@@ -361,6 +438,18 @@ export class CompositionDirector {
       compositionId: this.currentCompositionName,
       renderPlan: this.renderPlan.map(entry => ({ ...entry })),
       generators,
+      phaseOverlay: this.phaseOverlay?.inspect() ?? null,
+      // The endpoint state drives how the intro and outro render and was
+      // previously computed every frame and readable by nobody.
+      timeline: {
+        ...this.endpointState,
+        outerElapsed: this.endpointElapsed,
+        coreElapsed: this.endpointCoreElapsed,
+        coreDuration: this.coreAnimationDuration(),
+        rule: typeof this.currentRule?.inspect === "function"
+          ? this.currentRule.inspect()
+          : null,
+      },
     };
   }
 

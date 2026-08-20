@@ -1,4 +1,6 @@
 import { resolveCellTransitionSettings } from "./transition-settings.js";
+import { presentationsFrom } from "../transitions/presentations.js";
+import { debug } from "../debug/index.js";
 
 const IDENTITY_PRESENTATION = Object.freeze({
   offsetX: 0,
@@ -11,19 +13,22 @@ const IDENTITY_PRESENTATION = Object.freeze({
 export class CellStateTransition {
   constructor({ settings, modeRegistry }) {
     this.settings = resolveCellTransitionSettings({}, settings ?? {});
+    if (!Number.isFinite(this.settings.durationSeconds)) {
+      throw new RangeError(
+        "Cell-transition durationSeconds must resolve to a number before construction.",
+      );
+    }
     this.mode = null;
     if (this.settings.enabled) {
       if (
         !modeRegistry
-        || typeof modeRegistry.has !== "function"
-        || typeof modeRegistry.create !== "function"
+        || typeof modeRegistry.createForPhase !== "function"
       ) throw new TypeError("An enabled cell transition requires a mode registry.");
-      if (!modeRegistry.has(this.settings.mode)) {
-        throw new Error(`Unknown cell-transition mode "${this.settings.mode}".`);
-      }
-      this.mode = modeRegistry.create(
+      this.mode = modeRegistry.createForPhase(
         this.settings.mode,
+        "state",
         this.settings.modes[this.settings.mode],
+        "Cell transition (state)",
       );
       if (
         !this.mode
@@ -49,6 +54,14 @@ export class CellStateTransition {
 
   begin(event) {
     if (!this.settings.enabled) return false;
+    debug.transition(
+      "scene=state mode=%s targets=%d sources=%d duration=%.3f key=%s",
+      this.settings.mode,
+      event?.items?.length ?? event?.indices?.length ?? 0,
+      event?.fromItems?.length ?? 0,
+      this.settings.durationSeconds,
+      event?.key ?? "-",
+    );
     this.plan = this.mode.createPlan({
       ...event,
       durationSeconds: this.settings.durationSeconds,
@@ -72,13 +85,19 @@ export class CellStateTransition {
     return dt - consumed;
   }
 
+  progressFor() {
+    return this.elapsed / this.settings.durationSeconds;
+  }
+
   presentationFor(index) {
     if (!this.begun || !this.plan) return IDENTITY_PRESENTATION;
-    return this.mode.presentationAt(
-      this.plan,
-      index,
-      this.elapsed / this.settings.durationSeconds,
-    );
+    return this.mode.presentationAt(this.plan, index, this.progressFor());
+  }
+
+  /** Some modes place more than one pose per glyph; a crossfade needs two. */
+  presentationsFor(index) {
+    if (!this.begun || !this.plan) return [IDENTITY_PRESENTATION];
+    return presentationsFrom(this.mode, this.plan, index, this.progressFor());
   }
 
   inspect() {

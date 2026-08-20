@@ -1,17 +1,13 @@
+import { ARRANGEMENT_MODE_DEFAULTS } from "../transitions/index.js";
+
 export const DEFAULT_SCENE_TRANSITION_SETTINGS = Object.freeze({
   enabled: false,
-  mode: "sort-selection",
+  mode: "fade",
   durationSeconds: 0.7,
   fallbackToIntro: false,
-  modes: Object.freeze({
-    "sort-selection": Object.freeze({
-      seed: 173,
-      revealFraction: 0.16,
-      arcHeightInCells: 0.32,
-      staggerSeconds: 0,
-      timingCurve: Object.freeze([0.65, 0, 0.35, 1]),
-    }),
-  }),
+  // The whole pool is offered here; whether a mode may run in a given phase is
+  // the mode's declaration, enforced when the transition resolves it.
+  modes: ARRANGEMENT_MODE_DEFAULTS,
 });
 
 function requireSettingsObject(value, label) {

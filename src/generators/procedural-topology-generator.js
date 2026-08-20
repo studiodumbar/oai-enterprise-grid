@@ -47,12 +47,14 @@ function validateProceduralOptions(options) {
   ) {
     throw new RangeError("siteCount must be an integer between 2 and 16.");
   }
+  // Above 0.7 the boundary swallows the territory interiors, leaving nothing
+  // for the region-interior palette motion to animate.
   if (
     !Number.isFinite(options.boundaryWhitespace)
     || options.boundaryWhitespace < 0
-    || options.boundaryWhitespace >= 1.0 
+    || options.boundaryWhitespace >= 0.7
   ) {
-    throw new RangeError("boundaryWhitespace must be between 0 and 1.0");
+    throw new RangeError("boundaryWhitespace must be between 0 and 0.7.");
   }
 }
 

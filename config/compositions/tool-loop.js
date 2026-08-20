@@ -41,19 +41,13 @@ export const TOOL_LOOP_CONFIG = {
 
 intro: {
     enabled: true,
-    mode: "sort-selection",
+    mode: "fade",
     durationSeconds: 1,
     modes: {
-       // looks a lil weird tbh
-      "sort-selection": {
-        seed: 173,
-        revealFraction: 0.16,
-        arcHeightInCells: 0.32,
-        // Delay between selection movements; dense scenes cap it so the
-        // complete transition still fits durationSeconds.
-        staggerSeconds: 0.04,
+      fade: {
+        revealFraction: 0.5,
         // CSS cubic-bezier control points: [x1, y1, x2, y2].
-        timingCurve: [0.65, 0, 0.35, 1],
+        timingCurve: [0.42, 0, 0.58, 1],
       },
     },
   },

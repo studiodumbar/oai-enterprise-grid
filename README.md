@@ -68,8 +68,11 @@ is not claiming that every ChatGPT response uses a tool.
 Several fixed cells act as competing influence sites. Discrete re-weighting
 passes repartition the surrounding grid into colored territories; cells nearest
 an uncertain boundary remain white, making the whitespace itself describe low
-confidence. The strongest basin survives a consensus face and resolves to one
-committed circle. This is a weighted-Voronoi metaphor for distributed competing
+confidence. The strongest basin survives a consensus face and resolves to its
+farthest non-boundary level-0 parent cell. That large dot runs Dijkstra across
+parent-cell neighbors to the centre and blinks. Its route then subdivides and
+disappears in an accelerating start-to-centre cascade, leaving one large dot at
+the centre. This is a weighted-Voronoi metaphor for distributed competing
 evidence, not a map extracted from a model request.
 
 ### L-Tree Branch and Prune — `l-tree`
@@ -150,25 +153,44 @@ Edit `GLOBAL_CONFIG.composition.active` in `config/global.js`:
 ```js
 composition: {
   active: "voronoi", // or one of the compositions below
+  // Temporary defaults for compositions not migrated to circleEndpoints yet.
   startWithCircle: true,
   startWithCircleDurationSeconds: "auto",
   endWithCircle: true,
   endWithCircleDurationSeconds: "auto",
-  circleSubdivision: 2,
+  circleSubdivision: 1,
+  circleEndpoints: {
+    modes: {
+      dijkstra: {
+        trailLength: 1,
+        cleanupAcceleration: 2,
+      },
+    },
+  },
 },
 ```
 
-Each enabled endpoint is part of the composition's native animation: its real
-cells follow that universe's configured intro or outro scene-transition rule.
-The start and end durations are added around the unchanged intermediate
-timeline. A duration of `"auto"` matches the active flicker mode's
-`cycleSeconds`; if that mode has no finite cycle, it uses the corresponding
-intro/outro duration. A positive number keeps an explicit duration in seconds.
-`circleSubdivision` is the subdivision count along each axis of the
-centered parent cell, so `1`, `2`, `4`, `8`, and `16` produce 1, 4, 16, 64,
-and 256 child cells. Motion exports force enabled first and last frames to the
-exact parent-cell state. Continuous flock simulations support the start state,
-but have no finite final frame for an end state.
+Migrated compositions configure their own endpoint behavior beside their other
+settings. `config/compositions/voronoi.js`, for example, selects `dijkstra` for
+`circleEndpoints.end` and overrides its path, blink, cleanup, and hold timing.
+The module in `src/composition-endpoints/` layers those values over the shared
+mode defaults above without mutating either config. The remaining flat values
+are the native fallback while compositions are migrated one at a time.
+
+`trailLength` is normalized over `0..1` and controls overlap in the subdivision
+cleanup. `0` changes one path cell at a time, with no changing-cell trail; `1`
+changes every removable path cell together. Intermediate values remap to that
+proportion of simultaneously changing cells. It does not shorten the visible
+path or the blink. Cleanup duration and `cleanupAcceleration` still control the
+overall pace, so a separate delay setting is not required.
+
+Endpoint durations wrap the unchanged intermediate timeline. A positive number is
+an explicit duration in seconds. A duration of `"auto"` follows the active
+flicker mode's finite positive `cycleSeconds`; a mode without a cycle falls back
+to the corresponding intro or outro duration. Native `circleSubdivision` values `1`, `2`,
+`4`, `8`, and `16` produce 1, 4, 16, 64, and 256 child cells. Continuous flock
+simulations support the start state but have no finite final frame for an end
+state.
 
 For quick comparisons, the same choice can be made without editing:
 
@@ -311,7 +333,11 @@ p5js/
 │   │   ├── registry.js
 │   │   └── composition-director.js
 │   ├── compositions/
+│   │   ├── circle-endpoints.js   legacy native endpoint controller
 │   │   └── sequence-rule.js
+│   ├── composition-endpoints/
+│   │   ├── index.js              per-composition endpoint resolver/registry
+│   │   └── dijkstra.js           parent-grid search and cleanup
 │   ├── generators/
 │   │   ├── circle-grid-scene-generator.js
 │   │   ├── grid-scene-strategies.js

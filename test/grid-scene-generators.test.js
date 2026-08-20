@@ -663,7 +663,14 @@ test("Voronoi influence fields keep fixed sites and variable white boundaries", 
   assert.equal(commit.phase, "commit");
   assert.equal(commit.paletteMotion, undefined);
   assert.equal(commit.faces.filter(face => face.level >= 0).length, 1);
-  assert.equal(commit.faces[commit.selectedSiteIndex].level, 0);
+  assert.equal(commit.faces[commit.endpointCellIndex].level, 0);
+  assert.ok(!commit.boundaryIndices.includes(commit.endpointCellIndex));
+  assert.equal(
+    commit.territoryByIndex[commit.endpointCellIndex],
+    commit.selectedSiteOrder,
+  );
+  assert.equal(Object.hasOwn(commit, "selectedGlyphIndex"), false);
+  assert.equal(commit.transitionStyle, "cut");
   assert.equal(settle.paletteMotion, undefined);
   assert.deepEqual(faceSignatures(commit), faceSignatures(settle));
 
@@ -903,10 +910,18 @@ function createGeneratorForStrategy(
     options: {
       ...SETTINGS_BY_STRATEGY[strategy],
       ...overrides,
+      // These fixtures exercise scene mechanics, so the cycle-boundary phases
+      // stay off unless a test asks for them; otherwise they would consume
+      // timeline seconds the assertions attribute to the cycle.
       intro: {
         ...SETTINGS_BY_STRATEGY[strategy].intro,
         enabled: false,
         ...overrides.intro,
+      },
+      outro: {
+        ...SETTINGS_BY_STRATEGY[strategy].outro,
+        enabled: false,
+        ...overrides.outro,
       },
     },
     runtime: { viewport: () => viewport },
@@ -998,11 +1013,14 @@ test("L-tree renderer noise-colors only the active growth layer", () => {
   assert.equal(noiseCallCount, context.arcs.length);
   assert.ok(context.fills.length > 1);
   const paletteSwatches = new Set(generator.paletteColors);
-  assert.deepEqual(
-    new Set(context.fills.map(fill => fill.color)),
-    paletteSwatches,
-  );
-  assert.ok(context.fills.every(fill => paletteSwatches.has(fill.color)));
+  // The flicker is canvas-scoped here, so this cell shows only its own slice of
+  // the board-wide field. It must land on more than one swatch, and every swatch
+  // it lands on must belong to the palette — but which subset it reaches depends
+  // on where the cell sits, so demanding all of them would pin the cell-scope
+  // behavior instead.
+  const drawnSwatches = new Set(context.fills.map(fill => fill.color));
+  assert.ok(drawnSwatches.size > 1);
+  assert.ok([...drawnSwatches].every(color => paletteSwatches.has(color)));
   assert.equal(
     context.fills.reduce((sum, fill) => sum + fill.arcCount, 0),
     context.arcs.length,

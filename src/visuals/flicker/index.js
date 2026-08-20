@@ -25,13 +25,13 @@ export const flickerModes = new FlickerModeRegistry()
   .register(RADAR_ARC_FLICKER_MODE);
 
 /** Resolve authored flicker settings against the registered modes. */
-export function resolveFlicker(settings, modes = flickerModes) {
-  return resolveFlickerSettings(settings, modes);
+export function resolveFlicker(settings, modes = flickerModes, context = {}) {
+  return resolveFlickerSettings(settings, modes, context);
 }
 
 /** Resolve the flicker block a generator's options carry, legacy shape included. */
-export function resolveFlickerFromOptions(options, modes = flickerModes) {
-  return resolveFlickerSettings(flickerSettingsFromOptions(options), modes);
+export function resolveFlickerFromOptions(options, modes = flickerModes, context = {}) {
+  return resolveFlickerSettings(flickerSettingsFromOptions(options), modes, context);
 }
 
 export function createFlicker({
@@ -39,9 +39,17 @@ export function createFlicker({
   settings,
   noiseFunction,
   grid,
+  autoCycleSeconds = null,
   modes = flickerModes,
 }) {
-  return new FlickerController({ palette, settings, modes, noiseFunction, grid });
+  return new FlickerController({
+    palette,
+    settings,
+    modes,
+    noiseFunction,
+    grid,
+    autoCycleSeconds,
+  });
 }
 
 export { FlickerModeRegistry } from "./flicker-mode-registry.js";
@@ -86,6 +94,7 @@ export {
 } from "./radar-arc-mode.js";
 export { FieldGeometry } from "./field-geometry.js";
 export {
+  AUTO_FLICKER_CYCLE_SECONDS,
   DEFAULT_FLICKER_SETTINGS,
   FLICKER_SCOPES,
   LEGACY_FLICKER_KEYS,

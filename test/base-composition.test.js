@@ -33,7 +33,14 @@ function createGenerator(viewport = { width: 1000, height: 400 }) {
   return new BaseCompositionGenerator({
     name: "baseGrid",
     settingsKey: "base",
-    options: SETTINGS.base,
+    // This is the flicker test card, so the cycle-boundary phases stay off:
+    // whichever intro mode is configured app-wide must not decide whether the
+    // preview dots are on screen.
+    options: {
+      ...SETTINGS.base,
+      intro: { ...SETTINGS.base.intro, enabled: false },
+      outro: { ...SETTINGS.base.outro, enabled: false },
+    },
     runtime: {
       viewport: () => viewport,
       projectSeed: () => 123,
@@ -101,6 +108,15 @@ test("base previews every flicker in both scopes for three repeatable cycles", (
   const generator = createGenerator();
   const original = generator.flickerPreviewState();
   assert.equal(original.repeats, 3);
+  // The app-wide intro and outro are config choices; the preview timeline has
+  // to be asserted against whichever way they are currently set.
+  const introSeconds = generator.intro.settings.enabled
+    ? generator.intro.settings.durationSeconds
+    : 0;
+  const outroSeconds = generator.outro.settings.enabled
+    && !generator.outro.settings.fallbackToIntro
+    ? generator.outro.settings.durationSeconds
+    : 0;
 
   for (const scope of ["canvas", "cell"]) {
     for (const mode of flickerModes.list()) {
@@ -112,16 +128,13 @@ test("base previews every flicker in both scopes for three repeatable cycles", (
       assert.equal(context.arcs, 341, `${scope}/${mode} should render every preview dot.`);
       assert.equal(
         generator.animationDuration(),
-        generator.cycleDuration() * 3
-          + generator.intro.settings.durationSeconds * 3,
+        generator.cycleDuration() * 3 + (introSeconds + outroSeconds) * 3,
       );
 
       generator.seek(0.1);
       const firstCycle = [...generator.paletteIndicesForCell(4, 4)];
       generator.seek(
-        generator.cycleDuration()
-          + generator.intro.settings.durationSeconds
-          + 0.1,
+        generator.cycleDuration() + introSeconds + outroSeconds + 0.1,
       );
       assert.deepEqual(
         [...generator.paletteIndicesForCell(4, 4)],

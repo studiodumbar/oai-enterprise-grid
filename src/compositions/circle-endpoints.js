@@ -1,4 +1,6 @@
 import { resolveSceneTransitionSettings } from "../scene-transitions/index.js";
+import { presentationsFrom } from "../transitions/presentations.js";
+import { debug } from "../debug/index.js";
 
 const IDENTITY_PRESENTATION = Object.freeze({
   offsetX: 0,
@@ -28,7 +30,10 @@ function isPowerOfTwo(value) {
 }
 
 function requireDurationSetting(value, label) {
-  if (value !== AUTO_CIRCLE_ENDPOINT_DURATION && (!Number.isFinite(value) || value <= 0)) {
+  if (
+    value !== AUTO_CIRCLE_ENDPOINT_DURATION
+    && (!Number.isFinite(value) || value <= 0)
+  ) {
     throw new RangeError(`${label} must be "auto" or a finite positive number.`);
   }
   return value;
@@ -37,7 +42,9 @@ function requireDurationSetting(value, label) {
 function resolveDurationSetting(value, automaticValue, label) {
   if (value !== AUTO_CIRCLE_ENDPOINT_DURATION) return value;
   if (!Number.isFinite(automaticValue) || automaticValue <= 0) {
-    throw new RangeError(`${label} could not resolve "auto" to a positive duration.`);
+    throw new RangeError(
+      `${label} is "auto", but the generator did not provide a finite positive duration.`,
+    );
   }
   return automaticValue;
 }
@@ -209,23 +216,36 @@ export function circleEndpointSourceItems(layout, subdivision) {
   return items;
 }
 
-function createMode(modeRegistry, transitionSettings, label) {
+function createMode(modeRegistry, transitionSettings, phase, label) {
   const resolved = resolveSceneTransitionSettings({}, transitionSettings ?? {});
-  if (!modeRegistry?.has?.(resolved.mode) || typeof modeRegistry.create !== "function") {
-    throw new Error(`${label} refers to unknown scene-transition mode "${resolved.mode}".`);
+  if (typeof modeRegistry?.createForPhase !== "function") {
+    throw new TypeError(`${label} requires an arrangement mode registry.`);
   }
-  return modeRegistry.create(resolved.mode, resolved.modes[resolved.mode]);
+  return {
+    name: resolved.mode,
+    mode: modeRegistry.createForPhase(
+      resolved.mode,
+      phase,
+      resolved.modes[resolved.mode],
+      label,
+    ),
+  };
 }
 
 /** Supplies arrangement transforms while each generator keeps its native renderer. */
 export class NativeCircleEndpointTransition {
   constructor({ settings, intro, outro, modeRegistry }) {
     this.settings = normalizeCircleEndpointSettings(settings);
-    this.startMode = this.settings.startWithCircle
-      ? createMode(modeRegistry, intro, "Circle start")
+    this.start = this.settings.startWithCircle
+      ? createMode(modeRegistry, intro, "intro", "Circle start endpoint")
       : null;
-    this.endMode = this.settings.endWithCircle
-      ? createMode(modeRegistry, outro?.fallbackToIntro ? intro : (outro ?? intro), "Circle end")
+    this.end = this.settings.endWithCircle
+      ? createMode(
+        modeRegistry,
+        outro?.fallbackToIntro ? intro : (outro ?? intro),
+        "outro",
+        "Circle end endpoint",
+      )
       : null;
     this.reset();
   }
@@ -235,8 +255,8 @@ export class NativeCircleEndpointTransition {
       this.reset();
       return false;
     }
-    const mode = endpoint.phase === "start" ? this.startMode : this.endMode;
-    if (!mode) return false;
+    const entry = endpoint.phase === "start" ? this.start : this.end;
+    if (!entry) return false;
     const itemSignature = items
       .map(item => [item.id, item.x, item.y, item.size].join("@"))
       .join("|");
@@ -269,7 +289,22 @@ export class NativeCircleEndpointTransition {
           this.presentationIdsByTarget.get(target.id).push(id);
         }
       }
-      this.plan = mode.createPlan({
+      // `unpaired` counts targets with no circle source. What that costs is the
+      // mode's business: a fade simply has no circle behind those glyphs, while
+      // a motion mode has to invent a start position for each one.
+      debug.transition(
+        "endpoint=%s mode=%s cycle=%d targets=%d sources=%d padded=%d "
+        + "subdivision=%d unpaired=%d",
+        endpoint.phase,
+        entry.name,
+        endpoint.cycleIndex,
+        transitionItems.length,
+        sourceItems.length,
+        transitionItems.length - items.length,
+        this.settings.circleSubdivision,
+        Math.max(0, transitionItems.length - sourceItems.length),
+      );
+      this.plan = entry.mode.createPlan({
         items: transitionItems,
         fromItems: sourceItems,
         layout,
@@ -277,36 +312,64 @@ export class NativeCircleEndpointTransition {
         durationSeconds: endpoint.durationSeconds,
       });
       this.cacheKey = key;
-      this.mode = mode;
+      this.mode = entry.mode;
+      this.modeName = entry.name;
     }
     this.endpoint = endpoint;
     return true;
   }
 
-  presentationFor(id) {
-    if (!this.endpoint || !this.plan || !this.mode) return IDENTITY_PRESENTATION;
-    const progress = this.endpoint.phase === "start"
+  progressFor() {
+    return this.endpoint.phase === "start"
       ? this.endpoint.progress
       : 1 - this.endpoint.progress;
-    return this.mode.presentationAt(this.plan, id, progress);
+  }
+
+  presentationFor(id) {
+    if (!this.endpoint || !this.plan || !this.mode) return IDENTITY_PRESENTATION;
+    return this.mode.presentationAt(this.plan, id, this.progressFor());
   }
 
   presentationsFor(id) {
     if (!this.endpoint || !this.plan || !this.mode) return [IDENTITY_PRESENTATION];
     const presentationIds = this.presentationIdsByTarget?.get(id) ?? [id];
-    return presentationIds.map(presentationId => {
-      const progress = this.endpoint.phase === "start"
-        ? this.endpoint.progress
-        : 1 - this.endpoint.progress;
-      return this.mode.presentationAt(this.plan, presentationId, progress);
-    });
+    const progress = this.progressFor();
+    return presentationIds.flatMap(presentationId => presentationsFrom(
+      this.mode,
+      this.plan,
+      presentationId,
+      progress,
+    ));
   }
 
   reset() {
     this.cacheKey = null;
     this.mode = null;
+    this.modeName = null;
     this.plan = null;
     this.endpoint = null;
     this.presentationIdsByTarget = null;
+  }
+
+  inspect() {
+    return {
+      startWithCircle: this.settings.startWithCircle,
+      endWithCircle: this.settings.endWithCircle,
+      startMode: this.start?.name ?? null,
+      endMode: this.end?.name ?? null,
+      circleSubdivision: this.settings.circleSubdivision,
+      active: Boolean(this.endpoint && this.plan),
+      phase: this.endpoint?.phase ?? null,
+      progress: this.endpoint?.progress ?? null,
+      cycleIndex: this.endpoint?.cycleIndex ?? null,
+      targetCount: this.plan?.targets?.length ?? 0,
+      sourceItemCount: this.plan?.sourceItemCount ?? 0,
+      // Targets with no source glyph of their own. What that means on screen is
+      // the mode's business — see the prepare() comment.
+      unpairedTargets: Math.max(
+        0,
+        (this.plan?.targets?.length ?? 0) - (this.plan?.sourceItemCount ?? 0),
+      ),
+    };
   }
 }

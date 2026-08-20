@@ -1,0 +1,23 @@
+# composition: l-tree
+# frames: 900
+
+[cg:timeline] f=0000 phase=start cycle=0 duration=6.000 paused=yes
+[cg:plan] f=0000 enter=lTreeGrid
+[cg:plan] f=0000 render=[lTreeGrid@1.00]
+[cg:transition] f=0000 endpoint=start mode=text cycle=0 targets=25 sources=1 padded=0 subdivision=1 unpaired=24
+[cg:transition] f=0000 overlay=intro mode=text
+[cg:timeline] f=0360 phase=core cycle=0 duration=3.400 paused=no
+[cg:transition] f=0360 overlay=- mode=-
+[cg:timeline] f=0563 phase=end cycle=0 duration=3.000 paused=yes
+[cg:transition] f=0563 endpoint=end mode=fade cycle=0 targets=1 sources=1 padded=0 subdivision=1 unpaired=0
+[cg:transition] f=0563 overlay=outro mode=-
+[cg:timeline] f=0743 phase=start cycle=1 duration=6.000 paused=no
+[cg:transition] f=0743 scene=outro mode=fade targets=1 sources=0 duration=3.000 key=l-tree:0:settle:0:7x3
+[cg:transition] f=0743 endpoint=start mode=text cycle=1 targets=1 sources=1 padded=0 subdivision=1 unpaired=0
+[cg:transition] f=0743 overlay=intro mode=text
+[cg:timeline] f=0744 phase=start cycle=1 duration=6.000 paused=yes
+
+# draw volume
+blankFrames=3
+firstDrawnFrame=0
+totalFill=167773

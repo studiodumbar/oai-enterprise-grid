@@ -15,6 +15,19 @@
 // keys it cares about. `amount` and `envelope` stay outside `modes` because
 // they describe how strongly and when a composition flickers, not how the field
 // is generated.
+// A mode setting may use "auto" or `calc(auto * n)` instead of a number. Today
+// only `cycleSeconds` supports it: the composition's generator calculates one
+// beat of its own timeline — for the circle-grid family, the seconds one scene
+// state holds — and the flicker loop takes that length, so a config never
+// restates a duration the composition already declares.
+import {
+  AUTO_DURATION,
+  isAutomaticDurationSetting,
+  resolveAutomaticDuration,
+} from "../../core/automatic-duration.js";
+
+export const AUTO_FLICKER_CYCLE_SECONDS = AUTO_DURATION;
+
 export const DEFAULT_FLICKER_SETTINGS = Object.freeze({
   enabled: false,
   mode: "noise",
@@ -48,6 +61,26 @@ export const LEGACY_FLICKER_KEYS = Object.freeze([
   "finalSnapshotFlicker",
   "regionFlicker",
 ]);
+
+/**
+ * Swap an authored `cycleSeconds: "auto"` for the composition's own beat, so a
+ * mode's normalize() and its field only ever see a number.
+ */
+function resolveAutoCycleSeconds(authored, mode, autoCycleSeconds) {
+  if (!isAutomaticDurationSetting(authored.cycleSeconds)) return authored;
+  if (mode.defaults?.cycleSeconds === undefined) {
+    throw new Error(
+      `Flicker mode "${mode.name}" has no cycleSeconds setting, so `
+      + `flicker.modes.${mode.name}.cycleSeconds cannot be `
+      + `${JSON.stringify(authored.cycleSeconds)}.`,
+    );
+  }
+  const duration = resolveAutomaticDuration(authored.cycleSeconds, {
+    label: `flicker.modes.${mode.name}.cycleSeconds`,
+    candidates: [{ source: "composition-beat", seconds: autoCycleSeconds }],
+  });
+  return { ...authored, cycleSeconds: duration.seconds };
+}
 
 function requireSettingsObject(value, label) {
   if (value == null) return {};
@@ -122,7 +155,11 @@ export function isResolvedFlickerSettings(value) {
   return Boolean(value) && typeof value === "object" && value.resolved === true;
 }
 
-export function resolveFlickerSettings(settings, modeRegistry) {
+export function resolveFlickerSettings(
+  settings,
+  modeRegistry,
+  { autoCycleSeconds = null } = {},
+) {
   if (!modeRegistry || typeof modeRegistry.get !== "function") {
     throw new TypeError("resolveFlickerSettings requires a flicker mode registry.");
   }
@@ -161,9 +198,10 @@ export function resolveFlickerSettings(settings, modeRegistry) {
   const modes = {};
   for (const name of modeRegistry.list()) {
     const candidate = modeRegistry.get(name);
-    const authored = requireSettingsObject(
-      merged.modes[name],
-      `flicker.modes.${name}`,
+    const authored = resolveAutoCycleSeconds(
+      requireSettingsObject(merged.modes[name], `flicker.modes.${name}`),
+      candidate,
+      autoCycleSeconds,
     );
     modes[name] = Object.freeze(
       candidate.normalize
@@ -178,6 +216,9 @@ export function resolveFlickerSettings(settings, modeRegistry) {
   }
 
   const resolved = {
+    autoCycleSeconds: Number.isFinite(autoCycleSeconds) && autoCycleSeconds > 0
+      ? autoCycleSeconds
+      : null,
     enabled: merged.enabled,
     mode: mode.name,
     scope: merged.scope,

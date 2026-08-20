@@ -1,16 +1,11 @@
+import { ARRANGEMENT_MODE_DEFAULTS } from "../transitions/index.js";
+import { requireDurationSetting } from "../core/automatic-duration.js";
+
 export const DEFAULT_CELL_TRANSITION_SETTINGS = Object.freeze({
   enabled: false,
   mode: "sort-selection",
   durationSeconds: 0.7,
-  modes: Object.freeze({
-    "sort-selection": Object.freeze({
-      seed: 173,
-      revealFraction: 0.16,
-      arcHeightInCells: 0.32,
-      staggerSeconds: 0,
-      timingCurve: Object.freeze([0.65, 0, 0.35, 1]),
-    }),
-  }),
+  modes: ARRANGEMENT_MODE_DEFAULTS,
 });
 
 function requireSettingsObject(value, label) {
@@ -56,9 +51,10 @@ export function resolveCellTransitionSettings(base = {}, overrides = {}) {
   if (typeof resolved.mode !== "string" || resolved.mode.trim() === "") {
     throw new TypeError("Cell-transition mode must be a non-empty string.");
   }
-  if (!Number.isFinite(resolved.durationSeconds) || resolved.durationSeconds <= 0) {
-    throw new RangeError("Cell-transition durationSeconds must be a finite positive number.");
-  }
+  requireDurationSetting(
+    resolved.durationSeconds,
+    "Cell-transition durationSeconds",
+  );
   if (!Object.hasOwn(resolved.modes, resolved.mode)) {
     throw new Error(`Cell-transition mode "${resolved.mode}" has no settings block.`);
   }

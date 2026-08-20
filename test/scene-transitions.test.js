@@ -8,6 +8,9 @@ import {
   createSceneTransitionModeRegistry,
   resolveSceneTransitionSettings,
 } from "../src/scene-transitions/index.js";
+import { FadeArrangementMode } from "../src/transitions/fade.js";
+import { TextRevealArrangementMode } from "../src/transitions/text-reveal.js";
+import { captureDebug } from "../src/debug/index.js";
 import { SortSelectionTransitionMode } from "../src/cell-transitions/sort-selection.js";
 import { resolveCellTransitionSettings } from "../src/cell-transitions/transition-settings.js";
 import {
@@ -70,15 +73,19 @@ test("cycle-boundary and between-state transition settings resolve independently
   );
   assert.equal(SETTINGS.lTree.cellTransitions.mode, GLOBAL_CONFIG.cellTransitions.mode);
   assert.equal(Object.hasOwn(SETTINGS.base.intro, "trigger"), false);
-  assert.equal(SETTINGS.lTree.outro.fallbackToIntro, true);
-  assert.equal(SETTINGS.lTree.outro.mode, SETTINGS.lTree.intro.mode);
+  // A composition that authors no outro takes the app-wide one when there is
+  // one, and otherwise replays its own intro backward.
+  const appWideOutro = GLOBAL_CONFIG.outro !== undefined;
+  assert.equal(SETTINGS.lTree.outro.fallbackToIntro, !appWideOutro);
   assert.equal(
     SETTINGS.lTree.outro.durationSeconds,
-    SETTINGS.lTree.intro.durationSeconds,
+    appWideOutro
+      ? GLOBAL_CONFIG.outro.durationSeconds
+      : SETTINGS.lTree.intro.durationSeconds,
   );
-  assert.equal(
-    SETTINGS.base.intro.modes["sort-selection"].seed,
-    SETTINGS.lTree.intro.modes["sort-selection"].seed,
+  assert.deepEqual(
+    SETTINGS.base.intro.modes[GLOBAL_CONFIG.intro.mode],
+    SETTINGS.lTree.intro.modes[GLOBAL_CONFIG.intro.mode],
   );
 });
 
@@ -286,15 +293,9 @@ test("sort-selection uses the previous state as its visible source arrangement",
 test("intro and outro reuse the same registered mode name in opposite directions", () => {
   const settings = {
     enabled: true,
-    mode: "sort-selection",
+    mode: "fade",
     durationSeconds: 1,
-    modes: {
-      "sort-selection": {
-        seed: 9,
-        revealFraction: 0.2,
-        arcHeightInCells: 0.3,
-      },
-    },
+    modes: { fade: { revealFraction: 0.5, timingCurve: [0, 0, 1, 1] } },
   };
   const event = { indices: [0, 1, 2], layout: LAYOUT, key: "shared-mode" };
   const intro = new SceneTransition({
@@ -310,8 +311,8 @@ test("intro and outro reuse the same registered mode name in opposite directions
 
   intro.begin(event);
   outro.begin(event);
-  assert.equal(intro.inspect().mode, "sort-selection");
-  assert.equal(outro.inspect().mode, "sort-selection");
+  assert.equal(intro.inspect().mode, "fade");
+  assert.equal(outro.inspect().mode, "fade");
   assert.equal(intro.presentationFor(0).opacity, 0);
   assert.deepEqual(outro.presentationFor(0), {
     offsetX: 0,
@@ -331,6 +332,151 @@ test("intro and outro reuse the same registered mode name in opposite directions
   assert.equal(outro.presentationFor(0).opacity, 0);
 });
 
+test("the arrangement pool refuses a phase a mode does not declare", () => {
+  const registry = createSceneTransitionModeRegistry();
+  assert.deepEqual(registry.namesForPhase("intro"), ["fade", "text"]);
+  assert.deepEqual(registry.namesForPhase("state"), ["fade", "sort-selection"]);
+  assert.equal(registry.supports("text", "outro"), true);
+  assert.equal(registry.supports("text", "state"), false);
+  assert.equal(registry.supports("fade", "outro"), true);
+  assert.equal(registry.supports("sort-selection", "outro"), false);
+  assert.throws(
+    () => registry.supports("fade", "cycle"),
+    /Arrangement phase must be one of intro, outro, state/,
+  );
+
+  for (const direction of ["intro", "outro"]) {
+    assert.throws(
+      () => new SceneTransition({
+        direction,
+        settings: { enabled: true, mode: "sort-selection", durationSeconds: 1 },
+        modeRegistry: createSceneTransitionModeRegistry(),
+      }),
+      new RegExp(
+        `"sort-selection" does not support the "${direction}" phase\\. `
+        + 'Modes available for "' + direction + '": fade, text',
+      ),
+    );
+  }
+  assert.throws(
+    () => new SceneTransition({
+      direction: "intro",
+      settings: { enabled: true, mode: "spin", durationSeconds: 1 },
+      modeRegistry: createSceneTransitionModeRegistry(),
+    }),
+    /mode "spin" has no settings block/,
+  );
+});
+
+test("fade reveals the source pose, then crossfades into the target pose", () => {
+  const mode = new FadeArrangementMode({
+    revealFraction: 0.5,
+    timingCurve: [0, 0, 1, 1],
+  });
+  const targets = [
+    { id: "a", x: 100, y: 70, size: 20 },
+    { id: "b", x: 300, y: 70, size: 20 },
+    { id: "c", x: 500, y: 70, size: 20 },
+  ];
+  const circle = { id: "circle:0:0", x: 250, y: 70, size: 100 };
+  const plan = mode.createPlan({
+    items: targets,
+    fromItems: [circle],
+    layout: LAYOUT,
+    key: "endpoint",
+    durationSeconds: 1,
+  });
+  assert.equal(plan.sourceItemCount, 1);
+  assert.equal(plan.unpairedSources, 0);
+  assert.equal(plan.fadeIn, false);
+
+  const posesAt = progress => targets.flatMap(target => mode
+    .presentationsAt(plan, target.id, progress)
+    .map(presentation => ({
+      x: target.x + presentation.offsetX,
+      y: target.y + presentation.offsetY,
+      size: target.size * presentation.scale,
+      opacity: presentation.opacity,
+    })));
+
+  // Nothing is on screen at the start of the phase.
+  assert.ok(posesAt(0).every(pose => pose.opacity === 0));
+
+  // Halfway through, the circle alone is at full strength.
+  const revealed = posesAt(0.5);
+  const visible = revealed.filter(pose => pose.opacity > 0);
+  assert.deepEqual(visible, [{ x: 250, y: 70, size: 100, opacity: 1 }]);
+
+  // Then the circle and the composition trade places without moving.
+  const crossfading = posesAt(0.75).filter(pose => pose.opacity > 0);
+  assert.deepEqual(crossfading, [
+    { x: 250, y: 70, size: 100, opacity: 0.5 },
+    { x: 100, y: 70, size: 20, opacity: 0.5 },
+    { x: 300, y: 70, size: 20, opacity: 0.5 },
+    { x: 500, y: 70, size: 20, opacity: 0.5 },
+  ]);
+
+  assert.deepEqual(
+    targets.map(target => mode.presentationsAt(plan, target.id, 1)),
+    targets.map(() => [{ offsetX: 0, offsetY: 0, opacity: 1, scale: 1 }]),
+  );
+  // With nothing to reveal the phase is a plain fade-in of the target scene.
+  const withoutSources = mode.createPlan({ items: targets, layout: LAYOUT });
+  assert.equal(withoutSources.revealFraction, 0);
+  assert.equal(withoutSources.fadeIn, true);
+  assert.equal(mode.presentationAt(withoutSources, "a", 0.5).opacity, 0.5);
+  assert.throws(
+    () => new FadeArrangementMode({ revealFraction: 1 }),
+    /revealFraction must be at least zero and below one/,
+  );
+});
+
+test("fade carries every source and draws each target pose once", () => {
+  const mode = new FadeArrangementMode({
+    revealFraction: 0.5,
+    timingCurve: [0, 0, 1, 1],
+  });
+  const sources = Array.from({ length: 5 }, (_, index) => ({
+    id: `circle:${index}`,
+    x: 200 + index * 25,
+    y: 70,
+    size: 25,
+  }));
+  const targets = [
+    { id: "a", x: 100, y: 70, size: 20 },
+    { id: "b", x: 300, y: 70, size: 20 },
+  ];
+  const plan = mode.createPlan({
+    items: targets,
+    fromItems: sources,
+    layout: LAYOUT,
+    durationSeconds: 1,
+  });
+  // A source set larger than the target set is distributed, not dropped.
+  assert.equal(plan.unpairedSources, 0);
+  const revealed = targets.flatMap(target => mode
+    .presentationsAt(plan, target.id, 0.5)
+    .filter(presentation => presentation.opacity > 0)
+    .map(presentation => target.x + presentation.offsetX));
+  assert.deepEqual(revealed.sort((a, b) => a - b), sources.map(source => source.x));
+
+  // Duplicated destinations exist only to consume extra sources, so the shared
+  // pose must not be drawn — and faded up — once per duplicate.
+  const padded = mode.createPlan({
+    items: [
+      { id: "a", x: 100, y: 70, size: 20 },
+      { id: "padded:a", x: 100, y: 70, size: 20 },
+    ],
+    fromItems: sources.slice(0, 2),
+    layout: LAYOUT,
+    durationSeconds: 1,
+  });
+  const targetPoses = ["a", "padded:a"].flatMap(id => mode
+    .presentationsAt(padded, id, 0.75)
+    .filter(presentation => presentation.offsetX === 0 && presentation.offsetY === 0));
+  assert.deepEqual(targetPoses, [{ offsetX: 0, offsetY: 0, opacity: 0.5, scale: 1 }]);
+});
+
 function inferenceGenerator({ cellTransitions = true, outro = false } = {}) {
   return new InferenceGridGenerator({
     name: "transition-separation",
@@ -344,6 +490,9 @@ function inferenceGenerator({ cellTransitions = true, outro = false } = {}) {
       ...SETTINGS.inferenceLoop,
       intro: {
         ...SETTINGS.inferenceLoop.intro,
+        // The phase mechanics under test are independent of whether the
+        // app-wide intro happens to be switched on.
+        enabled: true,
         durationSeconds: 1,
       },
       cellTransitions: {
@@ -441,4 +590,336 @@ test("outro, next intro, and cycle occupy consecutive timeline phases", () => {
     generator.animationDuration(),
     generator.options.cycleSeconds + 1.25,
   );
+});
+
+function recordingContext() {
+  return {
+    globalAlpha: 1,
+    fillStyle: "",
+    font: "",
+    textAlign: "",
+    textBaseline: "",
+    dots: [],
+    rects: [],
+    texts: [],
+    order: [],
+    alphaStack: [],
+    save() {
+      this.alphaStack.push(this.globalAlpha);
+    },
+    restore() {
+      this.globalAlpha = this.alphaStack.pop() ?? 1;
+    },
+    beginPath() {},
+    moveTo() {},
+    arc(x, y, radius) {
+      this.dots.push({
+        x,
+        y,
+        radius,
+        opacity: this.globalAlpha,
+        fillStyle: this.fillStyle,
+      });
+      this.order.push("dot");
+    },
+    fill() {},
+    fillRect(x, y, width, height) {
+      this.rects.push({ x, y, width, height, fillStyle: this.fillStyle });
+      this.order.push("rect");
+    },
+    fillText(text, x, y) {
+      this.texts.push({
+        text,
+        x,
+        y,
+        opacity: this.globalAlpha,
+        fillStyle: this.fillStyle,
+        font: this.font,
+        align: this.textAlign,
+        baseline: this.textBaseline,
+      });
+      this.order.push("text");
+    },
+  };
+}
+
+const TEXT_LAYOUT = Object.freeze({ width: 1000, height: 500 });
+const TEXT_COLORS = Object.freeze(["#111111", "#555555", "#aaaaaa", "#ffffff"]);
+
+function textMode(overrides = {}) {
+  return new TextRevealArrangementMode({
+    text: "HELLO",
+    levels: 2,
+    longSideCells: 5,
+    sizeInCells: 1.5,
+    visibleSeconds: 1,
+    colorDrift: 0,
+    colors: TEXT_COLORS,
+    backgroundColor: "#000000",
+    ...overrides,
+  });
+}
+
+// levels 2 in a 4-second phase with 1s held: four cascade windows of 0.75s
+// around the hold, each holding three steps of 0.25s.
+function textPlan(mode = textMode(), durationSeconds = 4) {
+  return mode.createPlan({ layout: TEXT_LAYOUT, durationSeconds });
+}
+
+test("the text ladder mirrors one cell per subdivision level around the centre", () => {
+  const mode = textMode();
+  const plan = textPlan(mode);
+  // 1000x500 over 5 cells on the long side: 200px parent cells, centre at 500.
+  assert.equal(plan.cellSize, 200);
+  assert.deepEqual(
+    plan.cells.map(cell => [cell.level, cell.x, cell.y]),
+    [
+      [0, 500, 250],
+      [1, 300, 250],
+      [1, 700, 250],
+      [2, 100, 250],
+      [2, 900, 250],
+    ],
+  );
+  // A portrait viewport runs the same ladder along the other axis.
+  const portrait = mode.createPlan({
+    layout: { width: 500, height: 1000 },
+    durationSeconds: 4,
+  });
+  assert.deepEqual(
+    portrait.cells.map(cell => [cell.level, cell.x, cell.y]),
+    [
+      [0, 250, 500],
+      [1, 250, 300],
+      [1, 250, 700],
+      [2, 250, 100],
+      [2, 250, 900],
+    ],
+  );
+  assert.throws(
+    () => mode.createPlan({ layout: { width: 0, height: 10 } }),
+    /requires layout width and height/,
+  );
+  assert.throws(() => textMode({ text: "  " }), /text must be a non-empty string/);
+  assert.throws(() => textMode({ colorBy: "cell" }), /colorBy must be one of level, dot/);
+  assert.throws(() => textMode({ visibleSeconds: -1 }), /visibleSeconds must be finite/);
+});
+
+test("the text phase cuts through expand, uncover, hold, cover, collapse", () => {
+  const mode = textMode();
+  const plan = textPlan(mode);
+  const drawAt = progress => {
+    const context = recordingContext();
+    mode.drawOverlay(plan, progress, context);
+    return context;
+  };
+  const dotSizes = context => [...new Set(
+    context.dots.map(dot => Number((dot.radius * 2).toFixed(3))),
+  )].sort((first, second) => second - first);
+
+  // Windows of a 4s phase: expand [0, .1875), uncover [.1875, .375),
+  // hold [.375, .625), then the same two windows backward.
+  assert.deepEqual(
+    [plan.expandEnd, plan.holdStart, plan.holdEnd],
+    [0.1875, 0.375, 0.625],
+  );
+
+  // Expand: one big dot, then a 2x2 cell each side, then a 4x4 each side.
+  assert.equal(drawAt(0.02).dots.length, 1);
+  assert.equal(drawAt(0.07).dots.length, 1 + 2 * 4);
+  const complete = drawAt(0.13);
+  assert.equal(complete.dots.length, 1 + 2 * 4 + 2 * 16);
+  assert.deepEqual(dotSizes(complete), [184, 92, 46]);
+  // Every dot is drawn at full strength — the module never fades.
+  assert.ok(complete.dots.every(dot => dot.opacity === 1));
+  assert.equal(complete.texts.length, 0);
+  // Each cell paints out its whole footprint first, so the string never shows
+  // through the gaps between the dots.
+  assert.equal(complete.rects.length, 5);
+  assert.ok(complete.rects.every(rect => (
+    rect.fillStyle === "#000000"
+    && rect.width === plan.cellSize
+    && rect.height === plan.cellSize
+  )));
+
+  // Uncover: the text is behind the cells, which leave centre first.
+  const uncovering = drawAt(0.2);
+  assert.equal(uncovering.dots.length, 1 + 2 * 4 + 2 * 16);
+  assert.equal(uncovering.texts.length, 1);
+  assert.equal(uncovering.texts[0].opacity, 1);
+  // Drawn before the cells, so the ones still standing cover it.
+  assert.ok(uncovering.order.indexOf("text") < uncovering.order.indexOf("rect"));
+  const centreGone = drawAt(0.26);
+  assert.equal(centreGone.dots.length, 2 * 4 + 2 * 16);
+  assert.ok(
+    centreGone.dots.every(dot => dot.x !== 500),
+    "the centre cell should be gone, not moved",
+  );
+  assert.equal(drawAt(0.32).dots.length, 2 * 16);
+  // Everything is uncovered exactly when the hold starts.
+  assert.equal(drawAt(0.375).dots.length, 0);
+
+  // Hold: the text alone.
+  const held = drawAt(0.5);
+  assert.equal(held.dots.length, 0);
+  assert.equal(held.texts.length, 1);
+
+  // Cover: the cells come back outermost first, one step at a time, and the
+  // text stays drawn behind them until the last one lands. No jump.
+  assert.equal(drawAt(0.63).dots.length, 2 * 16);
+  assert.equal(drawAt(0.7).dots.length, 2 * 4 + 2 * 16);
+  const covered = drawAt(0.79);
+  assert.equal(covered.dots.length, 1 + 2 * 4 + 2 * 16);
+  assert.equal(covered.texts.length, 1);
+  // Collapse: they leave outermost first, down to the centre dot again.
+  assert.equal(drawAt(0.82).texts.length, 0);
+  assert.equal(drawAt(0.82).dots.length, 1 + 2 * 4 + 2 * 16);
+  assert.equal(drawAt(0.9).dots.length, 1 + 2 * 4);
+  const last = drawAt(0.99);
+  assert.equal(last.dots.length, 1);
+  assert.deepEqual([last.dots[0].x, last.dots[0].y], [500, 250]);
+  assert.equal(Number((last.dots[0].radius * 2).toFixed(3)), 184);
+
+  // The second half is the first half backward, which is the whole point.
+  for (const progress of [0.02, 0.07, 0.13, 0.2, 0.26, 0.32, 0.37]) {
+    assert.equal(
+      drawAt(1 - progress).dots.length,
+      drawAt(progress).dots.length,
+      `progress ${progress} should mirror ${1 - progress}`,
+    );
+  }
+
+  // Perfectly centered, and the type size is a multiple of the cell.
+  assert.deepEqual([held.texts[0].x, held.texts[0].y], [500, 250]);
+  assert.equal(held.texts[0].align, "center");
+  assert.equal(held.texts[0].baseline, "middle");
+  assert.equal(
+    held.texts[0].font,
+    "700 300px 'Helvetica Neue', Helvetica, Arial, sans-serif",
+  );
+
+  // Offsets nudge the string off the exact centre without moving the ladder.
+  const offset = textMode({ offsetX: -40, offsetY: 12 });
+  const offsetContext = recordingContext();
+  offset.drawOverlay(textPlan(offset), 0.5, offsetContext);
+  assert.deepEqual(
+    [offsetContext.texts[0].x, offsetContext.texts[0].y],
+    [460, 262],
+  );
+  assert.throws(
+    () => new TextRevealArrangementMode({ colors: TEXT_COLORS }).drawOverlay(
+      textPlan(new TextRevealArrangementMode({ colors: TEXT_COLORS })),
+      0.02,
+      recordingContext(),
+    ),
+    /no background color to mask with/,
+  );
+});
+
+test("the held seconds are authored, and clamped to fit the phase", () => {
+  const mode = textMode({ visibleSeconds: 2 });
+  const roomy = textPlan(mode, 10);
+  assert.equal(roomy.holdSeconds, 2);
+  assert.ok(Math.abs((roomy.holdEnd - roomy.holdStart) - 0.2) < 1e-9);
+
+  // A phase too short for the authored hold keeps room for the cascade, and
+  // says so rather than silently swallowing the cells.
+  const lines = captureDebug(["transition"], () => {
+    assert.equal(textPlan(mode, 1).holdSeconds, 0.6);
+  });
+  assert.ok(lines.some(line => line.includes("text hold clamped")), lines.join("\n"));
+});
+
+test("the text phase remaps the palette across the ladder and drifts it", () => {
+  const byLevel = textMode();
+  const context = recordingContext();
+  byLevel.drawOverlay(textPlan(byLevel), 0.13, context);
+  const colorForSize = (drawn, size) => drawn.dots.find(
+    dot => Number((dot.radius * 2).toFixed(3)) === size,
+  ).fillStyle;
+  // levels 0..2 spread over four colors, and the text takes the last one.
+  assert.deepEqual(
+    [184, 92, 46].map(size => colorForSize(context, size)),
+    ["#111111", "#aaaaaa", "#ffffff"],
+  );
+  const held = recordingContext();
+  byLevel.drawOverlay(textPlan(byLevel), 0.5, held);
+  assert.equal(held.texts[0].fillStyle, "#ffffff");
+
+  // Per-dot mapping spreads the palette inside each cell instead.
+  const byDot = textMode({ colorBy: "dot" });
+  const dotted = recordingContext();
+  byDot.drawOverlay(textPlan(byDot), 0.07, dotted);
+  const insideOneCell = dotted.dots.filter(dot => dot.x < 400 && dot.x > 200);
+  assert.deepEqual(
+    insideOneCell.map(dot => dot.fillStyle),
+    ["#111111", "#555555", "#aaaaaa", "#ffffff"],
+  );
+
+  // colorDrift rotates the whole ramp one entry per cascade step, so the colors
+  // travel with the motion instead of standing still.
+  const drifting = textMode({ colorDrift: 1 });
+  const plan = textPlan(drifting);
+  const centreColorAt = progress => {
+    const drawn = recordingContext();
+    drifting.drawOverlay(plan, progress, drawn);
+    return colorForSize(drawn, 184);
+  };
+  assert.equal(plan.slot, 0.0625);
+  assert.deepEqual(
+    [0.02, 0.07, 0.13, 0.19].map(centreColorAt),
+    ["#111111", "#555555", "#aaaaaa", "#ffffff"],
+  );
+  // The ramp keeps travelling while the geometry mirrors, so a mirrored frame
+  // is the same shape in a different colour.
+  assert.notEqual(centreColorAt(0.02), centreColorAt(0.98));
+
+  // An explicit text color overrides the palette, and a mode with no colors at
+  // all refuses to draw rather than inventing one.
+  const explicit = textMode({ textColor: "#ff0000" });
+  const red = recordingContext();
+  explicit.drawOverlay(textPlan(explicit), 0.5, red);
+  assert.equal(red.texts[0].fillStyle, "#ff0000");
+  const colorless = new TextRevealArrangementMode({
+    text: "X",
+    levels: 0,
+    backgroundColor: "#000000",
+  });
+  assert.throws(
+    () => colorless.drawOverlay(
+      colorless.createPlan({ layout: TEXT_LAYOUT, durationSeconds: 4 }),
+      0.02,
+      recordingContext(),
+    ),
+    /has no palette colors/,
+  );
+  assert.throws(() => textMode({ colorDrift: 0.5 }), /colorDrift must be an integer/);
+});
+
+test("text hides the composition for the whole phase, in both directions", () => {
+  const mode = textMode();
+  const items = [
+    { id: "a", x: 100, y: 100, size: 20 },
+    { id: "b", x: 300, y: 100, size: 20 },
+  ];
+  const plan = mode.createPlan({
+    items,
+    layout: TEXT_LAYOUT,
+    durationSeconds: 4,
+  });
+  const opacities = progress => items.map(
+    item => mode.presentationsAt(plan, item.id, progress)[0].opacity,
+  );
+  // There is no crossfade to hand over with, so the composition cuts in as the
+  // phase ends — and an outro, read backward, cuts it out as the phase starts.
+  assert.deepEqual(opacities(0), [0, 0]);
+  assert.deepEqual(opacities(0.6), [0, 0]);
+  assert.deepEqual(opacities(0.99), [0, 0]);
+  assert.deepEqual(opacities(1), [1, 1]);
+  // Nothing moves or scales: a text phase is cuts plus the overlay.
+  assert.ok(mode.presentationsAt(plan, "a", 0.5).every(
+    presentation => presentation.offsetX === 0
+      && presentation.offsetY === 0
+      && presentation.scale === 1,
+  ));
 });

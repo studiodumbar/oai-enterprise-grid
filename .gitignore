@@ -1,0 +1,20 @@
+# Dependencies — restore with `npm install`
+node_modules/
+
+# Build output — regenerate with `npm run build`
+dist/
+
+# Editor scratch
+*.swp
+*.swo
+*~
+.DS_Store
+
+# macOS resource forks
+._*
+
+# Dropbox conflict artifacts
+*conflicted copy*
+
+# Local agent state
+.claude/worktrees/

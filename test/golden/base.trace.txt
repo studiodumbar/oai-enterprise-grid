@@ -1,0 +1,17 @@
+# composition: base
+# frames: 900
+
+[cg:timeline] f=0000 phase=start cycle=0 duration=6.000 paused=yes
+[cg:plan] f=0000 enter=baseGrid
+[cg:plan] f=0000 render=[baseGrid@1.00]
+[cg:transition] f=0000 endpoint=start mode=text cycle=0 targets=341 sources=1 padded=0 subdivision=1 unpaired=340
+[cg:transition] f=0000 overlay=intro mode=text
+[cg:timeline] f=0360 phase=core cycle=0 duration=25.230 paused=no
+[cg:transition] f=0360 overlay=- mode=-
+[cg:transition] f=0444 scene=outro mode=fade targets=341 sources=0 duration=3.000 key=base:0:5x1
+[cg:transition] f=0624 scene=intro mode=text targets=341 sources=0 duration=6.000 key=base:1:5x1
+
+# draw volume
+blankFrames=276
+firstDrawnFrame=0
+totalFill=188727

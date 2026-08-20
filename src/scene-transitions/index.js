@@ -1,5 +1,4 @@
-import { FactoryRegistry } from "../core/registry.js";
-import { SortSelectionTransitionMode } from "./sort-selection.js";
+import { createArrangementModeRegistry } from "../transitions/index.js";
 
 export {
   DEFAULT_SCENE_TRANSITION_SETTINGS,
@@ -9,12 +8,12 @@ export {
   SCENE_TRANSITION_DIRECTIONS,
   SceneTransition,
 } from "./scene-transition.js";
-export { SortSelectionTransitionMode } from "./sort-selection.js";
 
+/**
+ * The intro/outro end of the shared arrangement pool. It is the same registry
+ * the between-state transitions use; which phases a mode may run in is the
+ * mode's own declaration, checked when the transition resolves it.
+ */
 export function createSceneTransitionModeRegistry() {
-  return new FactoryRegistry("scene-transition mode")
-    .register(
-      "sort-selection",
-      options => new SortSelectionTransitionMode(options),
-    );
+  return createArrangementModeRegistry("scene-transition mode");
 }

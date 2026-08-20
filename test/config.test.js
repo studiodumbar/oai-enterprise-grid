@@ -200,12 +200,15 @@ function assertInheritsGlobalDefaults(assembled, authored, name, inheritsPalette
     resolveSceneTransitionSettings(GLOBAL_CONFIG.intro, authoredIntro),
     `${name} should override only the intro values it authored.`,
   );
+  // An unauthored outro takes the app-wide block if there is one, and replays
+  // the intro backward only when there is not.
+  const inheritedOutro = authoredOutro ?? GLOBAL_CONFIG.outro;
   assert.deepEqual(
     assembledOutro,
-    authoredOutro === undefined
+    inheritedOutro === undefined
       ? resolveSceneTransitionSettings(assembledIntro, { fallbackToIntro: true })
-      : resolveSceneTransitionSettings(assembledIntro, authoredOutro),
-    `${name} should inherit intro for an unauthored outro.`,
+      : resolveSceneTransitionSettings(assembledIntro, inheritedOutro),
+    `${name} should inherit the app-wide outro, then its own intro.`,
   );
   if (authoredFlicker === undefined) {
     assert.equal(
@@ -388,17 +391,21 @@ test("config facade preserves explicit global, shared, and bundle ownership", ()
     GLOBAL_CONFIG.composition.endWithCircleDurationSeconds === "auto"
       || GLOBAL_CONFIG.composition.endWithCircleDurationSeconds > 0,
   );
+  assert.ok(GLOBAL_CONFIG.cellTransitions.durationSeconds > 0);
   assert.ok(
     [1, 2, 4, 8, 16].includes(GLOBAL_CONFIG.composition.circleSubdivision),
   );
+  assert.ok(GLOBAL_CONFIG.composition.circleEndpoints.modes.dijkstra);
   assert.deepEqual(
     ownKeys(GLOBAL_CONFIG),
     [
       "canvas",
       "cellTransitions",
       "composition",
+      "debug",
       "flicker",
       "intro",
+      "outro",
       "palette",
       "palettes",
       "ui",

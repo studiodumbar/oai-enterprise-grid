@@ -62,6 +62,9 @@ const CELLULAR_AUTOMATA_SPECIFICATION = Object.freeze({
   defaultStrategy: "life-like",
   defaults: DEFAULT_CELLULAR_AUTOMATA_OPTIONS,
   normalizeOptions: normalizeAutomataOptions,
+  // Every generation is the same length, so this is the exact next-state hold
+  // rather than the conservative shortest-hold fallback.
+  exactCellTransitionSeconds: options => options.cycleSeconds / options.stepCount,
   validateOptions: validateAutomataOptions,
   createScene: createCellularAutomataSceneAt,
 });

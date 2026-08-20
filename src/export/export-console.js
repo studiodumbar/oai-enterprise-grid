@@ -9,6 +9,7 @@ import {
   STATIC_EXPORT_FORMATS,
   normalizeExportState,
 } from "./export-state.js";
+import { DEBUG_CHANNEL_NAMES, configureDebug, debug } from "../debug/index.js";
 import {
   ASPECT_RATIO_PRESETS,
   LONG_EDGE_PRESETS,
@@ -44,6 +45,7 @@ Commands
   use <composition>             switch the live composition
   export [flags]                export the active composition (or --all / --composition)
   panel show|hide|toggle        show or hide the export panel
+  debug [channels|all|off]      trace subsystem state changes to the console
 
 Export flags
   --all                         export every composition, one after another
@@ -484,6 +486,24 @@ export function createExportConsole({
         const current = snapshot();
         log(JSON.stringify(current, null, 2));
         return { ok: true, ...current };
+      }
+      case "debug": {
+        if (parsed.args.length === 0) {
+          const active = debug.channels();
+          log(active.length > 0
+            ? `Debug channels: ${active.join(", ")}`
+            : `Debug is off. Available channels: ${DEBUG_CHANNEL_NAMES.join(", ")}, all.`);
+          return { ok: true, channels: active, available: [...DEBUG_CHANNEL_NAMES] };
+        }
+        const selector = parsed.args[0] === "off" ? "" : parsed.args.join(",");
+        try {
+          configureDebug({ channels: selector });
+        } catch (error) {
+          fail(error.message);
+        }
+        const channels = debug.channels();
+        log(channels.length > 0 ? `Debug channels: ${channels.join(", ")}` : "Debug is off.");
+        return { ok: true, channels };
       }
       case "use": {
         const id = parsed.args[0];

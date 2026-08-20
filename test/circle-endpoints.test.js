@@ -99,8 +99,8 @@ test("native endpoint motion preserves a complete subdivided parent cell", () =>
     circleSubdivision: 8,
   };
   const transitionSettings = {
-    mode: "sort-selection",
-    modes: { "sort-selection": { seed: 12 } },
+    mode: "fade",
+    modes: { fade: { revealFraction: 0.5, timingCurve: [0, 0, 1, 1] } },
   };
   const endpoint = new NativeCircleEndpointTransition({
     settings,
@@ -123,39 +123,47 @@ test("native endpoint motion preserves a complete subdivided parent cell", () =>
     y: 50,
     size: 100,
   }));
-  endpoint.prepare({
-    phase: "start",
-    progress: 0,
-    durationSeconds: 1,
-    cycleIndex: 0,
-  }, items, layout);
-  const start = items.flatMap(item => endpoint.presentationsFor(item.id).map(
-    presentation => ({
-      x: item.x + presentation.offsetX,
-      y: item.y + presentation.offsetY,
-      size: item.size * presentation.scale,
-    }),
-  ));
-  const onscreen = start.filter(item => (
-    item.x >= 0 && item.x <= layout.width && item.y >= 0 && item.y <= layout.height
-  ));
-  assert.equal(onscreen.length, 64);
-  assert.equal(new Set(onscreen.map(item => item.x)).size, 8);
-  assert.equal(new Set(onscreen.map(item => item.y)).size, 8);
-  assert.ok(onscreen.every(item => item.size === 12.5));
+  const posesAt = progress => {
+    endpoint.prepare({
+      phase: "start",
+      progress,
+      durationSeconds: 1,
+      cycleIndex: 0,
+    }, items, layout);
+    return items.flatMap(item => endpoint.presentationsFor(item.id).map(
+      presentation => ({
+        x: item.x + presentation.offsetX,
+        y: item.y + presentation.offsetY,
+        size: item.size * presentation.scale,
+        opacity: presentation.opacity,
+      }),
+    ));
+  };
 
-  endpoint.prepare({
-    phase: "start",
-    progress: 1,
-    durationSeconds: 1,
-    cycleIndex: 0,
-  }, items, layout);
+  // Fully revealed, the endpoint is the complete 8x8 parent cell and nothing
+  // else: every one of the 64 sources is carried by some destination glyph.
+  const revealed = posesAt(0.5).filter(pose => pose.opacity > 0);
+  assert.equal(revealed.length, 64);
+  assert.equal(new Set(revealed.map(pose => pose.x)).size, 8);
+  assert.equal(new Set(revealed.map(pose => pose.y)).size, 8);
+  assert.ok(revealed.every(pose => pose.size === 12.5 && pose.opacity === 1));
+  assert.ok(revealed.every(pose => (
+    pose.x >= 0 && pose.x <= layout.width
+    && pose.y >= 0 && pose.y <= layout.height
+  )));
+
+  // Midway through the crossfade the circle and the composition share the
+  // screen, and the padded duplicates do not stack extra copies of a glyph.
+  const crossfading = posesAt(0.75).filter(pose => pose.opacity > 0);
+  assert.equal(crossfading.filter(pose => pose.size === 12.5).length, 64);
   assert.deepEqual(
-    items.flatMap(item => endpoint.presentationsFor(item.id)),
-    Array.from(
-      { length: 64 },
-      () => ({ offsetX: 0, offsetY: 0, opacity: 1, scale: 1 }),
-    ),
+    crossfading.filter(pose => pose.size === 100),
+    items.map(item => ({ x: item.x, y: item.y, size: 100, opacity: 0.5 })),
+  );
+
+  assert.deepEqual(
+    posesAt(1),
+    items.map(item => ({ x: item.x, y: item.y, size: 100, opacity: 1 })),
   );
 });
 

@@ -2,6 +2,7 @@ import {
   cubicBezierAt,
   normalizeBezierCurve,
 } from "../core/cubic-bezier.js";
+import { normalizeArrangementItems } from "../transitions/arrangement-items.js";
 
 function clamp01(value) {
   return Math.max(0, Math.min(1, value));
@@ -43,27 +44,6 @@ function shuffled(values, key, seed) {
     && result.every((value, index) => value === values[index])
   ) result.push(result.shift());
   return result;
-}
-
-function centerForIndex(layout, index) {
-  const column = index % layout.columns;
-  const row = Math.floor(index / layout.columns);
-  return {
-    x: layout.offsetX + (column + 0.5) * layout.cellSize,
-    y: layout.offsetY + (row + 0.5) * layout.cellSize,
-  };
-}
-
-function requireLayout(layout) {
-  if (
-    !layout
-    || !Number.isInteger(layout.columns)
-    || !Number.isInteger(layout.rows)
-    || !Number.isFinite(layout.cellSize)
-    || !Number.isFinite(layout.offsetX)
-    || !Number.isFinite(layout.offsetY)
-  ) throw new TypeError("sort-selection requires a complete grid layout.");
-  return layout;
 }
 
 function transitionBounds(layout, targets) {
@@ -120,51 +100,6 @@ function offscreenSlots(targets, layout, key, seed) {
   }));
 }
 
-function transitionItems({ items, indices, layout }) {
-  if (items !== undefined) {
-    if (!Array.isArray(items)) {
-      throw new TypeError("sort-selection items must be an array.");
-    }
-    const normalized = items.map((item, index) => {
-      if (
-        !item
-        || (typeof item.id !== "string" && typeof item.id !== "number")
-        || !Number.isFinite(item.x)
-        || !Number.isFinite(item.y)
-      ) throw new TypeError(`sort-selection item ${index} is invalid.`);
-      return {
-        id: item.id,
-        x: item.x,
-        y: item.y,
-        size: Number.isFinite(item.size) && item.size > 0 ? item.size : 1,
-      };
-    });
-    if (new Set(normalized.map(item => item.id)).size !== normalized.length) {
-      throw new Error("sort-selection item ids must be unique.");
-    }
-    return normalized.sort((first, second) => (
-      first.y - second.y
-      || first.x - second.x
-      || String(first.id).localeCompare(String(second.id))
-    ));
-  }
-
-  requireLayout(layout);
-  if (!Array.isArray(indices)) {
-    throw new TypeError("sort-selection indices must be an array.");
-  }
-  const cellCount = layout.columns * layout.rows;
-  const unique = [...new Set(indices)].sort((first, second) => first - second);
-  if (unique.some(index => !Number.isInteger(index) || index < 0 || index >= cellCount)) {
-    throw new RangeError("sort-selection received an index outside the grid.");
-  }
-  return unique.map(index => ({
-    id: index,
-    ...centerForIndex(layout, index),
-    size: layout.cellSize,
-  }));
-}
-
 /**
  * A direction-neutral arrangement mode. Its zero pose is either the previous
  * scene or a translated copy of the target that is wholly outside the viewport.
@@ -212,11 +147,17 @@ export class SortSelectionTransitionMode {
     key = "scene",
     durationSeconds = 1,
   }) {
-    const targets = transitionItems({ items, indices, layout });
+    const targets = normalizeArrangementItems(
+      { items, indices, layout },
+      "sort-selection",
+    );
     const slots = targets.map(item => ({ x: item.x, y: item.y, size: item.size }));
     const authoredSources = fromItems === undefined
       ? null
-      : transitionItems({ items: fromItems, layout });
+      : normalizeArrangementItems(
+        { items: fromItems, layout },
+        "sort-selection source",
+      );
     const offscreen = offscreenSlots(targets, layout, key, this.seed);
     const sourceSlots = targets.map((target, slot) => {
       const source = authoredSources?.[slot] ?? offscreen[slot] ?? target;

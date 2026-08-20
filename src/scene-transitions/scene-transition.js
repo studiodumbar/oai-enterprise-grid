@@ -1,4 +1,6 @@
 import { resolveSceneTransitionSettings } from "./transition-settings.js";
+import { presentationsFrom } from "../transitions/presentations.js";
+import { debug } from "../debug/index.js";
 
 export const SCENE_TRANSITION_DIRECTIONS = Object.freeze(["intro", "outro"]);
 
@@ -23,15 +25,15 @@ export class SceneTransition {
     if (this.settings.enabled) {
       if (
         !modeRegistry
-        || typeof modeRegistry.has !== "function"
-        || typeof modeRegistry.create !== "function"
+        || typeof modeRegistry.createForPhase !== "function"
       ) throw new TypeError("An enabled scene transition requires a mode registry.");
-      if (!modeRegistry.has(this.settings.mode)) {
-        throw new Error(`Unknown scene-transition mode "${this.settings.mode}".`);
-      }
-      this.mode = modeRegistry.create(
+      // Resolving through the phase gate is what makes an unsupported
+      // mode/phase pairing a startup error instead of a broken frame.
+      this.mode = modeRegistry.createForPhase(
         this.settings.mode,
+        this.direction,
         this.settings.modes[this.settings.mode],
+        `Scene transition (${this.direction})`,
       );
       if (
         !this.mode
@@ -56,6 +58,15 @@ export class SceneTransition {
 
   begin(event) {
     if (!this.settings.enabled) return false;
+    debug.transition(
+      "scene=%s mode=%s targets=%d sources=%d duration=%.3f key=%s",
+      this.direction,
+      this.settings.mode,
+      event?.items?.length ?? 0,
+      event?.fromItems?.length ?? 0,
+      this.settings.durationSeconds,
+      event?.key ?? "-",
+    );
     this.plan = this.mode.createPlan({
       ...event,
       durationSeconds: this.settings.durationSeconds,
@@ -79,13 +90,20 @@ export class SceneTransition {
     return dt - consumed;
   }
 
+  progressFor() {
+    const clockProgress = this.elapsed / this.settings.durationSeconds;
+    return this.direction === "intro" ? clockProgress : 1 - clockProgress;
+  }
+
   presentationFor(index) {
     if (!this.begun || !this.plan) return IDENTITY_PRESENTATION;
-    const clockProgress = this.elapsed / this.settings.durationSeconds;
-    const progress = this.direction === "intro"
-      ? clockProgress
-      : 1 - clockProgress;
-    return this.mode.presentationAt(this.plan, index, progress);
+    return this.mode.presentationAt(this.plan, index, this.progressFor());
+  }
+
+  /** Some modes place more than one pose per glyph; a crossfade needs two. */
+  presentationsFor(index) {
+    if (!this.begun || !this.plan) return [IDENTITY_PRESENTATION];
+    return presentationsFrom(this.mode, this.plan, index, this.progressFor());
   }
 
   inspect() {

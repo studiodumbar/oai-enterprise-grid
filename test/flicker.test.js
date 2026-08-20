@@ -366,9 +366,15 @@ test("scope decides whether the pattern spans the board or repeats per cell", ()
         strategy: "life-like",
       },
       settingsKey: "gameOfLife",
-      // Pinned to the fixture swatches below, whatever palette config/global.js
-      // currently selects app-wide.
-      options: { ...settings.gameOfLife, palette: "green" },
+      // Pinned to the fixture below, whatever the composition currently
+      // authors: the swatches, and the grid the assertions count cells in.
+      options: {
+        ...settings.gameOfLife,
+        palette: "green",
+        longSideCells: 8,
+        cycleSeconds: 3,
+        generationsPerCycle: 6,
+      },
       runtime: { viewport: () => ({ width: 900, height: 600 }) },
       palettes: { green: GREEN },
     });
@@ -432,9 +438,12 @@ test("a cell-scoped cell resolves into every ring instead of one flat block", ()
     settingsKey: "gameOfLife",
     options: {
       ...SETTINGS.gameOfLife,
-      // Pinned to the fixture swatches below, whatever palette config/global.js
-      // currently selects app-wide.
+      // Pinned to the fixture below, whatever the composition currently
+      // authors: the swatches, and the grid the assertions count rings in.
       palette: "green",
+      longSideCells: 8,
+      cycleSeconds: 3,
+      generationsPerCycle: 6,
       flicker: {
         ...SETTINGS.gameOfLife.flicker,
         mode: "echo-ring",

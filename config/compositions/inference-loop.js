@@ -8,7 +8,24 @@ export const INFERENCE_LOOP_CONFIG = {
       tokenSeconds: 2.6,
       layerPasses: 4,
       flipSeconds: 0.016,
+      // Flicker starts on the selected candidate and follows outward. The
+      // envelope fractions are this composition's own timing; app-wide flicker
+      // defaults live in config/global.js.
+      flicker: {
+        amount: 0.9,
+        modes: {
+          noise: {
+            speed: 0.55,
+            spatialScale: 0.24,
+          },
+        },
+        envelope: {
+          leadFraction: 0.18,
+          spreadFraction: 0.6,
+          rampFraction: 0.22,
+        },
       },
+    },
   },
 
   generatorDefinitions: {

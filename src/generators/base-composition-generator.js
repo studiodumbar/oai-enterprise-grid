@@ -114,6 +114,7 @@ export class BaseCompositionGenerator {
       palette: this.palette,
       settings: this.flickerSettings,
       noiseFunction: this.noiseFunction,
+      autoCycleSeconds: this.autoFlickerCycleSeconds(),
     });
     const introSettings = resolveSceneTransitionSettings({}, options.intro ?? {});
     const outroSettings = options.outro === undefined
@@ -332,8 +333,7 @@ export class BaseCompositionGenerator {
     }
 
     const paletteCount = this.flicker.paletteColors.length;
-    const useRank = this.flicker.distribution === "rank"
-      || (this.flicker.distribution === "auto" && glyphCount >= paletteCount);
+    const useRank = this.flicker.spreadsRankAcrossCell(glyphCount);
     if (useRank) {
       order.sort((first, second) => samples[first] - samples[second] || first - second);
     }
@@ -409,7 +409,7 @@ export class BaseCompositionGenerator {
           const id = `${index}:${glyphIndex}`;
           const presentations = this.circleEndpointActive
             ? this.circleEndpoint.presentationsFor(id)
-            : [transition.presentationFor(id)];
+            : transition.presentationsFor(id);
           for (const presentation of presentations) {
             if (presentation.opacity <= 0) continue;
             const x = left + (subColumn + 0.5) * slot + presentation.offsetX;
@@ -448,6 +448,7 @@ export class BaseCompositionGenerator {
         scope,
       },
       noiseFunction: this.noiseFunction,
+      autoCycleSeconds: this.autoFlickerCycleSeconds(),
     });
     this.flicker = next;
     this.previewRepeats = normalizedRepeats;
@@ -466,6 +467,13 @@ export class BaseCompositionGenerator {
 
   availableFlickerModes() {
     return this.flicker.availableModes();
+  }
+
+  // The preview window is this composition's only beat, so `cycleSeconds:
+  // "auto"` fills one preview per flicker loop. It cannot read cycleDuration()
+  // below — that already derives from the flicker cycle.
+  autoFlickerCycleSeconds() {
+    return this.options.previewSeconds;
   }
 
   cycleDuration() {

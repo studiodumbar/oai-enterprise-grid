@@ -1,0 +1,23 @@
+# composition: tool-loop
+# frames: 900
+
+[cg:timeline] f=0000 phase=start cycle=0 duration=1.000 paused=yes
+[cg:plan] f=0000 enter=toolLoopGrid
+[cg:plan] f=0000 render=[toolLoopGrid@1.00]
+[cg:transition] f=0000 endpoint=start mode=fade cycle=0 targets=25 sources=1 padded=0 subdivision=1 unpaired=24
+[cg:timeline] f=0059 phase=core cycle=0 duration=4.000 paused=no
+[cg:timeline] f=0300 phase=end cycle=0 duration=3.000 paused=yes
+[cg:transition] f=0300 endpoint=end mode=fade cycle=0 targets=1 sources=1 padded=0 subdivision=1 unpaired=0
+[cg:timeline] f=0480 phase=start cycle=1 duration=1.000 paused=no
+[cg:transition] f=0480 scene=outro mode=fade targets=1 sources=0 duration=3.000 key=tool:0:route:0:answer:7x3
+[cg:transition] f=0480 endpoint=start mode=fade cycle=1 targets=1 sources=1 padded=0 subdivision=1 unpaired=0
+[cg:timeline] f=0481 phase=start cycle=1 duration=1.000 paused=yes
+[cg:timeline] f=0539 phase=core cycle=1 duration=4.000 paused=no
+[cg:transition] f=0719 scene=intro mode=fade targets=21 sources=0 duration=1.000 key=tool:1:perceive:0:waiting:7x3
+[cg:timeline] f=0779 phase=end cycle=1 duration=3.000 paused=yes
+[cg:transition] f=0779 endpoint=end mode=fade cycle=1 targets=21 sources=1 padded=0 subdivision=1 unpaired=20
+
+# draw volume
+blankFrames=8
+firstDrawnFrame=0
+totalFill=11243

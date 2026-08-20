@@ -61,6 +61,20 @@ export class SequenceRule {
     return [this.steps[this.index].planEntry];
   }
 
+  inspect() {
+    const step = this.steps[this.index];
+    return {
+      stepIndex: this.index,
+      stepCount: this.steps.length,
+      use: step.planEntry.use,
+      elapsedSeconds: this.elapsedSeconds,
+      stepDurationSeconds: step.durationSeconds,
+      cycleSeconds: Number.isFinite(this.cycleSeconds) ? this.cycleSeconds : null,
+      loop: this.loop,
+      holding: step.durationSeconds === null,
+    };
+  }
+
   advance(dt) {
     const current = this.steps[this.index];
     if (dt === 0 || current.durationSeconds === null) return;
