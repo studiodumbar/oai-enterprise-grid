@@ -1,3 +1,27 @@
+@font-face {
+    font-family: "OpenAI Sans";
+    src: url("../assets/OpenAI Sans/OpenAI Sans Complete TTF/OpenAISans-Regular.ttf") format("truetype");
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "OpenAI Sans";
+    src: url("../assets/OpenAI Sans/OpenAI Sans Complete TTF/OpenAISans-Semibold.ttf") format("truetype");
+    font-weight: 600;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "OpenAI Sans";
+    src: url("../assets/OpenAI Sans/OpenAI Sans Complete TTF/OpenAISans-Bold.ttf") format("truetype");
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+}
+
 html,
 body {
     margin: 0;
@@ -27,7 +51,7 @@ body {
     overflow: hidden;
     background: #f7f8fa;
     color: #061426;
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-family: "OpenAI Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 
 #sketch {

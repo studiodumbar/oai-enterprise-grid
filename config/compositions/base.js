@@ -7,14 +7,12 @@ export const BASE_CONFIG = {
   settings: {
     base: {
       dotMargin: 0.07,
-      previewSeconds: 2,
-      previewRepeats: 3,
       flicker: {
         amount: 1,
         scope: "cell",
         modes: {
           "echo-ring": {
-              cycleSeconds: 1,
+            //cycleSeconds: "calc(auto * 0.5)",
           },
         },
       },
@@ -30,6 +28,10 @@ export const BASE_CONFIG = {
 
   compositionDefinitions: {
     base: {
+      timing: {
+        bodyDurationSeconds: 2,
+        beatCount: 4,
+      },
       rule: "sequence",
       steps: [{ use: "baseGrid" }],
     },

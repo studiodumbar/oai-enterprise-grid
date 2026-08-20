@@ -16,6 +16,11 @@ import { BASE_CONFIG } from "./config/compositions/base.js";
 import { mergeFlickerSettings } from "./src/visuals/flicker/index.js";
 import { resolveSceneTransitionSettings } from "./src/scene-transitions/index.js";
 import { resolveCellTransitionSettings } from "./src/cell-transitions/transition-settings.js";
+import { resolveCompositionEndpointSettings } from "./src/composition-endpoints/index.js";
+import {
+  resolveTimelineDuration,
+  resolveTimelineSettings,
+} from "./src/timeline/timeline-settings.js";
 
 export { GLOBAL_CONFIG } from "./config/global.js";
 export { SHARED_CONFIG } from "./config/shared.js";
@@ -63,6 +68,66 @@ function mergeUnique(label, sections) {
 
 const compositionConfigs = Object.values(COMPOSITION_BUNDLES);
 
+function definitionGeneratorIds(definition) {
+  const ids = [];
+  const visit = value => {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+    if (typeof value.use === "string") ids.push(value.use);
+    if (value.steps !== undefined) visit(value.steps);
+    if (value.layers !== undefined) visit(value.layers);
+  };
+  visit(definition?.steps ?? definition?.layers);
+  return ids;
+}
+
+// Timing is authored by a composition recipe, then injected into each settings
+// group that recipe uses. This keeps clock ownership with the rule while the
+// existing generator API continues to receive a flat options object.
+function timingBySettingsKey(configs) {
+  const byKey = new Map();
+  for (const config of configs) {
+    for (const [compositionName, definition] of Object.entries(
+      config.compositionDefinitions ?? {},
+    )) {
+      const canonical = definition.legacyAliasFor === undefined
+        ? definition
+        : config.compositionDefinitions?.[definition.legacyAliasFor];
+      const authored = definition.timing ?? canonical?.timing;
+      if (authored === undefined) continue;
+      const timing = resolveTimelineSettings(
+        authored,
+        `compositionDefinitions.${compositionName}.timing`,
+      );
+      for (const id of definitionGeneratorIds(definition)) {
+        const generator = config.generatorDefinitions?.[id];
+        const key = generator?.settingsKey
+          ?? (typeof generator?.options === "string" ? generator.options : null);
+        if (key === null) continue;
+        const existing = byKey.get(key);
+        if (
+          existing
+          && (
+            existing.bodyDurationSeconds !== timing.bodyDurationSeconds
+            || existing.beatCount !== timing.beatCount
+          )
+        ) {
+          throw new Error(
+            `SETTINGS.${key} is used by compositions with conflicting timing roots.`,
+          );
+        }
+        byKey.set(key, timing);
+      }
+    }
+  }
+  return byKey;
+}
+
+const compositionTimingBySettingsKey = timingBySettingsKey(compositionConfigs);
+
 // A settings group that declares `flicker` inherits the app-wide flicker
 // defaults and overrides only the keys it authored. Groups without flicker are
 // untouched, and the composition config modules stay unmutated.
@@ -90,15 +155,86 @@ function withGlobalCompositionDefaults(settingsGroups) {
       group?.cellTransitions,
     );
     const intro = resolveSceneTransitionSettings(GLOBAL_CONFIG.intro, group?.intro);
-    const authoredOutro = group?.outro ?? GLOBAL_CONFIG.outro;
+    const globalOutro = GLOBAL_CONFIG.outro === undefined
+      ? resolveSceneTransitionSettings(intro, { fallbackToIntro: true })
+      : resolveSceneTransitionSettings(intro, GLOBAL_CONFIG.outro);
     resolved[name] = {
       palette: GLOBAL_CONFIG.palette,
       ...group,
       cellTransitions,
       intro,
-      outro: authoredOutro === undefined
-        ? resolveSceneTransitionSettings(intro, { fallbackToIntro: true })
-        : resolveSceneTransitionSettings(intro, authoredOutro),
+      // A local outro overrides the app-wide outro. It never accidentally
+      // inherits the intro merely because it authored one field.
+      outro: group?.outro === undefined
+        ? globalOutro
+        : resolveSceneTransitionSettings(globalOutro, group.outro),
+    };
+  }
+  return resolved;
+}
+
+function resolvedPhaseTiming(settings, timing, label) {
+  const duration = resolveTimelineDuration(settings.durationSeconds, {
+    automaticSeconds: timing.beatSeconds,
+    label: `${label}.durationSeconds`,
+    source: "composition-beat",
+  });
+  return { ...settings, durationSeconds: duration.seconds };
+}
+
+// Compile every composition's phase and endpoint durations before any
+// generator exists. Automatic values therefore cannot change with the active
+// render plan or a runtime mode swap.
+function withResolvedCompositionTiming(settingsGroups, timingByKey) {
+  const resolved = {};
+  for (const [name, group] of Object.entries(settingsGroups ?? {})) {
+    const authoredTiming = timingByKey.get(name);
+    if (authoredTiming === undefined) {
+      resolved[name] = group;
+      continue;
+    }
+    const timing = resolveTimelineSettings(authoredTiming, `SETTINGS.${name}.timing`);
+    const intro = resolvedPhaseTiming(group.intro, timing, `SETTINGS.${name}.intro`);
+    const outro = resolvedPhaseTiming(group.outro, timing, `SETTINGS.${name}.outro`);
+    const endpoints = resolveCompositionEndpointSettings(
+      GLOBAL_CONFIG.composition,
+      group.circleEndpoints ?? {},
+    );
+    const startDuration = resolveTimelineDuration(endpoints.start.durationSeconds, {
+      automaticSeconds: intro.durationSeconds,
+      label: `SETTINGS.${name}.circleEndpoints.start.durationSeconds`,
+      source: "intro-phase",
+    });
+    const endDuration = resolveTimelineDuration(endpoints.end.durationSeconds, {
+      automaticSeconds: outro.durationSeconds,
+      label: `SETTINGS.${name}.circleEndpoints.end.durationSeconds`,
+      source: "outro-phase",
+    });
+    const colorTransition = group.colorTransition === undefined
+      ? undefined
+      : {
+        ...group.colorTransition,
+        durationSeconds: resolveTimelineDuration(
+          group.colorTransition.durationSeconds,
+          {
+            automaticSeconds: timing.beatSeconds,
+            label: `SETTINGS.${name}.colorTransition.durationSeconds`,
+            source: "composition-beat",
+          },
+        ).seconds,
+      };
+    resolved[name] = {
+      ...group,
+      timing,
+      intro,
+      outro,
+      circleEndpoints: {
+        circleSubdivision: endpoints.circleSubdivision,
+        start: { ...endpoints.start, durationSeconds: startDuration.seconds },
+        end: { ...endpoints.end, durationSeconds: endDuration.seconds },
+        modes: endpoints.modes,
+      },
+      ...(colorTransition === undefined ? {} : { colorTransition }),
     };
   }
   return resolved;
@@ -106,15 +242,18 @@ function withGlobalCompositionDefaults(settingsGroups) {
 
 // These assembled aliases preserve the existing director/generator API while
 // authoring stays separated by ownership above.
-export const SETTINGS = withGlobalFlickerDefaults(mergeUnique("settings group", [
-  {
-    canvas: GLOBAL_CONFIG.canvas,
-    composition: GLOBAL_CONFIG.composition,
-    cellTransitions: GLOBAL_CONFIG.cellTransitions,
-  },
-  SHARED_CONFIG.settings,
-  ...compositionConfigs.map(config => withGlobalCompositionDefaults(config.settings)),
-]));
+export const SETTINGS = withResolvedCompositionTiming(
+  withGlobalFlickerDefaults(mergeUnique("settings group", [
+    {
+      canvas: GLOBAL_CONFIG.canvas,
+      composition: GLOBAL_CONFIG.composition,
+      cellTransitions: GLOBAL_CONFIG.cellTransitions,
+    },
+    SHARED_CONFIG.settings,
+    ...compositionConfigs.map(config => withGlobalCompositionDefaults(config.settings)),
+  ])),
+  compositionTimingBySettingsKey,
+);
 
 export const PALETTES = GLOBAL_CONFIG.palettes;
 

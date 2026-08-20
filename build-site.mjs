@@ -7,6 +7,7 @@ const runtimeEntries = [
   "config",
   "css",
   "src",
+  "assets",
 ];
 
 await rm("dist", { recursive: true, force: true });

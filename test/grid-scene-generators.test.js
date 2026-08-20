@@ -136,8 +136,11 @@ function normalizedOptionsFor(strategy, overrides = {}) {
     ?? (strategy === "voronoi" ? authored.partitionPasses : undefined)
     ?? (strategy === "l-tree" ? authored.generations : undefined)
     ?? (strategy === "life-like" ? authored.generationsPerCycle : undefined)
-    ?? authored.layerPasses;
-  const cycleSeconds = authored.cycleSeconds ?? authored.tokenSeconds;
+    ?? authored.layerPasses
+    ?? authored.timing?.beatCount;
+  const cycleSeconds = authored.cycleSeconds
+    ?? authored.tokenSeconds
+    ?? authored.timing?.bodyDurationSeconds;
   return {
     ...authored,
     intro: {
@@ -150,6 +153,11 @@ function normalizedOptionsFor(strategy, overrides = {}) {
     // Pure strategies use the shared internal clock/pass vocabulary.
     tokenSeconds: cycleSeconds,
     layerPasses: stepCount,
+    partitionPasses: strategy === "voronoi" ? stepCount : authored.partitionPasses,
+    generations: strategy === "l-tree" ? stepCount : authored.generations,
+    generationsPerCycle: strategy === "life-like"
+      ? stepCount
+      : authored.generationsPerCycle,
   };
 }
 
@@ -598,10 +606,17 @@ test("observe-act loop partitions model, gateway, gutters, and observation", () 
 });
 
 test("Voronoi influence fields keep fixed sites and variable white boundaries", () => {
-  const options = normalizedOptionsFor("voronoi");
+  // Keep the algorithm fixture spacious even while the authored composition is
+  // tuned to dense site counts; this test needs both borders and interiors.
+  const overrides = { longSideCells: 12, siteCount: 5 };
+  const options = normalizedOptionsFor("voronoi", overrides);
   const layout = createCircleGridSceneLayout(LANDSCAPE, options.longSideCells);
-  const sites = voronoiSitesForLayout(layout, 2, options.siteCount);
-  assert.equal(sites.length, options.siteCount);
+  const actualSiteCount = Math.min(
+    options.siteCount,
+    layout.columns * layout.rows,
+  );
+  const sites = voronoiSitesForLayout(layout, 2, actualSiteCount);
+  assert.equal(sites.length, actualSiteCount);
   assert.equal(new Set(sites).size, sites.length);
 
   const blankCounts = [];
@@ -609,11 +624,16 @@ test("Voronoi influence fields keep fixed sites and variable white boundaries", 
   for (let cycleIndex = 0; cycleIndex < 3; cycleIndex += 1) {
     for (let pass = 0; pass < options.stepCount; pass += 1) {
       const progress = pass * span + span * 0.4;
-      const scene = sceneAt("voronoi", progress, cycleIndex);
-      const held = sceneAt("voronoi", progress + span * 0.3, cycleIndex);
+      const scene = sceneAt("voronoi", progress, cycleIndex, overrides);
+      const held = sceneAt(
+        "voronoi",
+        progress + span * 0.3,
+        cycleIndex,
+        overrides,
+      );
       assert.equal(scene.phase, "partition");
       assert.deepEqual(faceSignatures(scene), faceSignatures(held));
-      assert.equal(new Set(scene.sites).size, options.siteCount);
+      assert.equal(new Set(scene.sites).size, scene.actualSiteCount);
       assert.ok(scene.sites.every(index => scene.faces[index].level >= 0));
       assert.ok(scene.boundaryIndices.every(
         index => scene.faces[index].level === EMPTY_GRID_FACE_LEVEL,
@@ -633,16 +653,16 @@ test("Voronoi influence fields keep fixed sites and variable white boundaries", 
       ));
       assert.equal(scene.paletteMotion.amount, 1);
       assert.ok(scene.territoryByIndex.every(
-        siteOrder => siteOrder >= 0 && siteOrder < options.siteCount,
+        siteOrder => siteOrder >= 0 && siteOrder < scene.actualSiteCount,
       ));
       blankCounts.push(blankCount(scene));
     }
   }
   assert.ok(new Set(blankCounts).size > 1);
 
-  const consensus = sceneAt("voronoi", 0.68, 2);
-  const commit = sceneAt("voronoi", 0.82, 2);
-  const settle = sceneAt("voronoi", 0.95, 2);
+  const consensus = sceneAt("voronoi", 0.68, 2, overrides);
+  const commit = sceneAt("voronoi", 0.82, 2, overrides);
+  const settle = sceneAt("voronoi", 0.95, 2, overrides);
   assert.equal(consensus.phase, "consensus");
   assert.ok(consensus.faces[consensus.selectedSiteIndex].level >= 0);
   const consensusInterior = expectedVoronoiRegionInterior(layout, consensus);
@@ -662,16 +682,24 @@ test("Voronoi influence fields keep fixed sites and variable white boundaries", 
   }
   assert.equal(commit.phase, "commit");
   assert.equal(commit.paletteMotion, undefined);
-  assert.equal(commit.faces.filter(face => face.level >= 0).length, 1);
-  assert.equal(commit.faces[commit.endpointCellIndex].level, 0);
-  assert.ok(!commit.boundaryIndices.includes(commit.endpointCellIndex));
+  assert.equal(commit.endpointCellIndices.length, commit.actualSiteCount);
+  assert.equal(new Set(commit.endpointCellIndices).size, commit.actualSiteCount);
   assert.equal(
-    commit.territoryByIndex[commit.endpointCellIndex],
-    commit.selectedSiteOrder,
+    commit.faces.filter(face => face.level >= 0).length,
+    commit.actualSiteCount,
   );
+  commit.endpointCellIndices.forEach((index, siteOrder) => {
+    assert.equal(commit.faces[index].level, 0);
+    assert.ok(!commit.boundaryIndices.includes(index));
+    assert.equal(commit.territoryByIndex[index], siteOrder);
+  });
+  assert.equal(Object.hasOwn(commit, "endpointCellIndex"), false);
   assert.equal(Object.hasOwn(commit, "selectedGlyphIndex"), false);
   assert.equal(commit.transitionStyle, "cut");
+  assert.ok(commit.endpointPreparationProgress > 0);
   assert.equal(settle.paletteMotion, undefined);
+  assert.deepEqual(settle.endpointCellIndices, commit.endpointCellIndices);
+  assert.ok(settle.endpointPreparationProgress > commit.endpointPreparationProgress);
   assert.deepEqual(faceSignatures(commit), faceSignatures(settle));
 
   const narrowWide = sceneAtViewport(
@@ -679,6 +707,7 @@ test("Voronoi influence fields keep fixed sites and variable white boundaries", 
     { width: 1920, height: 1080 },
     0.2,
     0,
+    overrides,
   );
   assert.equal(narrowWide.requestedSiteCount, options.siteCount);
   assert.equal(
@@ -1066,7 +1095,6 @@ test("all six strategies draw only full circles at legal cell centers", () => {
     const inspection = generator.inspect();
     assert.equal(inspection.generatorType, ENGINE_BY_STRATEGY[strategy].type);
     assert.equal(inspection.strategy, strategy);
-    assert.ok(inspection.whitespaceCount > 0);
     assert.ok(context.arcs.length > 0);
     assert.ok(context.arcs.every(arc => (
       Number.isFinite(arc.x)

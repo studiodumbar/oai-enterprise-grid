@@ -1,5 +1,9 @@
 import { firstPoseFlags, normalizeArrangementItems } from "./arrangement-items.js";
 import { debug } from "../debug/index.js";
+import {
+  isAutomaticDurationSetting,
+  resolveAutomaticDuration,
+} from "../core/automatic-duration.js";
 
 const IDENTITY_PRESENTATION = Object.freeze({
   offsetX: 0,
@@ -20,7 +24,7 @@ export const TEXT_COLOR_MAPPINGS = Object.freeze(["level", "dot"]);
 // The hold cannot eat the whole phase; the cascade has to fit on both sides of
 // it. A phase shorter than the authored hold is clamped to this share and says
 // so on the transition channel.
-const MAXIMUM_HOLD_SHARE = 0.6;
+export const MAXIMUM_TEXT_HOLD_SHARE = 0.6;
 
 export const DEFAULT_TEXT_REVEAL_SETTINGS = Object.freeze({
   text: "TEXT",
@@ -29,7 +33,7 @@ export const DEFAULT_TEXT_REVEAL_SETTINGS = Object.freeze({
   sizeInCells: 1.5,
   offsetX: 0,
   offsetY: 0,
-  // Seconds the text stays uncovered before the cells close back in.
+  // Seconds the text stays uncovered; "auto" takes the phase's hold window.
   visibleSeconds: 1,
   // Palette entries the ramp shifts by on every cascade step, so the colors
   // travel with the motion instead of standing still. 0 keeps them fixed.
@@ -50,7 +54,7 @@ export const DEFAULT_TEXT_REVEAL_SETTINGS = Object.freeze({
   colorBy: "level",
   // null takes the palette's last color.
   textColor: null,
-  fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif",
+  fontFamily: "'OpenAI Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif",
   fontWeight: 700,
 });
 
@@ -113,8 +117,14 @@ export class TextRevealArrangementMode {
       throw new RangeError("text sizeInCells must be a finite positive number.");
     }
     const visibleSeconds = options.visibleSeconds ?? defaults.visibleSeconds;
-    if (!Number.isFinite(visibleSeconds) || visibleSeconds < 0) {
-      throw new RangeError("text visibleSeconds must be finite and non-negative.");
+    if (
+      (!Number.isFinite(visibleSeconds) || visibleSeconds < 0)
+      && !isAutomaticDurationSetting(visibleSeconds)
+    ) {
+      throw new RangeError(
+        "text visibleSeconds must be finite and non-negative, \"auto\", or "
+        + '"calc(auto * n)" with a positive multiplier.',
+      );
     }
     const levels = options.levels ?? defaults.levels;
     if (!Number.isSafeInteger(levels) || levels < 0 || levels > 6) {
@@ -206,19 +216,27 @@ export class TextRevealArrangementMode {
   }
 
   /**
-   * The hold is authored in seconds, so it owns its share of the phase first and
-   * the four cascade windows split what is left evenly. Only the first half is
-   * described here; the second half reads it backward.
+   * The hold owns its share of the phase first and the four cascade windows
+   * split what is left evenly. Automatic timing takes the largest supported
+   * hold. Only the first half is described here; the second reads it backward.
    */
   windowsFor(durationSeconds) {
+    const maximumHoldSeconds = durationSeconds * MAXIMUM_TEXT_HOLD_SHARE;
+    const requestedHoldSeconds = isAutomaticDurationSetting(this.visibleSeconds)
+      ? resolveAutomaticDuration(this.visibleSeconds, {
+        label: "text visibleSeconds",
+        candidates: [{ source: "phase-hold-window", seconds: maximumHoldSeconds }],
+      }).seconds
+      : this.visibleSeconds;
     const holdSeconds = Math.min(
-      this.visibleSeconds,
-      durationSeconds * MAXIMUM_HOLD_SHARE,
+      requestedHoldSeconds,
+      maximumHoldSeconds,
     );
-    if (holdSeconds < this.visibleSeconds) {
+    if (holdSeconds < requestedHoldSeconds) {
       debug.transition(
-        "text hold clamped authored=%.3f applied=%.3f phase=%.3f",
+        "text hold clamped authored=%s requested=%.3f applied=%.3f phase=%.3f",
         this.visibleSeconds,
+        requestedHoldSeconds,
         holdSeconds,
         durationSeconds,
       );

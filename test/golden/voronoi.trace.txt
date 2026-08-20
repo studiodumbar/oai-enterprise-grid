@@ -1,28 +1,36 @@
 # composition: voronoi
 # frames: 900
 
-[cg:timeline] f=0000 phase=start cycle=0 duration=6.000 paused=yes
+[cg:timeline] f=0000 phase=start cycle=0 duration=2.000 paused=yes
 [cg:plan] f=0000 enter=voronoiGrid
 [cg:plan] f=0000 render=[voronoiGrid@1.00]
-[cg:transition] f=0000 endpoint=start mode=text cycle=0 targets=3200 sources=1 padded=0 subdivision=1 unpaired=3199
+[cg:transition] f=0000 endpoint=start mode=text cycle=0 targets=960 sources=1 padded=0 subdivision=1 unpaired=959
+[cg:transition] f=0000 text hold clamped authored=3 requested=3.000 applied=1.200 phase=2.000
 [cg:transition] f=0000 overlay=intro mode=text
-[cg:timeline] f=0360 phase=core cycle=0 duration=4.000 paused=no
-[cg:transition] f=0360 overlay=- mode=-
-[cg:transition] f=0542 scene=cut strategy=voronoi key=voronoi:0:commit:7
-[cg:transition] f=0575 scene=cut strategy=voronoi key=voronoi:0:settle:7
-[cg:timeline] f=0599 phase=end cycle=0 duration=4.000 paused=yes
-[cg:transition] f=0599 endpoint=end mode=dijkstra grid=parent cycle=0 start=0 center=45 path=10 changing=6 trail=0.600 cost=38.000
-[cg:transition] f=0599 endpoint=end mode=dijkstra stage=path cycle=0
-[cg:transition] f=0599 overlay=outro mode=-
-[cg:transition] f=0743 endpoint=end mode=dijkstra stage=blink cycle=0
-[cg:transition] f=0758 endpoint=end mode=dijkstra stage=subdivide cycle=0
-[cg:transition] f=0838 endpoint=end mode=dijkstra stage=center cycle=0
-[cg:timeline] f=0839 phase=start cycle=1 duration=6.000 paused=no
-[cg:transition] f=0839 endpoint=start mode=text cycle=1 targets=3040 sources=1 padded=0 subdivision=1 unpaired=3039
-[cg:transition] f=0839 overlay=intro mode=text
-[cg:timeline] f=0840 phase=start cycle=1 duration=6.000 paused=yes
+[cg:transition] f=0000 text hold clamped authored=3 requested=3.000 applied=1.200 phase=2.000
+[cg:timeline] f=0120 phase=core cycle=0 duration=8.000 paused=no
+[cg:transition] f=0120 overlay=- mode=-
+[cg:transition] f=0192 scene=state mode=sort-selection targets=960 sources=960 duration=0.800 key=voronoi:0:partition:1:5x3
+[cg:transition] f=0264 scene=state mode=sort-selection targets=960 sources=960 duration=0.800 key=voronoi:0:partition:2:5x3
+[cg:transition] f=0336 scene=state mode=sort-selection targets=960 sources=960 duration=0.800 key=voronoi:0:partition:3:5x3
+[cg:transition] f=0408 scene=state mode=sort-selection targets=78 sources=960 duration=0.800 key=voronoi:0:consensus:3:5x3
+[cg:transition] f=0484 scene=cut strategy=voronoi key=voronoi:0:commit:3
+[cg:transition] f=0484 endpoint=end mode=dijkstra grid=parent cycle=0 starts=15 center=7 paths=15 cells=15 changing=9 trail=0.600 cost=28.000
+[cg:transition] f=0484 endpoint=end mode=dijkstra stage=loading cycle=0
+[cg:transition] f=0551 scene=cut strategy=voronoi key=voronoi:0:settle:3
+[cg:timeline] f=0599 phase=end cycle=0 duration=2.000 paused=yes
+[cg:transition] f=0605 endpoint=end mode=dijkstra stage=path cycle=0
+[cg:transition] f=0623 endpoint=end mode=dijkstra stage=blink cycle=0
+[cg:transition] f=0631 endpoint=end mode=dijkstra stage=subdivide cycle=0
+[cg:timeline] f=0719 phase=start cycle=1 duration=2.000 paused=no
+[cg:transition] f=0719 endpoint=start mode=text cycle=1 targets=960 sources=1 padded=0 subdivision=1 unpaired=959
+[cg:transition] f=0719 text hold clamped authored=3 requested=3.000 applied=1.200 phase=2.000
+[cg:transition] f=0719 overlay=intro mode=text
+[cg:timeline] f=0720 phase=start cycle=1 duration=2.000 paused=yes
+[cg:timeline] f=0839 phase=core cycle=1 duration=8.000 paused=no
+[cg:transition] f=0839 overlay=- mode=-
 
 # draw volume
-blankFrames=8
+blankFrames=4
 firstDrawnFrame=0
-totalFill=563617
+totalFill=416439

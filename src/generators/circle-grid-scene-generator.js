@@ -29,11 +29,18 @@ import {
   nativeCircleEndpointSettings,
   resolveCompositionEndpointSettings,
 } from "../composition-endpoints/index.js";
+import {
+  drawCompositionEndpointFrame as drawEndpointFrame,
+} from "../composition-endpoints/render.js";
 import { debug } from "../debug/index.js";
 import {
   isAutomaticDurationSetting,
   resolveAutomaticDuration,
 } from "../core/automatic-duration.js";
+import {
+  requireMatchingTimelineValue,
+  resolveTimelineSettings,
+} from "../timeline/timeline-settings.js";
 
 export const DEFAULT_CIRCLE_GRID_SCENE_OPTIONS = Object.freeze({
   longSideCells: 9,
@@ -93,18 +100,35 @@ export function normalizeCircleGridSceneOptions(options = {}, specification = {}
   const prepared = specification.normalizeOptions
     ? specification.normalizeOptions(options)
     : options;
+  const timing = prepared.timing === undefined
+    ? null
+    : resolveTimelineSettings(prepared.timing, "timing");
+  const authoredCycleSeconds = prepared.cycleSeconds ?? prepared.tokenSeconds;
+  const authoredStepCount = prepared.stepCount ?? prepared.layerPasses;
+  if (timing) {
+    requireMatchingTimelineValue(
+      authoredCycleSeconds,
+      timing.bodyDurationSeconds,
+      { label: "cycleSeconds", source: "timing.bodyDurationSeconds" },
+    );
+    requireMatchingTimelineValue(
+      authoredStepCount,
+      timing.beatCount,
+      { label: "stepCount", source: "timing.beatCount" },
+    );
+  }
   const strategy = prepared.strategy ?? specification.defaultStrategy;
   const normalized = {
     ...DEFAULT_CIRCLE_GRID_SCENE_OPTIONS,
     ...specification.defaults,
     ...prepared,
     strategy,
-    cycleSeconds: prepared.cycleSeconds
-      ?? prepared.tokenSeconds
+    cycleSeconds: authoredCycleSeconds
+      ?? timing?.bodyDurationSeconds
       ?? specification.defaults?.cycleSeconds
       ?? DEFAULT_CIRCLE_GRID_SCENE_OPTIONS.cycleSeconds,
-    stepCount: prepared.stepCount
-      ?? prepared.layerPasses
+    stepCount: authoredStepCount
+      ?? timing?.beatCount
       ?? specification.defaults?.stepCount
       ?? DEFAULT_CIRCLE_GRID_SCENE_OPTIONS.stepCount,
     ...(compatibilityFlipSeconds === undefined
@@ -115,6 +139,7 @@ export function normalizeCircleGridSceneOptions(options = {}, specification = {}
   // authored settings file exposes domain names such as generations.
   normalized.tokenSeconds = normalized.cycleSeconds;
   normalized.layerPasses = normalized.stepCount;
+  if (timing) normalized.timing = timing;
 
   if (!specification.strategies?.includes(normalized.strategy)) {
     throw new Error(
@@ -181,18 +206,23 @@ export function normalizeCircleGridSceneOptions(options = {}, specification = {}
     normalized.cellTransitions ?? {},
   );
   if (isAutomaticDurationSetting(authoredCellTransitions.durationSeconds)) {
+    const exactCellTransitionSeconds = typeof specification.exactCellTransitionSeconds
+      === "function"
+      ? specification.exactCellTransitionSeconds(normalized)
+      : null;
+    const hasExactCellTransition = Number.isFinite(exactCellTransitionSeconds)
+      && exactCellTransitionSeconds > 0;
     const duration = resolveAutomaticDuration(
       authoredCellTransitions.durationSeconds,
       {
         label: "cellTransitions.durationSeconds",
         candidates: [
           {
-            source: "next-scene",
-            seconds: typeof specification.exactCellTransitionSeconds === "function"
-              ? specification.exactCellTransitionSeconds(normalized)
-              : null,
+            source: hasExactCellTransition ? "next-scene" : "shortest-scene",
+            seconds: hasExactCellTransition
+              ? exactCellTransitionSeconds
+              : shortestHoldSeconds,
           },
-          { source: "shortest-scene", seconds: shortestHoldSeconds },
         ],
       },
     );
@@ -714,11 +744,14 @@ export class CircleGridSceneGenerator {
     if (
       !transition.settings.enabled
       || (transition.direction === "outro" && transition.settings.fallbackToIntro)
+      || this.compositionEndpointOwnsLifecycle(transition)
     ) return false;
-    if (transition.direction === "intro" && this.compositionEndpoint?.phase === "start") {
-      return false;
-    }
     return eventType === "cycle";
+  }
+
+  compositionEndpointOwnsLifecycle(transition) {
+    const direction = transition.direction === "intro" ? "start" : "end";
+    return this.compositionEndpoints[direction]?.enabled === true;
   }
 
   shouldRunCellTransition(eventType, sceneChanged, scene) {
@@ -768,8 +801,8 @@ export class CircleGridSceneGenerator {
   advanceCycle(dt) {
     if (dt <= 0) return;
     const cycleSeconds = this.options.cycleSeconds;
-    const cycleTransition = this.intro.settings.enabled
-      || (this.outro.settings.enabled && !this.outro.settings.fallbackToIntro);
+    const cycleTransition = this.shouldRunLifecycle(this.intro, "cycle")
+      || this.shouldRunLifecycle(this.outro, "cycle");
     const nextBoundary = (this.cycleIndex + 1) * cycleSeconds;
     const secondsToBoundary = Math.max(0, nextBoundary - this.elapsed);
 
@@ -883,7 +916,7 @@ export class CircleGridSceneGenerator {
       ? this.endCompositionEndpoint
       : null;
     const endpointPreparationProgress = this.scene?.endpointPreparationProgress;
-    const preparingEndpoint = customEndpoint === null
+    const preparingEndpoint = frame?.compositionEndpoint == null
       && Number.isFinite(endpointPreparationProgress)
       && typeof this.endCompositionEndpoint?.preparationFrameAt === "function"
       ? this.endCompositionEndpoint
@@ -936,32 +969,19 @@ export class CircleGridSceneGenerator {
   }
 
   drawCompositionEndpointFrame(context, endpointFrame) {
-    const layout = endpointFrame.layout;
     const finestSubdivisions = 1 << MAX_GRID_FACE_LEVEL;
     const basePosition = endpointFrame.paletteStep
       / (GRID_FACE_PALETTE_STEP_COUNT - 1);
-    const inheritedAlpha = context.globalAlpha;
-    for (const cell of endpointFrame.cells) {
-      const subdivisions = 1 << cell.level;
-      const glyphCount = subdivisions ** 2;
-      const paletteSteps = cell.paletteSteps;
-      if (Array.isArray(paletteSteps) && paletteSteps.length !== glyphCount) {
-        throw new Error(
-          `Composition endpoint cell ${cell.index} at level ${cell.level} needs `
-          + `${glyphCount} palette steps; received ${paletteSteps.length}.`,
-        );
-      }
-      const slot = layout.cellSize / subdivisions;
-      const radius = slot * 0.5 * (1 - this.options.dotMargin);
-      const cellColumn = cell.index % layout.columns;
-      const cellRow = Math.floor(cell.index / layout.columns);
-      const left = layout.offsetX + cellColumn * layout.cellSize;
-      const top = layout.offsetY + cellRow * layout.cellSize;
-      for (let glyphIndex = 0; glyphIndex < subdivisions ** 2; glyphIndex += 1) {
-        const glyphColumn = glyphIndex % subdivisions;
-        const glyphRow = Math.floor(glyphIndex / subdivisions);
-        const x = left + (glyphColumn + 0.5) * slot;
-        const y = top + (glyphRow + 0.5) * slot;
+    drawEndpointFrame(context, endpointFrame, {
+      dotMargin: this.options.dotMargin,
+      colorForGlyph: ({
+        cellColumn,
+        cellRow,
+        glyphColumn,
+        glyphRow,
+        subdivisions,
+        paletteStep,
+      }) => {
         if (endpointFrame.flicker && this.flicker.enabled) {
           // Same coordinate convention as flickerOriginX/Y: canvas scope
           // addresses the whole board in finest-subdivision units, cell scope
@@ -981,26 +1001,15 @@ export class CircleGridSceneGenerator {
             sampleY,
             this.paletteMotionTime,
           );
-          context.fillStyle = this.flicker.paletteColors[this.flickerSwatchIndex(
+          return this.flicker.paletteColors[this.flickerSwatchIndex(
             basePosition,
             sample,
             endpointFrame.flickerAmount * this.flicker.amount,
           )];
-        } else {
-          context.fillStyle = this.paletteColorStep(
-            paletteSteps?.[glyphIndex] ?? endpointFrame.paletteStep,
-          );
         }
-        this.drawPresentedGlyph(
-          context,
-          x,
-          y,
-          radius,
-          IDENTITY_PRESENTATION,
-          inheritedAlpha,
-        );
-      }
-    }
+        return this.paletteColorStep(paletteStep);
+      },
+    });
   }
 
   glyphPresentations(cellIndex, glyphIndex, withTransition) {
@@ -1294,26 +1303,12 @@ export class CircleGridSceneGenerator {
       + this.transitionEventsPerCycle(this.outro) * this.outro.settings.durationSeconds;
   }
 
-  endpointAutoDuration(direction) {
-    const modeSettings = this.flicker.settings.modes[this.flicker.modeName];
-    if (Number.isFinite(modeSettings?.cycleSeconds) && modeSettings.cycleSeconds > 0) {
-      return modeSettings.cycleSeconds;
-    }
-    const transition = direction === "end" ? this.outro : this.intro;
-    return transition.settings.durationSeconds;
-  }
-
   transitionEventsPerCycle(transition) {
     if (
       !transition.settings.enabled
       || (transition.direction === "outro" && transition.settings.fallbackToIntro)
+      || this.compositionEndpointOwnsLifecycle(transition)
     ) return 0;
-    if (transition === this.intro && this.compositionEndpoints.start.enabled) {
-      return 0;
-    }
-    if (transition === this.outro && this.compositionEndpoints.end.enabled) {
-      return 0;
-    }
     return 1;
   }
 

@@ -5,6 +5,10 @@ import {
 import { createPhaseOverlay } from "../transitions/phase-overlay.js";
 import { debug } from "../debug/index.js";
 import { resolveCompositionEndpointSettings } from "../composition-endpoints/index.js";
+import {
+  isAutomaticDurationSetting,
+  resolveAutomaticDuration,
+} from "./automatic-duration.js";
 
 const GENERATOR_LIFECYCLE = [
   "enter",
@@ -16,7 +20,7 @@ const GENERATOR_LIFECYCLE = [
   "dispose",
 ];
 
-const AUTO_ENDPOINT_FALLBACK_SECONDS = 1;
+const INITIAL_ENDPOINT_DURATION_SECONDS = 1;
 
 function compositionGeneratorIds(definition) {
   const ids = [];
@@ -108,13 +112,17 @@ export class CompositionDirector {
       this.settings.composition ?? {},
     );
     this.circleEndpoints = this.compositionEndpoints.timeline;
+    this.endpointDurations = Object.freeze({
+      start: INITIAL_ENDPOINT_DURATION_SECONDS,
+      end: INITIAL_ENDPOINT_DURATION_SECONDS,
+    });
     this.endpointElapsed = 0;
     this.endpointCoreElapsed = 0;
     this.endpointState = circleEndpointTimelineAt(
       0,
       null,
       this.circleEndpoints,
-      { start: AUTO_ENDPOINT_FALLBACK_SECONDS, end: AUTO_ENDPOINT_FALLBACK_SECONDS },
+      this.endpointDurations,
     );
 
     this.generators = new Map();
@@ -157,9 +165,34 @@ export class CompositionDirector {
     if (!nextRule || typeof nextRule.update !== "function") {
       throw new TypeError(`Composition rule "${ruleType}" must return an object with update().`);
     }
+    const nextPhaseSettings = this.phaseSettingsGroup(name);
+    const authoredEndpoints = nextPhaseSettings?.circleEndpoints ?? {};
+    const legacyCompositionSettings = this.settings.composition ?? {};
+    const endpointOverrides = this.isLegacyFlockComposition(definition)
+      ? {
+        ...authoredEndpoints,
+        start: {
+          ...(authoredEndpoints.start ?? {}),
+          enabled: legacyCompositionSettings.startWithCircle,
+          durationSeconds: legacyCompositionSettings.startWithCircleDurationSeconds,
+          mode: "native",
+        },
+        end: {
+          ...(authoredEndpoints.end ?? {}),
+          enabled: legacyCompositionSettings.endWithCircle,
+          durationSeconds: legacyCompositionSettings.endWithCircleDurationSeconds,
+          mode: "native",
+        },
+      }
+      : authoredEndpoints;
     const nextCompositionEndpoints = resolveCompositionEndpointSettings(
       this.settings.composition ?? {},
-      this.phaseSettingsGroup(name)?.circleEndpoints ?? {},
+      endpointOverrides,
+    );
+    const nextEndpointDurations = this.resolveEndpointDurations(
+      name,
+      definition,
+      nextCompositionEndpoints.timeline,
     );
 
     for (const id of this.activeGeneratorIds) {
@@ -177,14 +210,36 @@ export class CompositionDirector {
     this.currentRule = nextRule;
     this.compositionEndpoints = nextCompositionEndpoints;
     this.circleEndpoints = nextCompositionEndpoints.timeline;
+    this.endpointDurations = nextEndpointDurations;
     this.endpointElapsed = 0;
     this.endpointCoreElapsed = 0;
     this.endpointState = circleEndpointTimelineAt(
       0,
       null,
       this.circleEndpoints,
-      this.endpointAutoDurations(),
+      this.endpointDurations,
     );
+    debug.config(
+      "endpoints composition=%s start=%s end=%s flockLegacy=%s",
+      name,
+      nextCompositionEndpoints.start.mode,
+      nextCompositionEndpoints.end.mode,
+      this.isLegacyFlockComposition(definition) ? "yes" : "no",
+    );
+    const timing = nextPhaseSettings?.timing;
+    if (timing) {
+      debug.config(
+        "timing composition=%s body=%.3f beats=%d beat=%.3f intro=%.3f outro=%.3f start=%.3f end=%.3f",
+        name,
+        timing.bodyDurationSeconds,
+        timing.beatCount,
+        timing.beatSeconds,
+        nextPhaseSettings.intro.durationSeconds,
+        nextPhaseSettings.outro.durationSeconds,
+        this.endpointDurations.start,
+        this.endpointDurations.end,
+      );
+    }
     this.buildPhaseOverlay();
     return this;
   }
@@ -198,11 +253,20 @@ export class CompositionDirector {
   phaseSettingsGroup(name) {
     const definition = this.compositionDefinitions.get(name);
     for (const id of compositionGeneratorIds(definition)) {
-      const key = this.generatorDefinitions.get(id)?.settingsKey;
+      const generatorDefinition = this.generatorDefinitions.get(id);
+      if (!generatorDefinition) continue;
+      const key = this.settingsKeyForDefinition(id, generatorDefinition);
       const group = key ? this.settings[key] : undefined;
       if (group?.intro !== undefined) return group;
     }
     return undefined;
+  }
+
+  isLegacyFlockComposition(definition) {
+    const ids = compositionGeneratorIds(definition);
+    return ids.length > 0 && ids.every(
+      id => this.generatorDefinitions.get(id)?.type === "flock-grid",
+    );
   }
 
   buildPhaseOverlay(name = this.currentCompositionName) {
@@ -221,6 +285,18 @@ export class CompositionDirector {
     if (this.phaseOverlay && this.viewport) this.phaseOverlay.resize(this.viewport);
   }
 
+  phaseOverlayEndpoint(endpoint) {
+    const direction = endpoint?.phase === "start"
+      ? "start"
+      : (endpoint?.phase === "end" ? "end" : null);
+    if (direction === null) return endpoint;
+    // A custom endpoint draws the complete phase through the generator port.
+    // Giving the same phase to the overlay would put text over that endpoint.
+    return this.compositionEndpoints[direction]?.mode === "native"
+      ? endpoint
+      : null;
+  }
+
   update(frame) {
     this.assertUsable();
     if (!this.currentRule) return [];
@@ -234,7 +310,7 @@ export class CompositionDirector {
       this.endpointElapsed,
       this.coreAnimationDuration(),
       this.circleEndpoints,
-      this.endpointAutoDurations(),
+      this.endpointDurations,
     );
     const coreDt = Math.max(0, endpointState.coreTime - this.endpointCoreElapsed);
     // The core clock is paused during an endpoint by zeroing this delta rather
@@ -308,9 +384,12 @@ export class CompositionDirector {
 
     const drawFrame = this.frameForDraw(frame);
     if (drawable.length > 0) this.drawPlan(drawable, drawFrame, context);
-    // The phase overlay sits above the composition: during an intro it is what
-    // the composition is being revealed from.
-    this.phaseOverlay?.draw(drawFrame.compositionEndpoint, context);
+    // Native endpoints and overlays can share a phase. A custom endpoint owns
+    // its phase exclusively because it supplies the complete rendered frame.
+    this.phaseOverlay?.draw(
+      this.phaseOverlayEndpoint(drawFrame.compositionEndpoint),
+      context,
+    );
   }
 
   drawPlan(drawable, frame, context) {
@@ -349,14 +428,11 @@ export class CompositionDirector {
       && frame.exportFrameCount > 0
       && frame.exportFrameIndex === frame.exportFrameCount - 1;
     if (isLastExportFrame && this.circleEndpoints.endWithCircle) {
-      const automaticDurations = this.endpointAutoDurations();
       endpointState = {
         ...endpointState,
         phase: "end",
         progress: 1,
-        durationSeconds: this.circleEndpoints.endWithCircleDurationSeconds === "auto"
-          ? automaticDurations.end
-          : this.circleEndpoints.endWithCircleDurationSeconds,
+        durationSeconds: this.endpointDurations.end,
       };
     }
     return this.frameForCore(frame, endpointState, 0);
@@ -446,6 +522,7 @@ export class CompositionDirector {
         outerElapsed: this.endpointElapsed,
         coreElapsed: this.endpointCoreElapsed,
         coreDuration: this.coreAnimationDuration(),
+        endpointDurations: { ...this.endpointDurations },
         rule: typeof this.currentRule?.inspect === "function"
           ? this.currentRule.inspect()
           : null,
@@ -491,31 +568,43 @@ export class CompositionDirector {
     return animationDurationWithCircleEndpoints(
       this.coreAnimationDuration(),
       this.circleEndpoints,
-      this.endpointAutoDurations(),
+      this.endpointDurations,
     );
   }
 
-  endpointAutoDurations() {
-    const activeIds = [...this.activeGeneratorIds];
-    const configuredIds = compositionGeneratorIds(
-      this.compositionDefinitions.get(this.currentCompositionName),
-    );
-    const ids = activeIds.length > 0 ? activeIds : configuredIds;
+  resolveEndpointDurations(compositionName, definition, circleEndpoints) {
+    const ids = compositionGeneratorIds(definition);
+    const legacyFlock = this.isLegacyFlockComposition(definition);
     const durationFor = (direction) => {
       const configuredDuration = direction === "start"
-        ? this.circleEndpoints.startWithCircleDurationSeconds
-        : this.circleEndpoints.endWithCircleDurationSeconds;
-      if (configuredDuration !== "auto") return configuredDuration;
+        ? circleEndpoints.startWithCircleDurationSeconds
+        : circleEndpoints.endWithCircleDurationSeconds;
+      if (!isAutomaticDurationSetting(configuredDuration)) return configuredDuration;
+      if (!legacyFlock) {
+        throw new Error(
+          `Composition "${compositionName}" left its ${direction} endpoint duration `
+          + `as ${JSON.stringify(configuredDuration)}. Add an explicit composition timing `
+          + "root so config assembly can resolve it before generator creation.",
+        );
+      }
       const orderedIds = direction === "start" ? ids : [...ids].reverse();
       for (const id of orderedIds) {
         const generator = this.generator(id);
         if (typeof generator.endpointAutoDuration !== "function") continue;
         const duration = generator.endpointAutoDuration(direction);
-        if (Number.isFinite(duration) && duration > 0) return duration;
+        if (Number.isFinite(duration) && duration > 0) {
+          return resolveAutomaticDuration(configuredDuration, {
+            label: `Composition "${compositionName}" ${direction} endpoint duration`,
+            candidates: [{ source: `legacy-flock:${id}`, seconds: duration }],
+          }).seconds;
+        }
       }
-      return AUTO_ENDPOINT_FALLBACK_SECONDS;
+      throw new RangeError(
+        `Legacy flock composition "${compositionName}" could not resolve its `
+        + `${direction} endpoint duration.`,
+      );
     };
-    return { start: durationFor("start"), end: durationFor("end") };
+    return Object.freeze({ start: durationFor("start"), end: durationFor("end") });
   }
 
   coreAnimationDuration() {
@@ -540,7 +629,7 @@ export class CompositionDirector {
       time,
       this.coreAnimationDuration(),
       this.circleEndpoints,
-      this.endpointAutoDurations(),
+      this.endpointDurations,
     );
     for (const id of this.activeGeneratorIds) {
       const generator = this.generator(id);
@@ -598,17 +687,7 @@ export class CompositionDirector {
 
   creationContext(name, definition) {
     let options = {};
-    if (
-      definition.settingsKey !== undefined
-      && definition.options !== undefined
-    ) {
-      throw new Error(
-        `Definition "${name}" cannot use both settingsKey and options.`,
-      );
-    }
-    const settingsKey = definition.settingsKey !== undefined
-      ? requireName(definition.settingsKey, `Settings key for definition "${name}"`)
-      : (typeof definition.options === "string" ? definition.options : null);
+    const settingsKey = this.settingsKeyForDefinition(name, definition);
     if (settingsKey !== null) {
       options = this.settings[settingsKey];
       if (!options || typeof options !== "object") {
@@ -629,6 +708,23 @@ export class CompositionDirector {
       runtime: this.runtime,
       director: this,
     };
+  }
+
+  settingsKeyForDefinition(name, definition) {
+    if (
+      definition.settingsKey !== undefined
+      && definition.options !== undefined
+    ) {
+      throw new Error(
+        `Definition "${name}" cannot use both settingsKey and options.`,
+      );
+    }
+    const settingsKey = definition.settingsKey !== undefined
+      ? requireName(definition.settingsKey, `Settings key for definition "${name}"`)
+      : (typeof definition.options === "string" ? definition.options : null);
+    return settingsKey === null
+      ? null
+      : requireName(settingsKey, `Settings key for definition "${name}"`);
   }
 
   generator(name) {

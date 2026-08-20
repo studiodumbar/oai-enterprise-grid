@@ -68,12 +68,13 @@ is not claiming that every ChatGPT response uses a tool.
 Several fixed cells act as competing influence sites. Discrete re-weighting
 passes repartition the surrounding grid into colored territories; cells nearest
 an uncertain boundary remain white, making the whitespace itself describe low
-confidence. The strongest basin survives a consensus face and resolves to its
-farthest non-boundary level-0 parent cell. That large dot runs Dijkstra across
-parent-cell neighbors to the centre and blinks. Its route then subdivides and
-disappears in an accelerating start-to-centre cascade, leaving one large dot at
-the centre. This is a weighted-Voronoi metaphor for distributed competing
-evidence, not a map extracted from a model request.
+confidence. After the strongest basin wins the consensus face, every territory
+retains its farthest non-boundary level-0 parent cell. Those fixed cells animate
+as loaders through the commit and settle body window, then start concurrent
+Dijkstra routes across parent-cell neighbors to the centre during the outro.
+The merged route blinks, subdivides, and disappears in an accelerating cascade,
+leaving one large dot at the centre. This is a weighted-Voronoi metaphor for
+distributed competing evidence, not a map extracted from a model request.
 
 ### L-Tree Branch and Prune — `l-tree`
 
@@ -122,8 +123,9 @@ their actual neighboring geometry for the traced path.
 
 `interactiveGrid.colorTransition.durationSeconds` is the total time for every
 pattern: the first dot starts at zero and the final dot finishes at that exact
-duration regardless of the number of dots in the cell. Its editable
-`timingCurve: [x1, y1, x2, y2]` applies CSS-style cubic-bezier acceleration.
+duration regardless of the number of dots in the cell. `"auto"` resolves to one
+composition beat, which interactive-grid defines as one palette step. Its
+editable `timingCurve: [x1, y1, x2, y2]` applies CSS-style cubic-bezier acceleration.
 Durations longer than one palette step are rejected because the next color
 would otherwise begin before the current pattern could finish.
 Set `cycleThroughPalette: true` to replay the chosen pattern for a complete
@@ -153,13 +155,15 @@ Edit `GLOBAL_CONFIG.composition.active` in `config/global.js`:
 ```js
 composition: {
   active: "voronoi", // or one of the compositions below
-  // Temporary defaults for compositions not migrated to circleEndpoints yet.
+  // Legacy native fallbacks; flock still reads this path.
   startWithCircle: true,
-  startWithCircleDurationSeconds: "auto",
+  startWithCircleDurationSeconds: 2,
   endWithCircle: true,
-  endWithCircleDurationSeconds: "auto",
+  endWithCircleDurationSeconds: 2,
   circleSubdivision: 1,
   circleEndpoints: {
+    // Structured settings override the legacy end enablement above.
+    end: { enabled: true, mode: "dijkstra" },
     modes: {
       dijkstra: {
         trailLength: 1,
@@ -170,12 +174,29 @@ composition: {
 },
 ```
 
-Migrated compositions configure their own endpoint behavior beside their other
-settings. `config/compositions/voronoi.js`, for example, selects `dijkstra` for
-`circleEndpoints.end` and overrides its path, blink, cleanup, and hold timing.
-The module in `src/composition-endpoints/` layers those values over the shared
-mode defaults above without mutating either config. The remaining flat values
-are the native fallback while compositions are migrated one at a time.
+The global end endpoint is `dijkstra` for every finite non-flock composition.
+Every visible parent cell in the final scene starts a concurrent route toward
+the centre. When routes merge, each shared parent cell is rendered once and
+cleaned once rather than stacking duplicate circles or cleanup work. A
+composition may still override the shared path, blink, cleanup, and hold
+settings beside its other options. The resolver in `src/composition-endpoints/`
+layers those values without mutating either config.
+
+`endWithCircle` is not dead code: it remains the native enablement fallback and
+still controls flock. The structured `circleEndpoints.end.enabled` value is the
+authoritative switch for migrated finite compositions.
+
+The route plan freezes when an endpoint first prepares and stays fixed through
+the outro. Most compositions prepare it on their first outro frame. Voronoi has
+an authored handoff: its commit and settle body window retains one far-edge
+source per territory and animates the Dijkstra loading state at each source. The
+exclusive outro resumes that loading state, then runs the actual path reveal,
+blink, cleanup, and centre hold.
+
+A custom endpoint owns its outro phase exclusively. While Dijkstra runs, the
+text phase overlay receives no outro frame and the matching generator-owned
+outro is suppressed, so neither can overlap the route. Flock remains the native
+endpoint exemption and does not use the global Dijkstra selection.
 
 `trailLength` is normalized over `0..1` and controls overlap in the subdivision
 cleanup. `0` changes one path cell at a time, with no changing-cell trail; `1`
@@ -184,13 +205,82 @@ proportion of simultaneously changing cells. It does not shorten the visible
 path or the blink. Cleanup duration and `cleanupAcceleration` still control the
 overall pace, so a separate delay setting is not required.
 
-Endpoint durations wrap the unchanged intermediate timeline. A positive number is
-an explicit duration in seconds. A duration of `"auto"` follows the active
-flicker mode's finite positive `cycleSeconds`; a mode without a cycle falls back
-to the corresponding intro or outro duration. Native `circleSubdivision` values `1`, `2`,
-`4`, `8`, and `16` produce 1, 4, 16, 64, and 256 child cells. Continuous flock
-simulations support the start state but have no finite final frame for an end
-state.
+Endpoint durations wrap the unchanged intermediate timeline. A positive number
+is an explicit duration in seconds. `"auto"` takes the already-resolved duration
+of the matching phase: the start endpoint takes `intro.durationSeconds`, and the
+end endpoint takes `outro.durationSeconds`. Endpoint timing never consults a
+live generator or flicker mode for a non-flock composition. The legacy flat
+`startWithCircleDurationSeconds` and `endWithCircleDurationSeconds` fallbacks use
+the same matching anchors. Native `circleSubdivision` values `1`, `2`, `4`, `8`,
+and `16` produce 1, 4, 16, 64, and 256 child cells. Continuous flock simulations
+stay on their native endpoint path and have no finite final frame for a Dijkstra
+end state.
+
+### Timing and `"auto"` durations
+
+Every canonical non-flock composition recipe owns one explicit timing root:
+
+```js
+compositionDefinitions: {
+  "game-of-life": {
+    rule: "sequence",
+    timing: {
+      bodyDurationSeconds: 24,
+      beatCount: 12,
+    },
+    steps: [{ use: "gameOfLifeAutomaton" }],
+  },
+}
+```
+
+Both values are required: `bodyDurationSeconds` is a finite positive number and
+must never be `"auto"`; `beatCount` is a positive integer. Their quotient defines
+the composition beat:
+
+```text
+beatSeconds = bodyDurationSeconds / beatCount
+```
+
+Legacy generator fields such as `cycleSeconds`, `tokenSeconds`,
+`previewSeconds`, and their pass-count partners may still appear in standalone
+fixtures. When a recipe timing root is present they must match it; a conflicting
+second clock is a startup error.
+
+Automatic durations form a fixed dependency graph. Each field has exactly one
+anchor:
+
+| Authored field | Sole `"auto"` anchor |
+| --- | --- |
+| `timing.bodyDurationSeconds` | None; keep this root explicit. |
+| `flicker.modes.<mode>.cycleSeconds` | `beatSeconds` |
+| `intro.durationSeconds`, `outro.durationSeconds` | `beatSeconds` |
+| `intro/outro.modes.text.visibleSeconds` | 60% hold window of its resolved phase |
+| `cellTransitions.durationSeconds` | The shortest hold between body state changes |
+| `circleEndpoints.start/end.durationSeconds` | The matching resolved intro/outro duration |
+| `interactiveGrid.colorTransition.durationSeconds` | `beatSeconds`; interactive-grid keeps `beatCount` equal to the palette size, so one beat is one palette step |
+
+An explicit number bypasses automatic resolution. The duration fields above
+require a positive value except `text.visibleSeconds`, which also accepts zero
+and caps any requested hold at 60% of its phase. `"auto"` takes the field's
+anchor, while `"calc(auto * n)"` multiplies that same anchor by a positive `n`;
+the text hold applies its cap afterward. No field searches other durations for
+a fallback. A missing anchor is a startup error that names the composition and
+field.
+
+The composition-level graph resolves once during startup into numeric settings.
+`text.visibleSeconds` resolves when its phase plan is created, because the same
+text mode may run in a normal intro and in a shorter explicit endpoint; the
+plan's already-numeric phase duration is its sole timing anchor. Config-resolved
+child durations are not recalculated when a sequence step or active generator
+changes. The resolved phase and endpoint durations stay fixed, but the director
+still asks the active generator for the core `animationDuration()`; that legacy
+value can include generator-owned intro/outro events and still determines total
+export duration. Consolidating that second clock remains Stage 3 work in
+`REFACTOR_PLAN.md`. Other nested mode timings such as `flipSeconds`,
+`staggerSeconds`, and `blendSeconds` remain explicit numbers unless that exact
+field is documented as supporting automatic duration syntax. A public alias
+recipe inherits the timing of its canonical recipe instead of declaring a
+second root.
 
 For quick comparisons, the same choice can be made without editing:
 
@@ -360,6 +450,8 @@ p5js/
 │   ├── grid/
 │   │   ├── circle-grid.js
 │   │   └── subdivision-policy.js
+│   ├── timeline/
+│   │   └── timeline-settings.js  startup timing resolver; single clock pending
 │   ├── cell-transitions/
 │   │   ├── cell-state-buffer.js
 │   │   ├── cell-state-transition.js
@@ -380,6 +472,11 @@ p5js/
     ├── config.test.js
     └── interactive-grid.test.js
 ```
+
+`timeline-settings.js` is the settings half of the timeline refactor. It
+resolves recipe roots and config-level automatic durations at startup, but the
+Stage 3 consolidation of the existing phase and generator clocks has not landed
+yet.
 
 ### The five configuration layers
 
@@ -593,9 +690,10 @@ Every ported loader is authored against a fixed 5x5 matrix. `FieldGeometry` in
 a motif keeps its shape whether the field is the whole board or a single cell.
 Modes that read a literal frame mask (`block-drop`, `prism-bloom`) sample the
 nearest of five virtual rows and columns; `radar-arc` uses the loader's centered
-`-2..2` space. Each mode's own numbers — cycle length, stagger, decay, beam width
-— come straight from the loader, and only `baseIntensity` is normally worth
-retuning, since it sets which swatch an unlit dot rests on.
+`-2..2` space. Each mode's geometry and micro timings — stagger, decay, beam
+width — come from the loader. `cycleSeconds` may instead follow the composition
+beat through the automatic-duration table above. Only `baseIntensity` is
+normally worth retuning, since it sets which swatch an unlit dot rests on.
 
 `echo-ring` keeps the loader's own numbers: rings are Manhattan bands around the
 center, each ring lags `ringDelayFraction` (0.14) of a cycle, odd rings lag
@@ -714,7 +812,7 @@ The app-wide between-state selection lives in `GLOBAL_CONFIG`:
 cellTransitions: {
   enabled: true,
   mode: "sort-selection",
-  durationSeconds: 0.7,
+  durationSeconds: "auto",
   modes: {
     none: { baseKind: "circle" },
     "sort-selection": {
@@ -740,31 +838,42 @@ transition does not replay the intro or extend `animationDuration()`.
 
 `staggerSeconds` requests spacing between selection movements while
 `durationSeconds` remains the complete transition duration. Dense plans compress
-movement and delay proportionally. `timingCurve: [x1, y1, x2, y2]` uses CSS
-cubic-bezier semantics; `[0, 0, 1, 1]` is linear.
+movement and delay proportionally. Here `"auto"` takes the shortest hold between
+body state changes. `timingCurve: [x1, y1, x2, y2]` uses CSS cubic-bezier
+semantics; `[0, 0, 1, 1]` is linear.
 
-Lifecycle settings contain no `state`/`cycle` trigger:
+Lifecycle settings contain no `state`/`cycle` trigger. Intro and outro select
+phase-capable modes such as `fade` and `text`; `sort-selection` is state-only:
 
 ```js
 intro: {
   enabled: true,
-  mode: "sort-selection",
-  durationSeconds: 1,
+  mode: "fade",
+  durationSeconds: "auto",
   modes: {
-    "sort-selection": {
-      seed: 173,
+    fade: {
       revealFraction: 0.6,
-      arcHeightInCells: 0.32,
-      staggerSeconds: 0.02,
       timingCurve: [0.65, 0, 0.35, 1],
     },
   },
-}
+},
+outro: {
+  enabled: true,
+  mode: "text",
+  durationSeconds: "calc(auto * 2)",
+  modes: {
+    text: {
+      text: "Open AI // Cyber",
+      visibleSeconds: 0.8,
+    },
+  },
+},
 ```
 
-When `outro` is absent, it inherits the intro arrangement in reverse without
-adding a duplicate inner phase. A composition can override `cellTransitions`,
-`intro`, or `outro` field by field in its own settings group.
+When a composition omits a local `outro`, it inherits `GLOBAL_CONFIG.outro`.
+Only when that app-wide block is absent does outro fall back to intro. A
+composition can override `cellTransitions`, `intro`, or `outro` field by field
+in its own settings group.
 
 ## Adding a circle animation
 

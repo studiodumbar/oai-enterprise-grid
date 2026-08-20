@@ -9,7 +9,9 @@ import {
   resolveSceneTransitionSettings,
 } from "../src/scene-transitions/index.js";
 import { FadeArrangementMode } from "../src/transitions/fade.js";
-import { TextRevealArrangementMode } from "../src/transitions/text-reveal.js";
+import {
+  TextRevealArrangementMode,
+} from "../src/transitions/text-reveal.js";
 import { captureDebug } from "../src/debug/index.js";
 import { SortSelectionTransitionMode } from "../src/cell-transitions/sort-selection.js";
 import { resolveCellTransitionSettings } from "../src/cell-transitions/transition-settings.js";
@@ -332,6 +334,17 @@ test("intro and outro reuse the same registered mode name in opposite directions
   assert.equal(outro.presentationFor(0).opacity, 0);
 });
 
+test("scene transitions reject unresolved automatic durations before frame arithmetic", () => {
+  assert.throws(
+    () => new SceneTransition({
+      direction: "intro",
+      settings: { enabled: false, durationSeconds: "auto" },
+      modeRegistry: createSceneTransitionModeRegistry(),
+    }),
+    /durationSeconds must resolve to a number before construction/,
+  );
+});
+
 test("the arrangement pool refuses a phase a mode does not declare", () => {
   const registry = createSceneTransitionModeRegistry();
   assert.deepEqual(registry.namesForPhase("intro"), ["fade", "text"]);
@@ -477,7 +490,11 @@ test("fade carries every source and draws each target pose once", () => {
   assert.deepEqual(targetPoses, [{ offsetX: 0, offsetY: 0, opacity: 0.5, scale: 1 }]);
 });
 
-function inferenceGenerator({ cellTransitions = true, outro = false } = {}) {
+function inferenceGenerator({
+  cellTransitions = true,
+  outro = false,
+  compositionEndpoints = false,
+} = {}) {
   return new InferenceGridGenerator({
     name: "transition-separation",
     definition: {
@@ -505,6 +522,21 @@ function inferenceGenerator({ cellTransitions = true, outro = false } = {}) {
         enabled: outro,
         fallbackToIntro: false,
         durationSeconds: 0.25,
+      },
+      circleEndpoints: {
+        ...SETTINGS.inferenceLoop.circleEndpoints,
+        // These tests exercise generator-owned lifecycle phases, so app-wide
+        // endpoint toggles must not suppress the phases under test.
+        start: {
+          ...SETTINGS.inferenceLoop.circleEndpoints.start,
+          enabled: compositionEndpoints,
+          mode: "native",
+        },
+        end: {
+          ...SETTINGS.inferenceLoop.circleEndpoints.end,
+          enabled: compositionEndpoints,
+          mode: compositionEndpoints ? "dijkstra" : "native",
+        },
       },
     },
     runtime: { viewport: () => ({ width: 900, height: 600 }) },
@@ -590,6 +622,37 @@ test("outro, next intro, and cycle occupy consecutive timeline phases", () => {
     generator.animationDuration(),
     generator.options.cycleSeconds + 1.25,
   );
+});
+
+test("composition endpoints replace the matching generator lifecycle phases", () => {
+  const generator = inferenceGenerator({
+    outro: true,
+    compositionEndpoints: true,
+  });
+  generator.enter();
+  generator.update({
+    compositionDt: 0,
+    compositionEndpoint: {
+      phase: "start",
+      progress: 0,
+      durationSeconds: 1,
+      cycleIndex: 0,
+    },
+  });
+  assert.equal(generator.inspect().timelinePhase, "cycle");
+  assert.equal(generator.inspect().intro.active, false);
+  assert.equal(generator.animationDuration(), generator.options.cycleSeconds);
+
+  generator.update({
+    compositionDt: generator.options.cycleSeconds,
+    compositionEndpoint: null,
+  });
+  const nextCycle = generator.inspect();
+  assert.equal(nextCycle.cycleIndex, 1);
+  assert.equal(nextCycle.cycleElapsed, generator.options.cycleSeconds);
+  assert.equal(nextCycle.timelinePhase, "cycle");
+  assert.equal(nextCycle.intro.active, false);
+  assert.equal(nextCycle.outro.active, false);
 });
 
 function recordingContext() {
@@ -795,7 +858,7 @@ test("the text phase cuts through expand, uncover, hold, cover, collapse", () =>
   assert.equal(held.texts[0].baseline, "middle");
   assert.equal(
     held.texts[0].font,
-    "700 300px 'Helvetica Neue', Helvetica, Arial, sans-serif",
+    "700 300px 'OpenAI Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif",
   );
 
   // Offsets nudge the string off the exact centre without moving the ladder.
@@ -828,6 +891,16 @@ test("the held seconds are authored, and clamped to fit the phase", () => {
     assert.equal(textPlan(mode, 1).holdSeconds, 0.6);
   });
   assert.ok(lines.some(line => line.includes("text hold clamped")), lines.join("\n"));
+});
+
+test("text visibleSeconds auto follows the resolved phase hold window", () => {
+  const automatic = textMode({ visibleSeconds: "auto" });
+  assert.equal(textPlan(automatic, 2).holdSeconds, 1.2);
+  assert.equal(textPlan(automatic, 0.5).holdSeconds, 0.3);
+
+  const scaled = textMode({ visibleSeconds: "calc(auto * 0.5)" });
+  assert.equal(textPlan(scaled, 2).holdSeconds, 0.6);
+  assert.throws(() => textMode({ visibleSeconds: "sometimes" }), /visibleSeconds/);
 });
 
 test("the text phase remaps the palette across the ladder and drifts it", () => {

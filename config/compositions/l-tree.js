@@ -8,8 +8,6 @@ export const L_TREE_CONFIG = {
     lTree: {
       longSideCells: 8,
       dotMargin: 0.08,
-      cycleSeconds: 3.4,
-      generations: 4,
       flipSeconds: 0.015,
       // The growing layer flickers, then the surviving route ramps up.
       flicker: {
@@ -20,15 +18,15 @@ export const L_TREE_CONFIG = {
             spatialScale: 3,
           },
           "prism-bloom": {
-            cycleSeconds: 1.25,
-            blendSeconds: 0.75
+            cycleSeconds: "calc(auto * 1.4705882352941178)",
+            blendSeconds: 0.75,
           },
-          "strobe-stack": { 
-             cycleSeconds: 0.5 
-            },
-          "echo-ring":{
-              cycleSeconds: 0.75
-          }
+          "strobe-stack": {
+            cycleSeconds: "calc(auto * 0.5882352941176471)",
+          },
+          "echo-ring": {
+            cycleSeconds: "calc(auto * 0.8823529411764706)",
+          },
         },
         envelope: {
           layerEdgeFraction: 0.5,
@@ -48,6 +46,10 @@ export const L_TREE_CONFIG = {
 
   compositionDefinitions: {
     "l-tree": {
+      timing: {
+        bodyDurationSeconds: 3.4,
+        beatCount: 4,
+      },
       rule: "sequence",
       steps: [{ use: "lTreeGrid" }],
     },

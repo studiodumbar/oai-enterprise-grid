@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+import { SETTINGS } from "../config.js";
 import {
   DEBUG_CHANNEL_NAMES,
   captureDebug,
@@ -119,10 +120,22 @@ test("plain state survives cycles, non-finite numbers, and functions", () => {
 });
 
 test("the headless driver runs a real composition with no browser", async () => {
+  const settings = structuredClone(SETTINGS);
+  settings.composition = {
+    ...settings.composition,
+    startWithCircle: true,
+    startWithCircleDurationSeconds: 0.5,
+  };
+  settings.base.circleEndpoints.start = {
+    ...settings.base.circleEndpoints.start,
+    enabled: true,
+    durationSeconds: 0.5,
+  };
   const run = await runFrames({
     composition: "base",
     frames: 90,
     channels: ["timeline", "transition", "plan"],
+    settings,
   });
 
   assert.equal(run.drawCounts.length, 90);
@@ -157,7 +170,12 @@ test("headless runs are deterministic, so two logs can be diffed", async () => {
 });
 
 test("the headless director exposes draw volume per frame", async () => {
-  const { director, context } = createHeadlessDirector({ composition: "base" });
+  const settings = structuredClone(SETTINGS);
+  settings.base.intro.enabled = false;
+  settings.base.outro.enabled = false;
+  settings.base.circleEndpoints.start.enabled = false;
+  settings.base.circleEndpoints.end.enabled = false;
+  const { director, context } = createHeadlessDirector({ composition: "base", settings });
   const frame = {
     dt: 1 / 60,
     compositionDt: 1 / 60,

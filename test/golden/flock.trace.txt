@@ -1,11 +1,12 @@
 # composition: flock
 # frames: 900
 
-[cg:timeline] f=0000 phase=start cycle=0 duration=6.000 paused=yes
+[cg:timeline] f=0000 phase=start cycle=0 duration=2.000 paused=yes
 [cg:plan] f=0000 enter=flockGrid
 [cg:plan] f=0000 render=[flockGrid@1.00]
 [cg:transition] f=0000 endpoint=start mode=text cycle=0 targets=77 sources=1 padded=0 subdivision=1 unpaired=76
-[cg:timeline] f=0360 phase=core cycle=0 duration=- paused=no
+[cg:transition] f=0000 text hold clamped authored=3 requested=3.000 applied=1.200 phase=2.000
+[cg:timeline] f=0120 phase=core cycle=0 duration=- paused=no
 
 # draw volume
 blankFrames=0

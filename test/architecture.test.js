@@ -151,6 +151,7 @@ test("composition director switches generators through lifecycle contracts", () 
       outerElapsed: 0,
       coreElapsed: 0,
       coreDuration: null,
+      endpointDurations: { start: 1, end: 1 },
       rule: {
         stepIndex: 0,
         stepCount: 2,
@@ -605,7 +606,7 @@ test("the configured flock composition runs through the complete adapter", () =>
     viewport,
     pointer: { active: false, x: 0, y: 0 },
   });
-  const startDuration = director.endpointAutoDurations().start;
+  const startDuration = director.endpointDurations.start;
   const frame = {
     dt: startDuration + 1 / 60,
     time: startDuration + 1 / 60,

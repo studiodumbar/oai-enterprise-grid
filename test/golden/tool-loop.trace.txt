@@ -1,23 +1,53 @@
 # composition: tool-loop
 # frames: 900
 
-[cg:timeline] f=0000 phase=start cycle=0 duration=1.000 paused=yes
+[cg:timeline] f=0000 phase=start cycle=0 duration=2.000 paused=yes
 [cg:plan] f=0000 enter=toolLoopGrid
 [cg:plan] f=0000 render=[toolLoopGrid@1.00]
-[cg:transition] f=0000 endpoint=start mode=fade cycle=0 targets=25 sources=1 padded=0 subdivision=1 unpaired=24
-[cg:timeline] f=0059 phase=core cycle=0 duration=4.000 paused=no
-[cg:timeline] f=0300 phase=end cycle=0 duration=3.000 paused=yes
-[cg:transition] f=0300 endpoint=end mode=fade cycle=0 targets=1 sources=1 padded=0 subdivision=1 unpaired=0
-[cg:timeline] f=0480 phase=start cycle=1 duration=1.000 paused=no
-[cg:transition] f=0480 scene=outro mode=fade targets=1 sources=0 duration=3.000 key=tool:0:route:0:answer:7x3
-[cg:transition] f=0480 endpoint=start mode=fade cycle=1 targets=1 sources=1 padded=0 subdivision=1 unpaired=0
-[cg:timeline] f=0481 phase=start cycle=1 duration=1.000 paused=yes
-[cg:timeline] f=0539 phase=core cycle=1 duration=4.000 paused=no
-[cg:transition] f=0719 scene=intro mode=fade targets=21 sources=0 duration=1.000 key=tool:1:perceive:0:waiting:7x3
-[cg:timeline] f=0779 phase=end cycle=1 duration=3.000 paused=yes
-[cg:transition] f=0779 endpoint=end mode=fade cycle=1 targets=21 sources=1 padded=0 subdivision=1 unpaired=20
+[cg:transition] f=0000 endpoint=start mode=text cycle=0 targets=25 sources=1 padded=0 subdivision=1 unpaired=24
+[cg:transition] f=0000 text hold clamped authored=3 requested=3.000 applied=1.200 phase=2.000
+[cg:transition] f=0000 overlay=intro mode=text
+[cg:transition] f=0000 text hold clamped authored=3 requested=3.000 applied=1.200 phase=2.000
+[cg:timeline] f=0120 phase=core cycle=0 duration=4.000 paused=no
+[cg:transition] f=0120 overlay=- mode=-
+[cg:transition] f=0139 scene=state mode=sort-selection targets=85 sources=25 duration=0.320 key=tool:0:infer:0:waiting:7x3
+[cg:transition] f=0165 scene=state mode=sort-selection targets=17 sources=85 duration=0.320 key=tool:0:infer:1:waiting:7x3
+[cg:transition] f=0192 scene=state mode=sort-selection targets=17 sources=17 duration=0.320 key=tool:0:action:0:tool:7x3
+[cg:transition] f=0211 scene=state mode=sort-selection targets=1 sources=17 duration=0.320 key=tool:0:wait:0:tool:7x3
+[cg:transition] f=0278 scene=state mode=sort-selection targets=75 sources=1 duration=0.320 key=tool:0:observation:0:tool:7x3
+[cg:transition] f=0300 scene=state mode=sort-selection targets=15 sources=75 duration=0.320 key=tool:0:assimilate:0:model:7x3
+[cg:transition] f=0319 scene=state mode=sort-selection targets=34 sources=15 duration=0.320 key=tool:0:assimilate:1:model:7x3
+[cg:transition] f=0338 scene=state mode=sort-selection targets=1 sources=34 duration=0.320 key=tool:0:route:0:answer:7x3
+[cg:timeline] f=0360 phase=end cycle=0 duration=2.000 paused=yes
+[cg:transition] f=0360 endpoint=end mode=dijkstra grid=parent cycle=0 starts=1 center=10 paths=1 cells=3 changing=2 trail=1.000 cost=2.000
+[cg:transition] f=0360 endpoint=end mode=dijkstra stage=loading cycle=0
+[cg:transition] f=0361 endpoint=end mode=dijkstra stage=path cycle=0
+[cg:transition] f=0364 endpoint=end mode=dijkstra stage=blink cycle=0
+[cg:transition] f=0388 endpoint=end mode=dijkstra stage=subdivide cycle=0
+[cg:transition] f=0468 endpoint=end mode=dijkstra stage=center cycle=0
+[cg:timeline] f=0480 phase=start cycle=1 duration=2.000 paused=no
+[cg:transition] f=0480 endpoint=start mode=text cycle=1 targets=21 sources=1 padded=0 subdivision=1 unpaired=20
+[cg:transition] f=0480 text hold clamped authored=3 requested=3.000 applied=1.200 phase=2.000
+[cg:transition] f=0480 overlay=intro mode=text
+[cg:timeline] f=0481 phase=start cycle=1 duration=2.000 paused=yes
+[cg:timeline] f=0599 phase=core cycle=1 duration=4.000 paused=no
+[cg:transition] f=0599 overlay=- mode=-
+[cg:transition] f=0619 scene=state mode=sort-selection targets=6 sources=21 duration=0.320 key=tool:1:infer:0:waiting:7x3
+[cg:transition] f=0645 scene=state mode=sort-selection targets=38 sources=6 duration=0.320 key=tool:1:infer:1:waiting:7x3
+[cg:transition] f=0671 scene=state mode=sort-selection targets=17 sources=38 duration=0.320 key=tool:1:action:0:tool:7x3
+[cg:transition] f=0691 scene=state mode=sort-selection targets=1 sources=17 duration=0.320 key=tool:1:wait:0:tool:7x3
+[cg:transition] f=0758 scene=state mode=sort-selection targets=83 sources=1 duration=0.320 key=tool:1:observation:0:tool:7x3
+[cg:transition] f=0779 scene=state mode=sort-selection targets=46 sources=83 duration=0.320 key=tool:1:assimilate:0:model:7x3
+[cg:transition] f=0799 scene=state mode=sort-selection targets=37 sources=46 duration=0.320 key=tool:1:assimilate:1:model:7x3
+[cg:transition] f=0818 scene=state mode=sort-selection targets=1 sources=37 duration=0.320 key=tool:1:route:0:answer:7x3
+[cg:timeline] f=0839 phase=end cycle=1 duration=2.000 paused=yes
+[cg:transition] f=0839 endpoint=end mode=dijkstra grid=parent cycle=1 starts=1 center=10 paths=1 cells=3 changing=2 trail=1.000 cost=2.000
+[cg:transition] f=0839 endpoint=end mode=dijkstra stage=loading cycle=1
+[cg:transition] f=0841 endpoint=end mode=dijkstra stage=path cycle=1
+[cg:transition] f=0844 endpoint=end mode=dijkstra stage=blink cycle=1
+[cg:transition] f=0868 endpoint=end mode=dijkstra stage=subdivide cycle=1
 
 # draw volume
-blankFrames=8
+blankFrames=24
 firstDrawnFrame=0
-totalFill=11243
+totalFill=53788

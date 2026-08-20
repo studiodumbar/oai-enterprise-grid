@@ -18,31 +18,41 @@ export const GLOBAL_CONFIG = {
 
   composition: {
     // flock,
-    // base, // ok
-    // interactive-grid,
-    // inference-loop, // BUG: intro is weird
+    // base
+    // interactive-grid
+    // inference-loop
+    // l-tree
+    // tool-loop
+    // context-window
     // game-of-life
-    // l-tree,
     // voronoi,
-    // tool-loop,
-    // context-window,
-    active: "voronoi",
+    active: "game-of-life",
     // Legacy phase defaults stay flat while compositions are migrated one by
     // one. A migrated composition overrides them through circleEndpoints.
-    startWithCircle: false,
-    startWithCircleDurationSeconds: "auto", // "auto" or a duration in seconds.
-    endWithCircle: false,
-    endWithCircleDurationSeconds: "auto", // "auto" or a duration in seconds.
+    startWithCircle: true,
+    // A number is an explicit override. "auto" reuses the resolved intro.
+    startWithCircleDurationSeconds: 2,
+    endWithCircle: true,
+    // calc(auto * n) scales the resolved outro.
+    endWithCircleDurationSeconds: 2,
     circleSubdivision: 1, // 1, 2, 4, 8, or 16.
     circleEndpoints: {
+      // Every finite non-flock composition uses the shared path-to-centre outro.
+      // Flock remains on its exempt native endpoint path.
+      end: {
+        enabled: true,
+        mode: "dijkstra",
+      },
       // Shared mode defaults. Per-composition values override these by key.
       modes: {
         // Searches cardinal neighbors on the composition's parent-cell grid.
         dijkstra: {
-          pathFraction: 0.4,
+          // Shares of the numeric end duration. The path share includes the
+          // initial loader; cleanup receives the unallocated middle window.
+          pathFraction: 0.04,
           blinkFraction: 0.2,
           centerHoldFraction: 0.1,
-          blinkCount: 2,
+          blinkCount: 6,
           // Cleanup overlap: 0 changes one cell; 1 changes the full path together.
           trailLength: 1,
           maximumLevel: 3,
@@ -62,7 +72,8 @@ export const GLOBAL_CONFIG = {
   cellTransitions: {
     enabled: true,
     mode: "sort-selection",
-    durationSeconds: 1, // should support auto option
+    // "auto" uses the active composition's shortest state hold.
+    durationSeconds: 'auto',
     modes: {
       none: {
         baseKind: "circle",
@@ -77,34 +88,27 @@ export const GLOBAL_CONFIG = {
     },
   },
 
-  // App-wide cycle entrance, shared with the intro/outro circle endpoints
-  // above. A composition can override any field by adding its own `intro` block
-  // beside its palette/flicker settings. The modes usable here are the ones
-  // that declare the intro/outro phases in src/transitions/index.js.
   intro: {
     enabled: true,
-    // fade — reveal the centered circle grid, then crossfade the composition in.
-    // text — build a ladder of subdivided cells out from the centre, slide it
-    //        away and hand the screen to a centered string.
-    mode: "text",
-    durationSeconds: 2,
+    mode: "text", // text, fade
+    durationSeconds: 3, // auto = one beat of the active composition
     modes: {
       fade: {
         // Share of the phase spent fading the centered circle grid up before it
         // crossfades into the composition. 0 makes it a plain fade-in.
         revealFraction: 0.5,
-        // CSS cubic-bezier control points: [x1, y1, x2, y2].
-        timingCurve: [0.42, 0, 0.58, 1],
+        timingCurve: [0.42, 0, 0.58, 1], // CSS cubic-bezier control points: [x1, y1, x2, y2].
       },
       text: {
         text: "Open AI // Cyber",
-        fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif",
+        fontFamily: "'OpenAI Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif",
         fontWeight: 600,
         sizeInCells: 0.5,
         // Pixels from the exact canvas centre.
         offsetX: 0,
         offsetY: 0,
-        visibleSeconds: 2,
+        // "auto" uses the text mode's maximum hold window (60% of its phase).
+        visibleSeconds: 3,
         colorDrift: 3,
         // null takes `canvas.background`.
         backgroundColor: null,
@@ -125,7 +129,7 @@ export const GLOBAL_CONFIG = {
   // Mode settings not repeated here fall back to the intro's.
   outro: {
     enabled: true,
-    mode: "fade",
+    mode: "text",
     durationSeconds: 3,
     modes: {
       fade: {
@@ -156,32 +160,32 @@ export const GLOBAL_CONFIG = {
       },
       // diamond rings pulse outward 
       "echo-ring": {
-        // cycleSeconds: 1,
+        cycleSeconds: "auto",
         ringDelayFraction: 0.14,
         echoDelayFraction: 0.03,
         ringCount: 5,
       },
       // Columns stack upward on a stagger 
       "strobe-stack": {
-        // cycleSeconds: 1.43,
+        cycleSeconds: "auto",
         columns: 5,
         rows: 5,
         baseIntensity: 0.08,
       },
       // Frames drop and pile up 
       "block-drop": {
-        // cycleSeconds: 1.41,
+        cycleSeconds: "auto",
         baseIntensity: 0.08,
       },
       // A kaleidoscope breathing out
       "prism-bloom": {
-        // cycleSeconds: 0.75,
+        cycleSeconds: "auto",
         blendSeconds: 0.38,
         baseIntensity: 0.08,
       },
       // A scanline steps down the field, leaving a decaying trail
       "crt-glide": {
-        // cycleSeconds: 0.6,
+        cycleSeconds: "auto",
         rows: 5,
         decay: 0.72,
         columnWarp: 0.07,
@@ -190,7 +194,7 @@ export const GLOBAL_CONFIG = {
       },
       // A rotating arm sweeps the field
       "radar-arc": { // kinda looks like ass
-        // cycleSeconds: 1,
+        cycleSeconds: "auto",
         gridSteps: 5,
         beamWidth: 0.55,
         wakeWidth: 1.15,

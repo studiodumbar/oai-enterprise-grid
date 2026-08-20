@@ -374,14 +374,24 @@ test("the composition-endpoint frame maps per-glyph loader steps through its pal
   generator.dispose();
 });
 
-test("endpoint preparation replaces the authored handoff scene through one draw path", () => {
+test("custom endpoint preparation draws only in the body and hands off to the end", () => {
   const generator = voronoiGenerator("canvas");
-  let received = null;
-  generator.scene = { ...generator.scene, endpointPreparationProgress: 0.5 };
+  const preparationInputs = [];
+  const endInputs = [];
   generator.endCompositionEndpoint = {
     reset() {},
     preparationFrameAt(input) {
-      received = input;
+      preparationInputs.push(input);
+      return {
+        layout: input.layout,
+        cells: [{ index: 0, level: 2 }],
+        paletteStep: 2,
+        flicker: false,
+        flickerAmount: 0,
+      };
+    },
+    frameAt(input) {
+      endInputs.push(input);
       return {
         layout: input.layout,
         cells: [{ index: 0, level: 0 }],
@@ -391,12 +401,41 @@ test("endpoint preparation replaces the authored handoff scene through one draw 
       };
     },
   };
+  generator.scene = { endpointPreparationProgress: 0.5 };
 
-  const context = recordingContext();
-  generator.draw({}, {}, context);
+  const bodyContext = recordingContext();
+  generator.draw({ time: 1 }, {}, bodyContext);
+  assert.equal(preparationInputs.length, 1);
+  assert.equal(preparationInputs[0].progress, 0.5);
+  assert.equal(preparationInputs[0].scene, generator.scene);
+  assert.equal(bodyContext.glyphs.length, 16);
 
-  assert.equal(received.progress, 0.5);
-  assert.equal(received.scene, generator.scene);
-  assert.equal(context.glyphs.length, 1);
+  const startContext = recordingContext();
+  generator.draw({
+    compositionEndpoint: {
+      phase: "start",
+      cycleIndex: 0,
+      progress: 0.5,
+      durationSeconds: 2,
+    },
+  }, {}, startContext);
+  assert.equal(preparationInputs.length, 1);
+  assert.equal(endInputs.length, 0);
+  assert.equal(startContext.glyphs.length, 0);
+
+  const endContext = recordingContext();
+  generator.draw({
+    compositionEndpoint: {
+      phase: "end",
+      cycleIndex: 0,
+      progress: 0,
+      durationSeconds: 2,
+    },
+  }, {}, endContext);
+  assert.equal(preparationInputs.length, 1);
+  assert.equal(endInputs.length, 1);
+  assert.equal(endInputs[0].progress, 0);
+  assert.equal(endInputs[0].scene, generator.scene);
+  assert.equal(endContext.glyphs.length, 1);
   generator.dispose();
 });

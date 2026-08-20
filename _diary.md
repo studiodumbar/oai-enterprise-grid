@@ -10,7 +10,7 @@
 [] Too dense
 [] Scanning worked well
 [] Clear movements that feel organic
-
+[] sort selection ramp up
 
 [ === wip === ]
 

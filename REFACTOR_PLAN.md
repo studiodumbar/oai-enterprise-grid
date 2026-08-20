@@ -49,6 +49,11 @@ failure the owner reported.
 | 7 | **Presentation is applied four different ways**, with different guards and — in `circle-grid.js` — inside an already-rotated parent transform, so world-space plan deltas get rotated and scaled. Latent, currently masked because the only production cell transition pins rotation to 0 and scale to 1. | `base-composition-generator.js:413`, `circle-grid.js:234-255`, `circle-grid-scene-generator.js:806-823`, `interactive-grid-generator.js:1539-1548` | inconsistent behavior per composition |
 | 8 | **`seek()` diverges from playback.** Generator `seek()` replays with synthesized frames that omit `compositionEndpoint`, so the intro-suppression guard never fires during restore. `seek()` also never touches `SequenceRule.index`/`elapsedSeconds`. | `base-composition-generator.js:504-516`, `composition-director.js:445-469` | undo/restore showing a different image than playback |
 
+The table records the pre-refactor evidence. The endpoint-duration half of cause
+5 is now addressed for non-flock compositions by the deterministic settings
+work documented under “Landed ahead of Stage 3”. The active generator still
+supplies the legacy core/export duration, so the competing-clock half remains.
+
 ### 1.3 Measured, after Stage 1
 
 The debug channels turned the diagnosis into measurement. Every number below is
@@ -139,7 +144,8 @@ src/timeline/
   timeline.js              The single clock. Phases: intro | body | outro.
                            advance(dt) → { phase, progress, cycleIndex, bodyTime }.
                            Pure and testable; no generator, no p5.
-  timeline-settings.js     Resolve + validate durations, including "auto".
+  timeline-settings.js     LANDED EARLY: resolve + validate recipe roots and
+                           config-level "auto" fields at startup.
 
 src/transitions/
   index.js                 Mode registry, built on the flicker-registry shape:
@@ -365,6 +371,14 @@ the timeline work, and because `sort-selection` was the only registered mode:
   including those with no transition wiring (§1.2, cause 6) and draws exactly
   once per frame. `director.inspect()` reports it, and the `transition` channel
   logs each overlay phase change.
+- The global finite non-flock end endpoint now selects `dijkstra`; flock keeps
+  its native exemption. Every visible final parent cell routes concurrently to
+  the centre, while merged route cells render and clean up once. A custom
+  endpoint owns the outro phase exclusively, so the director withholds the text
+  overlay and the matching generator-owned outro timing cannot run underneath
+  it. Voronoi prepares one far-edge source per territory during its commit and
+  settle body window, where all sources show the loading state; the frozen plan
+  starts pathfinding only when the exclusive Dijkstra outro begins.
 
 Still owed by Stage 2: merging the two settings resolvers, splitting the
 CellShaper port out of the cell-transition registry, the one
@@ -399,15 +413,59 @@ Mechanical and behavior-preserving.
 field names as public contract — renames will break it without any behavior
 change. Those assertions get rewritten to go through constructors.
 
+### Landed ahead of Stage 3 — deterministic timing settings
+
+The settings half of Stage 3 landed without claiming that the clocks have been
+unified:
+
+- Every canonical non-flock composition recipe declares
+  `timing: { bodyDurationSeconds, beatCount }`. The body duration is an explicit
+  positive number, the beat count is a positive integer, and
+  `beatSeconds = bodyDurationSeconds / beatCount`. Alias recipes inherit their
+  canonical recipe's root.
+- `src/timeline/timeline-settings.js` validates the recipe root and resolves a
+  field against its single named anchor. Config assembly compiles phase and
+  endpoint durations, injects the resolved recipe timing into its generators,
+  and the director stores the endpoint result once. Generator-specific flicker
+  and state-hold anchors resolve once when those generators are constructed.
+  Changing the active generator cannot change those resolved settings, but it
+  can still change the legacy core/export duration until Stage 3.
+- Migrated endpoint `"auto"` durations reuse the matching resolved intro/outro
+  duration and never ask a live generator. Flock retains its exempt legacy path,
+  but resolves that path once rather than on every frame.
+- An explicit number bypasses automatic resolution. `"auto"` uses a field's sole
+  anchor and `"calc(auto * n)"` scales only that anchor. A missing anchor throws
+  during startup. Nested micro timings remain explicit unless their field
+  documents automatic syntax. Text `visibleSeconds` is the exception: it
+  resolves when its phase plan is built and caps every request at the 60% hold
+  window, because an explicit endpoint can be shorter than the intro whose mode
+  it uses.
+
+The dependency table is:
+
+| Field | Sole `"auto"` anchor |
+|---|---|
+| flicker `cycleSeconds` | composition `beatSeconds` |
+| intro/outro `durationSeconds` | composition `beatSeconds` |
+| text `visibleSeconds` | 60% hold window of its resolved phase |
+| cell-transition `durationSeconds` | shortest body-state hold |
+| start/end endpoint `durationSeconds` | matching resolved intro/outro |
+| interactive color-transition `durationSeconds` | `beatSeconds`; one palette step |
+
+`timeline.js`, one cycle definition, and removal of the competing generator
+clocks remain Stage 3 work.
+
 ### Stage 3 — Single timeline owner
 
-- Introduce `src/timeline/`. One clock, phases `intro | body | outro`, one
-  definition of a cycle.
+- Finish `src/timeline/` with `timeline.js`. One clock, phases
+  `intro | body | outro`, one definition of a cycle. The settings resolver above
+  is only the first half.
 - The director owns it and publishes `frame.stage`. Generators own no transition
   clock.
-- Resolve `"auto"` durations from settings, not by asking a generator that may
-  not exist yet. This also removes the side effect where `endpointAutoDurations()`
-  eagerly constructs every generator named in a definition.
+- Keep `timeline-settings.js` as the composition-root and config-level duration
+  resolver, with `automatic-duration.js` as the shared syntax parser. The unified
+  runtime clock must consume resolved timing instead of deriving it from active
+  generator state.
 - Delete the dead `frame.endpointDt` field and the four divergent
   `endpointAutoDuration` implementations.
 - Fix `seek()`: restore `SequenceRule` position, and replay with frames that
@@ -483,8 +541,6 @@ before Stage 1.
   field appear to disagree.
 - `config/global.js:16` — `// BUG: intro is weird` on inference-loop. Covered by
   §1.2 causes 2 and 4; verify against the golden snapshot after Stage 4.
-- `config/global.js:65` — `// should support auto option` on the cell-transition
-  duration. This belongs with the single clock in Stage 3.
 - `config/global.js:128` — `// kinda looks like ass` on the `radar-arc` flicker
   mode. Aesthetic, not structural.
 - `config/compositions/inference-loop.js:11` — stray indentation left by the

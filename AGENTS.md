@@ -158,6 +158,10 @@ src/compositions/     Composition rules.
 src/composition-endpoints/  Resolves global endpoint defaults with local
                       composition overrides. `dijkstra` searches and cleans up
                       on the parent-cell grid.
+src/timeline/
+  timeline-settings.js     Resolves recipe roots and config-level auto timings.
+                           This is the settings half of Stage 3; the single
+                           timeline clock has not landed yet.
 src/transitions/      The shared arrangement pool. index.js is the registry:
                       every mode declares which phases (intro | outro | state)
                       it supports, plus its defaults. fade.js and
@@ -175,7 +179,7 @@ Not yet created — see REFACTOR_PLAN.md for which stage lands each:
 src/debug/            Debug channels, sink, headless frame driver.  (Stage 1)
 src/cell-state/       The per-cell buffer writer, split out of the
                       transition registry.                          (Stage 2)
-src/timeline/         The single clock: intro | body | outro.        (Stage 3)
+src/timeline/timeline.js  The single clock: intro | body | outro.    (Stage 3)
 
 Until those land, the equivalent code lives in src/scene-transitions/,
 src/cell-transitions/, src/compositions/circle-endpoints.js, and the new
@@ -236,6 +240,55 @@ config modules are never mutated — resolution produces new objects. A missing
 `SETTINGS.<key>` referenced by a definition is a startup error, not a silent
 default.
 
+### Timing resolution
+
+Every canonical non-flock composition recipe must declare timing beside its
+rule and steps:
+
+```js
+compositionDefinitions: {
+  example: {
+    rule: "sequence",
+    timing: { bodyDurationSeconds: 6, beatCount: 6 },
+    steps: [{ use: "exampleGrid" }],
+  },
+}
+```
+
+`bodyDurationSeconds` is the explicit positive root and `beatCount` is a
+positive integer. The resolver derives
+`beatSeconds = bodyDurationSeconds / beatCount` once at startup, then resolves
+each supported automatic field from one anchor:
+
+Legacy generator clock aliases remain usable only when no recipe timing is
+present or when they exactly match it. Conflicting duplicate clocks must throw
+at startup.
+
+| Field | `"auto"` anchor |
+|---|---|
+| flicker `cycleSeconds` | `beatSeconds` |
+| intro/outro `durationSeconds` | `beatSeconds` |
+| text `visibleSeconds` | 60% hold window of its resolved phase |
+| cell-transition `durationSeconds` | shortest state hold |
+| start/end endpoint `durationSeconds` | matching resolved intro/outro |
+| interactive color-transition `durationSeconds` | `beatSeconds`, one palette step |
+
+Explicit numbers bypass automatic resolution. The fields above require positive
+values except text `visibleSeconds`, which also accepts zero and caps any request
+at its 60% phase window. `"calc(auto * n)"` scales only that field's anchor by a
+positive `n`; the text cap applies afterward, and no resolver searches a
+fallback chain. A missing anchor throws at startup, naming the composition and
+field. Non-flock endpoint resolution never queries live generators; flock
+retains its one-time legacy path under §8. Interactive-grid keeps `beatCount`
+aligned with the palette size. The composition-level graph resolves at startup;
+text `visibleSeconds` resolves when its phase plan is created from that plan's
+numeric duration. Resolved phase and endpoint durations stay fixed, but the
+director's core/export duration still comes from the active generator's legacy
+`animationDuration()` until Stage 3. Other nested micro timings such as
+`flipSeconds`, `staggerSeconds`, and `blendSeconds` stay explicit unless that
+exact field documents automatic syntax. Alias recipes inherit their canonical
+recipe's timing instead of declaring another root.
+
 ## 7. House rules
 
 1. **Read `REFACTOR_PLAN.md` before structural work.** It says what is
@@ -281,26 +334,34 @@ cut — the mode never fades or slides, and the composition cuts in as the phase
 ends. It is the one mode that draws through the overlay port, and the only one
 that needs a palette (it remaps the composition's palette across the ladder's
 levels, or across the dots inside each cell). `sort-selection` is `state`-only — driven from
-one centered circle it degenerates into an offscreen slide-in. The generator's
-own per-cycle intro/outro still runs on its own clock beside the endpoint, which
-is Stage 3 work.
+one centered circle it degenerates into an offscreen slide-in. A generator's
+per-cycle lifecycle still owns a boundary with no matching composition endpoint,
+which remains Stage 3 clock work. An enabled composition endpoint suppresses the
+matching generator lifecycle timing instead of running beside it.
 
-Composition endpoints are configured separately in `circleEndpoints`. Voronoi
-currently overrides the global native fallback with `dijkstra`: its retained
-level-0 parent cell is selected from the far edge of the winning basin, searches
-across parent-cell neighbors, blinks, then runs a ramped subdivision cleanup
-ending at the centre. `trailLength` maps `0..1` onto the computed path: zero
+Composition endpoints are configured separately in `circleEndpoints`. The
+global non-flock end mode is `dijkstra`; flock remains on its exempt native path.
+Every visible final parent cell searches concurrently across cardinal neighbors
+toward the centre. Route cells shared by several paths are rendered once and
+cleaned once. Most compositions freeze that source set on the first outro frame.
+Voronoi deliberately prepares earlier: its commit and settle body window keeps
+one far-edge level-0 parent cell per territory and animates a loader at every
+source. The exclusive outro resumes that frozen loading state, then begins the
+paths. The routes blink, then run a ramped subdivision cleanup ending at one
+centre cell. `trailLength` maps `0..1` onto the computed cleanup set: zero
 changes one cleanup cell at a time, while one overlaps subdivision across every
-removable path cell. It does not alter pathfinding or blink visibility.
-Shared mode defaults live under `GLOBAL_CONFIG.composition.circleEndpoints`;
-composition values override them by key.
+removable route cell. It does not alter pathfinding or blink visibility. A custom
+endpoint owns its outro phase exclusively: the text overlay receives no frame
+and the matching generator outro is suppressed. Shared mode defaults live under
+`GLOBAL_CONFIG.composition.circleEndpoints`; composition values override them by
+key.
 
 **Half-finished features.** The remaining `intro`/`outro` defects are the
-timeline ones — two layers deciding the cycle restarts, and durations derived
-from mutable runtime state. Do not patch them case by case; see
-`REFACTOR_PLAN.md`. Specifically, do not "fix" a composition by adding a guard
-that special-cases it — that is how the current three-competing-drivers
-situation arose.
+clock-ownership ones — two layers still decide the cycle restarts. The startup
+timing resolver has landed, but the single Stage 3 clock has not. Do not patch
+these defects case by case; see `REFACTOR_PLAN.md`. Specifically, do not "fix" a
+composition by adding a guard that special-cases it — that is how the current
+three-competing-drivers situation arose.
 
 ---
 
@@ -345,8 +406,10 @@ viewport, not a generator layout: it takes its cell size from the composition's
 blocks, import it in `config.js`. Reuse an existing generator type where
 possible; a new generator type is a much larger commitment.
 
-**Change timing** → do not add a clock. There is one timeline owner. Read
-`src/timeline/` first.
+**Change timing** → use `src/timeline/timeline-settings.js` for recipe roots and
+config-level automatic fields. A deliberately supported mode-local field reuses
+`src/core/automatic-duration.js`; never add another clock or fallback chain. The
+Stage 3 clock consolidation is still pending.
 
 **Debug a visual glitch** → enable the relevant channels, run the headless
 driver for the composition, diff the log across frames. Do not read pixels.

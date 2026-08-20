@@ -151,78 +151,163 @@ export class DijkstraCompositionEndpoint {
     return row * layout.columns + column;
   }
 
-  startIndex(layout, scene) {
-    const index = scene?.endpointCellIndex;
-    const cellCount = layout.columns * layout.rows;
-    if (
-      !Number.isSafeInteger(index)
-      || index < 0
-      || index >= cellCount
-    ) {
-      throw new Error(
-        "dijkstra endpoint needs one endpoint parent cell.",
-      );
-    }
-    return index;
+  normalizedStartIndices(indices, cellCount) {
+    if (!Array.isArray(indices) && !ArrayBuffer.isView(indices)) return [];
+    return [...new Set(Array.from(indices).filter(index => (
+      Number.isSafeInteger(index)
+      && index >= 0
+      && index < cellCount
+    )))].sort((first, second) => first - second);
   }
 
-  createPlan({ layout, scene, cycleIndex = 0 }) {
-    const startIndex = this.startIndex(layout, scene);
-    const centerIndex = this.centerIndex(layout);
+  startIndices(layout, scene) {
     const cellCount = layout.columns * layout.rows;
-    const territoryByIndex = scene.territoryByIndex;
-    const startTerritory = Array.isArray(territoryByIndex)
-      ? territoryByIndex[startIndex]
-      : null;
-    const traversalCosts = Array.from({ length: cellCount }, (_, index) => (
-      startTerritory !== null && territoryByIndex[index] !== startTerritory
+    // Non-grid generators publish explicit parent cells; grid scenes remain
+    // portable by deriving the same contract from their final visible faces.
+    const explicit = this.normalizedStartIndices(
+      scene?.endpointCellIndices,
+      cellCount,
+    );
+    if (explicit.length > 0) return explicit;
+
+    if (Array.isArray(scene?.faces)) {
+      const visible = scene.faces.slice(0, cellCount).flatMap((face, index) => (
+        Number.isSafeInteger(face?.level) && face.level >= 0 ? [index] : []
+      ));
+      if (visible.length > 0) return visible;
+    }
+
+    return [this.centerIndex(layout)];
+  }
+
+  traversalCostsFor(startIndex, territoryByIndex, cellCount) {
+    if (
+      (!Array.isArray(territoryByIndex) && !ArrayBuffer.isView(territoryByIndex))
+      || territoryByIndex.length !== cellCount
+    ) {
+      return new Array(cellCount).fill(1);
+    }
+    const startTerritory = territoryByIndex[startIndex];
+    return Array.from({ length: cellCount }, (_, index) => (
+      territoryByIndex[index] !== startTerritory
         ? this.foreignTerritoryCost
         : 1
     ));
-    const search = runPathfindingSearch({
-      strategy: "dijkstra",
-      layout,
-      startIndex,
-      goalIndex: centerIndex,
-      traversalCosts,
-    });
-    if (!search.found) {
-      throw new Error(
-        `dijkstra endpoint could not reach center cell ${centerIndex} from ${startIndex}.`,
-      );
+  }
+
+  cleanupIndicesFor(paths, centerIndex) {
+    const remainingStepsByIndex = new Map();
+    for (const path of paths) {
+      for (let order = 0; order < path.pathIndices.length - 1; order += 1) {
+        const index = path.pathIndices[order];
+        if (index === centerIndex) continue;
+        const remainingSteps = path.pathIndices.length - 1 - order;
+        const previousSteps = remainingStepsByIndex.get(index);
+        remainingStepsByIndex.set(
+          index,
+          previousSteps === undefined
+            ? remainingSteps
+            : Math.min(previousSteps, remainingSteps),
+        );
+      }
     }
-    const removableCount = Math.max(0, search.pathIndices.length - 1);
+    // A shared cell uses its closest-to-center position, so one branch cannot
+    // clean a merged route before every contributing branch reaches it.
+    return [...remainingStepsByIndex].sort((first, second) => (
+      second[1] - first[1]
+      || first[0] - second[0]
+    )).map(([index]) => index);
+  }
+
+  uniquePathIndices(paths) {
+    const indices = [];
+    const seen = new Set();
+    for (const path of paths) {
+      for (const index of path.pathIndices) {
+        if (seen.has(index)) continue;
+        seen.add(index);
+        indices.push(index);
+      }
+    }
+    return indices;
+  }
+
+  createPlan({ layout, scene, cycleIndex = 0, startIndices = null }) {
+    const resolvedStartIndices = startIndices ?? this.startIndices(layout, scene);
+    const centerIndex = this.centerIndex(layout);
+    const cellCount = layout.columns * layout.rows;
+    const territoryByIndex = scene?.territoryByIndex;
+    const paths = resolvedStartIndices.map(startIndex => {
+      const search = runPathfindingSearch({
+        strategy: "dijkstra",
+        layout,
+        startIndex,
+        goalIndex: centerIndex,
+        traversalCosts: this.traversalCostsFor(
+          startIndex,
+          territoryByIndex,
+          cellCount,
+        ),
+      });
+      if (!search.found) {
+        throw new Error(
+          `dijkstra endpoint could not reach center cell ${centerIndex} from ${startIndex}.`,
+        );
+      }
+      return {
+        startIndex,
+        pathIndices: search.pathIndices,
+        pathCost: search.pathCost,
+      };
+    });
+    const pathIndices = this.uniquePathIndices(paths);
+    const cleanupIndices = this.cleanupIndicesFor(paths, centerIndex);
+    const removableCount = cleanupIndices.length;
     const changingCellCount = removableCount === 0
       ? 0
       : 1 + Math.round(this.trailLength * (removableCount - 1));
+    const pathCost = paths.reduce((total, path) => total + path.pathCost, 0);
+    const maximumPathLength = Math.max(
+      1,
+      ...paths.map(path => path.pathIndices.length),
+    );
     debug.transition(
-      "endpoint=end mode=dijkstra grid=parent cycle=%d start=%d center=%d path=%d changing=%d trail=%.3f cost=%.3f",
+      "endpoint=end mode=dijkstra grid=parent cycle=%d starts=%d center=%d paths=%d cells=%d changing=%d trail=%.3f cost=%.3f",
       cycleIndex,
-      startIndex,
+      resolvedStartIndices.length,
       centerIndex,
-      search.pathIndices.length,
+      paths.length,
+      pathIndices.length,
       changingCellCount,
       this.trailLength,
-      search.pathCost,
+      pathCost,
     );
     return {
       cycleIndex,
-      startIndex,
+      startIndices: [...resolvedStartIndices],
       centerIndex,
-      pathIndices: search.pathIndices,
+      paths,
+      pathIndices,
+      cleanupIndices,
+      maximumPathLength,
       changingCellCount,
-      pathCost: search.pathCost,
+      pathCost,
       layout: { ...layout },
       cellCount,
     };
   }
 
   prepare({ layout, scene, cycleIndex = 0 }) {
+    // Capture the final body scene on its first preparation frame, or on the
+    // first end-phase frame when a composition does not prepare. Later edits
+    // belong to the next cycle and cannot reroute an outro in flight.
     const key = [
       cycleIndex,
       layout.columns,
       layout.rows,
-      scene?.endpointCellIndex,
+      layout.cellSize,
+      layout.offsetX,
+      layout.offsetY,
     ].join(":");
     if (key !== this.planKey) {
       this.plan = this.createPlan({ layout, scene, cycleIndex });
@@ -233,7 +318,7 @@ export class DijkstraCompositionEndpoint {
   }
 
   loadingEndProgress(plan) {
-    return this.pathFraction / Math.max(1, plan.pathIndices.length);
+    return this.pathFraction / plan.maximumPathLength;
   }
 
   stageAt(progress, plan) {
@@ -245,13 +330,27 @@ export class DijkstraCompositionEndpoint {
     return "subdivide";
   }
 
-  visiblePathLength(plan, progress) {
-    if (plan.pathIndices.length <= 1) return 1;
+  visiblePathLength(plan, path, progress) {
+    if (path.pathIndices.length <= 1) return 1;
     const local = clamp01(progress / this.pathFraction);
     return Math.min(
-      plan.pathIndices.length,
-      1 + Math.floor(local * plan.pathIndices.length),
+      path.pathIndices.length,
+      1 + Math.floor(local * plan.maximumPathLength),
     );
+  }
+
+  visiblePathIndices(plan, progress) {
+    const visible = [];
+    const seen = new Set();
+    for (const path of plan.paths) {
+      const length = this.visiblePathLength(plan, path, progress);
+      for (const index of path.pathIndices.slice(0, length)) {
+        if (seen.has(index)) continue;
+        seen.add(index);
+        visible.push(index);
+      }
+    }
+    return visible;
   }
 
   blinkVisible(progress) {
@@ -282,15 +381,16 @@ export class DijkstraCompositionEndpoint {
       flicker: cleanupStage,
       flickerAmount: cleanupStage ? 1 : 0,
       pathIndices: [...plan.pathIndices],
+      startIndices: [...plan.startIndices],
       changingCellCount: plan.changingCellCount,
       trailLength: this.trailLength,
       centerIndex: plan.centerIndex,
     };
   }
 
-  loadingCell(plan, progress) {
+  loadingCell(index, progress) {
     return {
-      index: plan.startIndex,
+      index,
       level: LOADING_LEVEL,
       paletteSteps: loadingPaletteSteps(progress, this.paletteStep),
     };
@@ -302,7 +402,7 @@ export class DijkstraCompositionEndpoint {
     return this.endpointFrame(
       plan,
       "loading",
-      [this.loadingCell(plan, clamp01(progress))],
+      plan.startIndices.map(index => this.loadingCell(index, clamp01(progress))),
     );
   }
 
@@ -315,12 +415,14 @@ export class DijkstraCompositionEndpoint {
     const drawCell = (index, level = 0) => cells.push({ index, level });
 
     if (stage === "loading") {
-      cells.push(this.loadingCell(
-        plan,
-        1 + amount / this.loadingEndProgress(plan),
-      ));
+      for (const index of plan.startIndices) {
+        cells.push(this.loadingCell(
+          index,
+          1 + amount / this.loadingEndProgress(plan),
+        ));
+      }
     } else if (stage === "path") {
-      for (const index of plan.pathIndices.slice(0, this.visiblePathLength(plan, amount))) {
+      for (const index of this.visiblePathIndices(plan, amount)) {
         drawCell(index);
       }
     } else if (stage === "blink") {
@@ -328,7 +430,7 @@ export class DijkstraCompositionEndpoint {
         for (const index of plan.pathIndices) drawCell(index);
       }
     } else if (stage === "subdivide") {
-      const removableCount = Math.max(0, plan.pathIndices.length - 1);
+      const removableCount = plan.cleanupIndices.length;
       const local = clamp01(
         (amount - this.pathFraction - this.blinkFraction)
           / (1 - this.pathFraction - this.blinkFraction - this.centerHoldFraction),
@@ -347,7 +449,7 @@ export class DijkstraCompositionEndpoint {
             this.maximumLevel,
             1 + Math.floor(cellAmount * this.maximumLevel),
           );
-        drawCell(plan.pathIndices[order], level);
+        drawCell(plan.cleanupIndices[order], level);
       }
       drawCell(plan.centerIndex);
     } else {
@@ -367,6 +469,8 @@ export class DijkstraCompositionEndpoint {
     return {
       mode: "dijkstra",
       stage: this.lastStage,
+      startIndices: [...(this.plan?.startIndices ?? [])],
+      pathCount: this.plan?.paths.length ?? 0,
       pathIndices: [...(this.plan?.pathIndices ?? [])],
       changingCellCount: this.plan?.changingCellCount ?? null,
       trailLength: this.trailLength,

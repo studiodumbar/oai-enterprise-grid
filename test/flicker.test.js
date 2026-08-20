@@ -92,7 +92,7 @@ test("global flicker defaults fill in whatever a composition leaves unauthored",
   const resolved = resolveFlicker(mergeFlickerSettings(
     GLOBAL_CONFIG.flicker,
     { amount: 0.42, modes: { noise: { speed: 9 } } },
-  ));
+  ), undefined, { autoCycleSeconds: 2 });
 
   assert.equal(resolved.enabled, GLOBAL_CONFIG.flicker.enabled);
   assert.equal(resolved.mode, GLOBAL_CONFIG.flicker.mode);
@@ -341,7 +341,7 @@ test("scope decides whether the pattern spans the board or repeats per cell", ()
     resolveFlicker(mergeFlickerSettings(
       { ...GLOBAL_CONFIG.flicker, scope: "canvas" },
       { scope: "cell" },
-    )).scope,
+    ), undefined, { autoCycleSeconds: 2 }).scope,
     "cell",
   );
 
@@ -372,6 +372,7 @@ test("scope decides whether the pattern spans the board or repeats per cell", ()
         ...settings.gameOfLife,
         palette: "green",
         longSideCells: 8,
+        timing: { bodyDurationSeconds: 3, beatCount: 6 },
         cycleSeconds: 3,
         generationsPerCycle: 6,
       },
@@ -442,6 +443,7 @@ test("a cell-scoped cell resolves into every ring instead of one flat block", ()
       // authors: the swatches, and the grid the assertions count rings in.
       palette: "green",
       longSideCells: 8,
+      timing: { bodyDurationSeconds: 3, beatCount: 6 },
       cycleSeconds: 3,
       generationsPerCycle: 6,
       flicker: {
@@ -750,6 +752,7 @@ test("the shipped catalog registers every mode and each composition selects one"
     const flicker = createFlicker({
       palette: GREEN,
       settings: group.flicker,
+      autoCycleSeconds: group.timing.beatSeconds,
       grid: { columns: 8, rows: 6, cellSize: 100, dotsPerCellAxis: 8 },
     });
     assert.equal(flicker.enabled, true, `${name} should flicker.`);

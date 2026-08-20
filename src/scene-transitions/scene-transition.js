@@ -21,6 +21,11 @@ export class SceneTransition {
     }
     this.direction = direction;
     this.settings = resolveSceneTransitionSettings({}, settings ?? {});
+    if (!Number.isFinite(this.settings.durationSeconds)) {
+      throw new RangeError(
+        "Scene-transition durationSeconds must resolve to a number before construction.",
+      );
+    }
     this.mode = null;
     if (this.settings.enabled) {
       if (

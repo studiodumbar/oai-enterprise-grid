@@ -6,6 +6,19 @@ import {
   resolveSceneTransitionSettings,
 } from "../scene-transitions/index.js";
 import { NativeCircleEndpointTransition } from "../compositions/circle-endpoints.js";
+import {
+  createCompositionEndpointMode,
+  nativeCircleEndpointSettings,
+  resolveCompositionEndpointSettings,
+} from "../composition-endpoints/index.js";
+import {
+  compositionEndpointPaletteColor,
+  drawCompositionEndpointFrame,
+} from "../composition-endpoints/render.js";
+import {
+  requireMatchingTimelineValue,
+  resolveTimelineSettings,
+} from "../timeline/timeline-settings.js";
 
 export const BASE_CELL_LEVELS = Object.freeze([0, 1, 2, 3, 4]);
 
@@ -88,38 +101,64 @@ export class BaseCompositionGenerator {
     if (!options || typeof options !== "object") {
       throw new TypeError("Base composition options must be an object.");
     }
-    if (!Number.isFinite(options.dotMargin) || options.dotMargin < 0 || options.dotMargin >= 1) {
+    const timing = options.timing === undefined
+      ? null
+      : resolveTimelineSettings(options.timing, "base.timing");
+    if (timing) {
+      requireMatchingTimelineValue(options.previewSeconds, timing.beatSeconds, {
+        label: "base.previewSeconds",
+        source: "base.timing.beatSeconds",
+      });
+      requireMatchingTimelineValue(options.previewRepeats, timing.beatCount, {
+        label: "base.previewRepeats",
+        source: "base.timing.beatCount",
+      });
+    }
+    const normalizedOptions = {
+      ...options,
+      ...(timing === null ? {} : { timing }),
+      previewSeconds: options.previewSeconds ?? timing?.beatSeconds,
+      previewRepeats: options.previewRepeats ?? timing?.beatCount,
+    };
+    if (
+      !Number.isFinite(normalizedOptions.dotMargin)
+      || normalizedOptions.dotMargin < 0
+      || normalizedOptions.dotMargin >= 1
+    ) {
       throw new RangeError("base.dotMargin must be between 0 (inclusive) and 1 (exclusive).");
     }
-    if (!Number.isFinite(options.previewSeconds) || options.previewSeconds <= 0) {
+    if (
+      !Number.isFinite(normalizedOptions.previewSeconds)
+      || normalizedOptions.previewSeconds <= 0
+    ) {
       throw new RangeError("base.previewSeconds must be a finite positive number.");
     }
 
     this.generatorInstanceId = name ?? null;
     this.settingsKey = settingsKey ?? null;
-    this.options = options;
+    this.options = normalizedOptions;
     this.runtime = runtime;
     this.timelineElapsed = 0;
     this.elapsed = 0;
     this.pendingCycleBoundary = null;
     this.active = false;
     this.disposed = false;
-    this.palette = paletteByName(palettes, options.palette);
+    this.palette = paletteByName(palettes, this.options.palette);
     this.noiseFunction = typeof runtime.p5?.noise === "function"
       ? runtime.p5.noise.bind(runtime.p5)
       : undefined;
-    this.flickerSettings = options.flicker;
-    this.previewRepeats = normalizePreviewRepeats(options.previewRepeats);
+    this.flickerSettings = this.options.flicker;
+    this.previewRepeats = normalizePreviewRepeats(this.options.previewRepeats);
     this.flicker = createFlicker({
       palette: this.palette,
       settings: this.flickerSettings,
       noiseFunction: this.noiseFunction,
       autoCycleSeconds: this.autoFlickerCycleSeconds(),
     });
-    const introSettings = resolveSceneTransitionSettings({}, options.intro ?? {});
-    const outroSettings = options.outro === undefined
+    const introSettings = resolveSceneTransitionSettings({}, this.options.intro ?? {});
+    const outroSettings = this.options.outro === undefined
       ? resolveSceneTransitionSettings(introSettings, { fallbackToIntro: true })
-      : resolveSceneTransitionSettings(introSettings, options.outro);
+      : resolveSceneTransitionSettings(introSettings, this.options.outro);
     this.intro = new SceneTransition({
       direction: "intro",
       settings: introSettings,
@@ -130,12 +169,20 @@ export class BaseCompositionGenerator {
       settings: outroSettings,
       modeRegistry: sceneTransitionTypes ?? createSceneTransitionModeRegistry(),
     });
+    this.compositionEndpoints = resolveCompositionEndpointSettings(
+      settings?.composition ?? {},
+      this.options.circleEndpoints ?? {},
+    );
     this.circleEndpoint = new NativeCircleEndpointTransition({
-      settings: settings?.composition,
+      settings: nativeCircleEndpointSettings(this.compositionEndpoints),
       intro: introSettings,
       outro: outroSettings,
       modeRegistry: sceneTransitionTypes ?? createSceneTransitionModeRegistry(),
     });
+    this.endCompositionEndpoint = createCompositionEndpointMode(
+      this.compositionEndpoints.end,
+      this.compositionEndpoints.modes,
+    );
     this.compositionEndpoint = null;
     this.circleEndpointActive = false;
     this.resize(runtime.viewport());
@@ -166,7 +213,7 @@ export class BaseCompositionGenerator {
   }
 
   beginIntro(key, fromItems = null) {
-    if (this.compositionEndpoint?.phase === "start") return false;
+    if (this.compositionEndpointOwnsLifecycle(this.intro)) return false;
     const event = {
       items: this.transitionItems(),
       layout: this.layout,
@@ -177,6 +224,7 @@ export class BaseCompositionGenerator {
   }
 
   beginOutro(key) {
+    if (this.compositionEndpointOwnsLifecycle(this.outro)) return false;
     return this.outro.begin({
       items: this.transitionItems(),
       layout: this.layout,
@@ -193,8 +241,9 @@ export class BaseCompositionGenerator {
     this.intro.reset();
     this.outro.reset();
     this.circleEndpoint.reset();
+    this.endCompositionEndpoint?.reset();
     this.compositionEndpoint = null;
-    if (!this.circleEndpoint.settings.startWithCircle) this.beginIntro("base:0");
+    if (!this.compositionEndpoints.start.enabled) this.beginIntro("base:0");
     this.beginFlickerFrame();
   }
 
@@ -241,9 +290,10 @@ export class BaseCompositionGenerator {
     const currentCycle = Math.floor(this.elapsed / duration);
     const boundary = (currentCycle + 1) * duration;
     const secondsToBoundary = boundary - this.elapsed;
-    const cycleIntro = this.intro.settings.enabled;
+    const cycleIntro = this.transitionEventsPerCycle(this.intro) > 0;
     const cycleOutro = this.outro.settings.enabled
-      && !this.outro.settings.fallbackToIntro;
+      && !this.outro.settings.fallbackToIntro
+      && this.transitionEventsPerCycle(this.outro) > 0;
     if ((cycleIntro || cycleOutro) && dt >= secondsToBoundary) {
       if (cycleOutro) {
         this.pendingCycleBoundary = boundary;
@@ -267,6 +317,20 @@ export class BaseCompositionGenerator {
       progress: cyclePosition - Math.floor(cyclePosition),
       cycleIndex: Math.floor(cyclePosition),
     });
+  }
+
+  compositionEndpointOwnsLifecycle(transition) {
+    const direction = transition.direction === "intro" ? "start" : "end";
+    return this.compositionEndpoints[direction]?.enabled === true;
+  }
+
+  transitionEventsPerCycle(transition) {
+    if (
+      !transition.settings.enabled
+      || (transition.direction === "outro" && transition.settings.fallbackToIntro)
+      || this.compositionEndpointOwnsLifecycle(transition)
+    ) return 0;
+    return 1;
   }
 
   resize(viewport) {
@@ -369,9 +433,39 @@ export class BaseCompositionGenerator {
     return indices;
   }
 
+  compositionEndpointScene() {
+    return {
+      endpointCellIndices: BASE_CELL_LEVELS.map((_, index) => index),
+      faces: BASE_CELL_LEVELS.map(level => ({ level })),
+    };
+  }
+
+  drawCustomCompositionEndpoint(context, endpoint, frame) {
+    const endpointFrame = endpoint.frameAt({
+      layout: this.layout,
+      scene: this.compositionEndpointScene(),
+      cycleIndex: frame.compositionEndpoint.cycleIndex,
+      progress: frame.compositionEndpoint.progress,
+    });
+    drawCompositionEndpointFrame(context, endpointFrame, {
+      dotMargin: this.options.dotMargin,
+      colorForGlyph: ({ paletteStep }) => compositionEndpointPaletteColor(
+        this.flicker.paletteColors,
+        paletteStep,
+      ),
+    });
+  }
+
   draw(frame, planEntry, context) {
     if (!context || typeof context.beginPath !== "function") {
       throw new TypeError("Base composition requires a 2D drawing context.");
+    }
+    const customEndpoint = frame?.compositionEndpoint?.phase === "end"
+      ? this.endCompositionEndpoint
+      : null;
+    if (customEndpoint) {
+      this.drawCustomCompositionEndpoint(context, customEndpoint, frame);
+      return;
     }
     this.circleEndpointActive = this.circleEndpoint.prepare(
       frame?.compositionEndpoint,
@@ -469,44 +563,24 @@ export class BaseCompositionGenerator {
     return this.flicker.availableModes();
   }
 
-  // The preview window is this composition's only beat, so `cycleSeconds:
-  // "auto"` fills one preview per flicker loop. It cannot read cycleDuration()
-  // below — that already derives from the flicker cycle.
+  // The preview window is this composition's beat, so `cycleSeconds: "auto"`
+  // fills one preview. Explicit flicker cycles may repeat within that window,
+  // but a child effect never changes its parent's cycle boundary.
   autoFlickerCycleSeconds() {
     return this.options.previewSeconds;
   }
 
   cycleDuration() {
-    const modeSettings = this.flicker.settings.modes[this.flicker.modeName];
-    return Number.isFinite(modeSettings?.cycleSeconds) && modeSettings.cycleSeconds > 0
-      ? modeSettings.cycleSeconds
-      : this.options.previewSeconds;
+    return this.options.previewSeconds;
   }
 
   animationDuration() {
     const cycleSeconds = this.cycleDuration() * this.previewRepeats;
-    const authoredIntroCount = this.intro.settings.enabled
-      ? this.previewRepeats
-      : 0;
-    const introCount = this.circleEndpoint.settings.startWithCircle
-      ? Math.max(0, authoredIntroCount - 1)
-      : authoredIntroCount;
-    const outroCount = this.outro.settings.enabled
-      && !this.outro.settings.fallbackToIntro
-      ? this.previewRepeats
-      : 0;
+    const introCount = this.transitionEventsPerCycle(this.intro) * this.previewRepeats;
+    const outroCount = this.transitionEventsPerCycle(this.outro) * this.previewRepeats;
     return cycleSeconds
       + introCount * this.intro.settings.durationSeconds
       + outroCount * this.outro.settings.durationSeconds;
-  }
-
-  endpointAutoDuration(direction) {
-    const modeSettings = this.flicker.settings.modes[this.flicker.modeName];
-    if (Number.isFinite(modeSettings?.cycleSeconds) && modeSettings.cycleSeconds > 0) {
-      return modeSettings.cycleSeconds;
-    }
-    const transition = direction === "end" ? this.outro : this.intro;
-    return transition.settings.durationSeconds;
   }
 
   seek(time) {
@@ -588,6 +662,7 @@ export class BaseCompositionGenerator {
       },
       intro: this.intro.inspect(),
       outro: this.outro.inspect(),
+      compositionEndpoint: this.endCompositionEndpoint?.inspect?.() ?? null,
     };
   }
 
@@ -597,6 +672,7 @@ export class BaseCompositionGenerator {
     this.intro.reset();
     this.outro.reset();
     this.circleEndpoint.reset();
+    this.endCompositionEndpoint?.reset();
     this.pendingCycleBoundary = null;
   }
 }

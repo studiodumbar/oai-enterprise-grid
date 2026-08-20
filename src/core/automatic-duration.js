@@ -49,11 +49,17 @@ export function resolveAutomaticDuration(value, { label, candidates = [] } = {})
       + "automatic duration candidate was available.",
     );
   }
+  const seconds = selected.seconds * multiplier;
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    throw new RangeError(
+      `${label ?? "Duration"} resolves outside the finite positive range.`,
+    );
+  }
   return {
     authored: value,
     source: selected.source ?? "automatic",
     baseSeconds: selected.seconds,
     multiplier,
-    seconds: selected.seconds * multiplier,
+    seconds,
   };
 }

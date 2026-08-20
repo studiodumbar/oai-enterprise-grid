@@ -56,6 +56,25 @@ function memorySessionStorage(initial = {}) {
   };
 }
 
+function endpointDrawingContext() {
+  return {
+    globalAlpha: 1,
+    fillStyle: "",
+    arcs: 0,
+    fills: 0,
+    save() {},
+    restore() {},
+    beginPath() {},
+    moveTo() {},
+    arc() {
+      this.arcs += 1;
+    },
+    fill() {
+      this.fills += 1;
+    },
+  };
+}
+
 function interactiveGeneratorWithSession(storage, viewport = { width: 500, height: 300 }) {
   const catalog = createCatalog({ palettes: PALETTES });
   return catalog.generatorTypes.create("interactive-grid", {
@@ -1155,6 +1174,51 @@ test("empty cells emit no glyphs while active cells still draw", () => {
   generator.hoveredCell = 0;
   generator.draw({ time: 0 }, {}, context);
   assert.equal(strokeRects.length, 1);
+});
+
+test("interactive Dijkstra freezes every active parent and falls back to center when empty", () => {
+  const generator = interactiveGeneratorWithSession(memorySessionStorage());
+  generator.clear();
+  generator.baseStates[0] = 0;
+  generator.baseStates[4] = 2;
+  generator.baseStates[14] = 4;
+  const firstContext = endpointDrawingContext();
+
+  generator.draw({
+    compositionEndpoint: { phase: "end", progress: 0, cycleIndex: 3 },
+  }, {}, firstContext);
+
+  assert.equal(generator.compositionEndpoints.end.mode, "dijkstra");
+  assert.deepEqual(
+    generator.inspect().compositionEndpoint.startIndices,
+    [0, 4, 14],
+  );
+  assert.equal(generator.inspect().compositionEndpoint.pathCount, 3);
+  assert.equal(firstContext.arcs, 3 * 16);
+
+  generator.baseStates.fill(EMPTY_CELL_STATE);
+  generator.baseStates[1] = 1;
+  generator.draw({
+    compositionEndpoint: { phase: "end", progress: 0.5, cycleIndex: 3 },
+  }, {}, endpointDrawingContext());
+  assert.deepEqual(
+    generator.inspect().compositionEndpoint.startIndices,
+    [0, 4, 14],
+    "The endpoint must keep the last body frame after its outro starts.",
+  );
+
+  generator.clear();
+  const emptyContext = endpointDrawingContext();
+  generator.draw({
+    compositionEndpoint: { phase: "end", progress: 0, cycleIndex: 4 },
+  }, {}, emptyContext);
+  assert.deepEqual(
+    generator.inspect().compositionEndpoint.startIndices,
+    [generator.centerCellIndex()],
+  );
+  assert.equal(generator.inspect().compositionEndpoint.pathCount, 1);
+  assert.equal(emptyContext.arcs, 16);
+  generator.dispose();
 });
 
 test("configured catalog exposes the interactive generator and composition", () => {

@@ -1,23 +1,23 @@
 # composition: game-of-life
 # frames: 900
 
-[cg:timeline] f=0000 phase=start cycle=0 duration=6.000 paused=yes
+[cg:timeline] f=0000 phase=start cycle=0 duration=2.000 paused=yes
 [cg:plan] f=0000 enter=gameOfLifeAutomaton
 [cg:plan] f=0000 render=[gameOfLifeAutomaton@1.00]
-[cg:transition] f=0000 endpoint=start mode=text cycle=0 targets=3 sources=1 padded=0 subdivision=1 unpaired=2
+[cg:transition] f=0000 endpoint=start mode=text cycle=0 targets=297 sources=1 padded=0 subdivision=1 unpaired=296
+[cg:transition] f=0000 text hold clamped authored=3 requested=3.000 applied=1.200 phase=2.000
 [cg:transition] f=0000 overlay=intro mode=text
-[cg:timeline] f=0360 phase=core cycle=0 duration=2.400 paused=no
-[cg:transition] f=0360 overlay=- mode=-
-[cg:timeline] f=0504 phase=end cycle=0 duration=6.000 paused=yes
-[cg:transition] f=0504 endpoint=end mode=text cycle=0 targets=928 sources=1 padded=0 subdivision=1 unpaired=927
-[cg:transition] f=0504 overlay=outro mode=text
-[cg:timeline] f=0863 phase=start cycle=1 duration=6.000 paused=no
-[cg:transition] f=0863 scene=outro mode=text targets=928 sources=0 duration=6.000 key=game-of-life:1:0:11:11x7
-[cg:transition] f=0863 endpoint=start mode=text cycle=1 targets=928 sources=1 padded=0 subdivision=1 unpaired=927
-[cg:transition] f=0863 overlay=intro mode=text
-[cg:timeline] f=0864 phase=start cycle=1 duration=6.000 paused=yes
+[cg:transition] f=0000 text hold clamped authored=3 requested=3.000 applied=1.200 phase=2.000
+[cg:timeline] f=0120 phase=core cycle=0 duration=24.000 paused=no
+[cg:transition] f=0120 overlay=- mode=-
+[cg:transition] f=0240 scene=state mode=sort-selection targets=976 sources=297 duration=2.000 key=game-of-life:1:0:1:11x7
+[cg:transition] f=0360 scene=state mode=sort-selection targets=1792 sources=976 duration=2.000 key=game-of-life:1:0:2:11x7
+[cg:transition] f=0480 scene=state mode=sort-selection targets=940 sources=1792 duration=2.000 key=game-of-life:1:0:3:11x7
+[cg:transition] f=0599 scene=state mode=sort-selection targets=1040 sources=940 duration=2.000 key=game-of-life:1:0:4:11x7
+[cg:transition] f=0719 scene=state mode=sort-selection targets=1560 sources=1040 duration=2.000 key=game-of-life:1:0:5:11x7
+[cg:transition] f=0839 scene=state mode=sort-selection targets=932 sources=1560 duration=2.000 key=game-of-life:1:0:6:11x7
 
 # draw volume
 blankFrames=0
 firstDrawnFrame=0
-totalFill=351855
+totalFill=868157

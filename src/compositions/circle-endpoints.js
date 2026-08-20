@@ -1,6 +1,11 @@
 import { resolveSceneTransitionSettings } from "../scene-transitions/index.js";
 import { presentationsFrom } from "../transitions/presentations.js";
 import { debug } from "../debug/index.js";
+import {
+  AUTO_DURATION,
+  requireDurationSetting,
+  resolveAutomaticDuration,
+} from "../core/automatic-duration.js";
 
 const IDENTITY_PRESENTATION = Object.freeze({
   offsetX: 0,
@@ -19,7 +24,7 @@ export const DEFAULT_CIRCLE_ENDPOINT_SETTINGS = Object.freeze({
 
 export const MAX_CIRCLE_SUBDIVISION = 16;
 export const ENDPOINT_SAMPLE_HOLD_SECONDS = 1 / 60;
-export const AUTO_CIRCLE_ENDPOINT_DURATION = "auto";
+export const AUTO_CIRCLE_ENDPOINT_DURATION = AUTO_DURATION;
 
 function clamp01(value) {
   return Math.max(0, Math.min(1, value));
@@ -29,24 +34,11 @@ function isPowerOfTwo(value) {
   return value > 0 && (value & (value - 1)) === 0;
 }
 
-function requireDurationSetting(value, label) {
-  if (
-    value !== AUTO_CIRCLE_ENDPOINT_DURATION
-    && (!Number.isFinite(value) || value <= 0)
-  ) {
-    throw new RangeError(`${label} must be "auto" or a finite positive number.`);
-  }
-  return value;
-}
-
 function resolveDurationSetting(value, automaticValue, label) {
-  if (value !== AUTO_CIRCLE_ENDPOINT_DURATION) return value;
-  if (!Number.isFinite(automaticValue) || automaticValue <= 0) {
-    throw new RangeError(
-      `${label} is "auto", but the generator did not provide a finite positive duration.`,
-    );
-  }
-  return automaticValue;
+  return resolveAutomaticDuration(value, {
+    label,
+    candidates: [{ source: "resolved-phase", seconds: automaticValue }],
+  }).seconds;
 }
 
 export function normalizeCircleEndpointSettings(settings = {}) {

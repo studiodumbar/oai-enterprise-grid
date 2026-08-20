@@ -6,7 +6,6 @@ export const INTERACTIVE_GRID_CONFIG = {
       longSideCells: 5,
       dotMargin: 0.07,
       showCellGrid: false,
-      colorCycleSeconds: 2,
       colorTransition: {
         // Dot-face motion used inside snake, diamond, and row patterns.
         // Every palette step independently rolls one pattern per parent cell;
@@ -17,7 +16,7 @@ export const INTERACTIVE_GRID_CONFIG = {
         cycleThroughPalette: false,
         noise: true,
         // Total time for the whole parent-cell pattern, including its stagger.
-        durationSeconds: 0.25,
+        durationSeconds: "auto",
         // CSS cubic-bezier control points: [x1, y1, x2, y2].
         timingCurve: [1.0, 0.0, 0.0, 1],
       },
@@ -33,6 +32,11 @@ export const INTERACTIVE_GRID_CONFIG = {
 
   compositionDefinitions: {
     "interactive-grid": {
+      timing: {
+        bodyDurationSeconds: 2,
+        // The current five-color palette makes one beat one palette step.
+        beatCount: 5,
+      },
       rule: "sequence",
       steps: [{ use: "interactiveGrid" }],
     },

@@ -12,8 +12,14 @@ import {
   COMPOSITION_CONFIGS,
 } from "../config.js";
 import { createCatalog } from "../src/catalog.js";
+import { resolveCompositionEndpointSettings } from "../src/composition-endpoints/index.js";
+import { CompositionDirector } from "../src/core/composition-director.js";
 import { resolveSceneTransitionSettings } from "../src/scene-transitions/index.js";
 import { resolveCellTransitionSettings } from "../src/cell-transitions/transition-settings.js";
+import {
+  resolveTimelineDuration,
+  resolveTimelineSettings,
+} from "../src/timeline/timeline-settings.js";
 
 const EXPECTED_BUNDLE_OWNERSHIP = Object.freeze({
   base: {
@@ -153,24 +159,90 @@ function assertDisjointEntries(groups, kind) {
   return ownerByKey;
 }
 
+function definitionGeneratorIds(definition) {
+  const ids = [];
+  const visit = value => {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+    if (typeof value.use === "string") ids.push(value.use);
+    visit(value.steps);
+    visit(value.layers);
+  };
+  visit(definition.steps ?? definition.layers);
+  return ids;
+}
+
+function timingForSettingsKey(settingsKey) {
+  let resolved;
+  for (const [family, bundle] of Object.entries(COMPOSITION_BUNDLES)) {
+    for (const [compositionId, definition] of Object.entries(
+      bundle.compositionDefinitions,
+    )) {
+      const canonical = definition.legacyAliasFor === undefined
+        ? definition
+        : bundle.compositionDefinitions[definition.legacyAliasFor];
+      const authoredTiming = definition.timing ?? canonical?.timing;
+      if (authoredTiming === undefined) continue;
+      const usesSettings = definitionGeneratorIds(definition).some(id => {
+        const generator = bundle.generatorDefinitions[id];
+        return (generator?.settingsKey ?? generator?.options) === settingsKey;
+      });
+      if (!usesSettings) continue;
+      const timing = resolveTimelineSettings(
+        authoredTiming,
+        `${family}.${compositionId}.timing`,
+      );
+      if (resolved !== undefined) {
+        assert.deepEqual(
+          timing,
+          resolved,
+          `SETTINGS.${settingsKey} cannot inherit conflicting timing roots.`,
+        );
+      }
+      resolved = timing;
+    }
+  }
+  return resolved;
+}
+
+function phaseWithResolvedDuration(settings, timing, label) {
+  return {
+    ...settings,
+    durationSeconds: resolveTimelineDuration(settings.durationSeconds, {
+      automaticSeconds: timing.beatSeconds,
+      label,
+      source: "composition-beat",
+    }).seconds,
+  };
+}
+
 // Composition settings groups are the one place the facade builds a merged copy
-// instead of forwarding the bundle's object: app-wide palette, cell-transition,
-// intro, and flicker values fill in whatever the composition left unauthored.
+// instead of forwarding the bundle's object: app-wide defaults fill unauthored
+// values, then the recipe timing root compiles every automatic child duration.
 function assertInheritsGlobalDefaults(assembled, authored, name, inheritsPalette) {
   const {
     cellTransitions: assembledCellTransitions,
+    circleEndpoints: assembledCircleEndpoints,
+    colorTransition: assembledColorTransition,
     flicker: assembledFlicker,
     intro: assembledIntro,
     outro: assembledOutro,
     palette: assembledPalette,
+    timing: assembledTiming,
     ...assembledRest
   } = assembled;
   const {
     cellTransitions: authoredCellTransitions,
+    circleEndpoints: authoredCircleEndpoints,
+    colorTransition: authoredColorTransition,
     flicker: authoredFlicker,
     intro: authoredIntro,
     outro: authoredOutro,
     palette: authoredPalette,
+    timing: authoredTiming,
     ...authoredRest
   } = authored;
   assert.deepEqual(
@@ -195,21 +267,98 @@ function assertInheritsGlobalDefaults(assembled, authored, name, inheritsPalette
   } else {
     assert.equal(assembledPalette, authoredPalette);
   }
-  assert.deepEqual(
-    assembledIntro,
-    resolveSceneTransitionSettings(GLOBAL_CONFIG.intro, authoredIntro),
-    `${name} should override only the intro values it authored.`,
+  assert.equal(
+    authoredTiming,
+    undefined,
+    `${name} timing belongs to its composition definition, not its settings group.`,
   );
-  // An unauthored outro takes the app-wide block if there is one, and replays
-  // the intro backward only when there is not.
-  const inheritedOutro = authoredOutro ?? GLOBAL_CONFIG.outro;
-  assert.deepEqual(
-    assembledOutro,
-    inheritedOutro === undefined
-      ? resolveSceneTransitionSettings(assembledIntro, { fallbackToIntro: true })
-      : resolveSceneTransitionSettings(assembledIntro, inheritedOutro),
-    `${name} should inherit the app-wide outro, then its own intro.`,
+  const unresolvedIntro = resolveSceneTransitionSettings(
+    GLOBAL_CONFIG.intro,
+    authoredIntro,
   );
+  const globalOutro = GLOBAL_CONFIG.outro === undefined
+    ? resolveSceneTransitionSettings(unresolvedIntro, { fallbackToIntro: true })
+    : resolveSceneTransitionSettings(unresolvedIntro, GLOBAL_CONFIG.outro);
+  const unresolvedOutro = authoredOutro === undefined
+    ? globalOutro
+    : resolveSceneTransitionSettings(globalOutro, authoredOutro);
+  const timing = timingForSettingsKey(name);
+  if (timing === undefined) {
+    assert.equal(assembledTiming, undefined);
+    assert.deepEqual(assembledIntro, unresolvedIntro);
+    assert.deepEqual(assembledOutro, unresolvedOutro);
+    assert.deepEqual(assembledCircleEndpoints, authoredCircleEndpoints);
+    assert.deepEqual(assembledColorTransition, authoredColorTransition);
+  } else {
+    assert.deepEqual(assembledTiming, timing);
+    const expectedIntro = phaseWithResolvedDuration(
+      unresolvedIntro,
+      timing,
+      `SETTINGS.${name}.intro.durationSeconds`,
+    );
+    const expectedOutro = phaseWithResolvedDuration(
+      unresolvedOutro,
+      timing,
+      `SETTINGS.${name}.outro.durationSeconds`,
+    );
+    assert.deepEqual(
+      assembledIntro,
+      expectedIntro,
+      `${name} should resolve its intro from the recipe beat.`,
+    );
+    assert.deepEqual(
+      assembledOutro,
+      expectedOutro,
+      `${name} should layer its local outro over the app-wide outro.`,
+    );
+
+    const endpoints = resolveCompositionEndpointSettings(
+      GLOBAL_CONFIG.composition,
+      authoredCircleEndpoints ?? {},
+    );
+    assert.deepEqual(assembledCircleEndpoints, {
+      circleSubdivision: endpoints.circleSubdivision,
+      start: {
+        ...endpoints.start,
+        durationSeconds: resolveTimelineDuration(
+          endpoints.start.durationSeconds,
+          {
+            automaticSeconds: expectedIntro.durationSeconds,
+            label: `SETTINGS.${name}.circleEndpoints.start.durationSeconds`,
+            source: "intro-phase",
+          },
+        ).seconds,
+      },
+      end: {
+        ...endpoints.end,
+        durationSeconds: resolveTimelineDuration(
+          endpoints.end.durationSeconds,
+          {
+            automaticSeconds: expectedOutro.durationSeconds,
+            label: `SETTINGS.${name}.circleEndpoints.end.durationSeconds`,
+            source: "outro-phase",
+          },
+        ).seconds,
+      },
+      modes: endpoints.modes,
+    });
+    assert.deepEqual(
+      assembledColorTransition,
+      authoredColorTransition === undefined
+        ? undefined
+        : {
+          ...authoredColorTransition,
+          durationSeconds: resolveTimelineDuration(
+            authoredColorTransition.durationSeconds,
+            {
+              automaticSeconds: timing.beatSeconds,
+              label: `SETTINGS.${name}.colorTransition.durationSeconds`,
+              source: "composition-beat",
+            },
+          ).seconds,
+        },
+    );
+  }
   if (authoredFlicker === undefined) {
     assert.equal(
       assembledFlicker,
@@ -391,7 +540,7 @@ test("config facade preserves explicit global, shared, and bundle ownership", ()
     GLOBAL_CONFIG.composition.endWithCircleDurationSeconds === "auto"
       || GLOBAL_CONFIG.composition.endWithCircleDurationSeconds > 0,
   );
-  assert.ok(GLOBAL_CONFIG.cellTransitions.durationSeconds > 0);
+  assert.equal(GLOBAL_CONFIG.cellTransitions.durationSeconds, "auto");
   assert.ok(
     [1, 2, 4, 8, 16].includes(GLOBAL_CONFIG.composition.circleSubdivision),
   );
@@ -512,6 +661,104 @@ test("public compositions expose the explicit configuration hierarchy", () => {
       Object.hasOwn(COMPOSITION_DEFINITIONS, compositionId),
       `Legacy public composition "${compositionId}" must remain available.`,
     );
+  }
+});
+
+test("global Dijkstra reaches every non-flock composition while flock stays native", () => {
+  assert.equal(GLOBAL_CONFIG.composition.circleEndpoints.end.mode, "dijkstra");
+  assert.equal(GLOBAL_CONFIG.composition.circleEndpoints.end.enabled, true);
+  for (const [compositionId, definition] of Object.entries(COMPOSITION_DEFINITIONS)) {
+    const generatorIds = definitionGeneratorIds(definition);
+    const flockOnly = generatorIds.every(
+      id => GENERATOR_DEFINITIONS[id]?.type === "flock-grid",
+    );
+    if (flockOnly) continue;
+
+    const settingsKeys = generatorIds.map(id => settingsKeyForDefinition(
+      GENERATOR_DEFINITIONS[id],
+      `Generator "${id}"`,
+    )).filter(key => key !== null);
+    assert.ok(
+      settingsKeys.length > 0,
+      `Composition "${compositionId}" needs an endpoint settings group.`,
+    );
+    for (const key of settingsKeys) {
+      assert.equal(
+        SETTINGS[key].circleEndpoints.end.mode,
+        "dijkstra",
+        `Composition "${compositionId}" should inherit the global Dijkstra outro.`,
+      );
+      assert.equal(
+        SETTINGS[key].circleEndpoints.end.enabled,
+        true,
+        `Composition "${compositionId}" should enable the global Dijkstra outro.`,
+      );
+    }
+  }
+
+  const catalog = createCatalog({ palettes: PALETTES });
+  const director = new CompositionDirector({
+    settings: SETTINGS,
+    generatorDefinitions: GENERATOR_DEFINITIONS,
+    compositionDefinitions: COMPOSITION_DEFINITIONS,
+    generatorTypes: catalog.generatorTypes,
+    compositionRules: catalog.compositionRules,
+    sceneTransitionTypes: catalog.sceneTransitionTypes,
+    palettes: PALETTES,
+    runtime: {
+      context: () => ({ save() {}, restore() {} }),
+    },
+  });
+  for (const compositionId of ["flock", "flock-circles"]) {
+    director.use(compositionId);
+    assert.equal(director.compositionEndpoints.start.mode, "native");
+    assert.equal(director.compositionEndpoints.end.mode, "native");
+    assert.equal(
+      director.compositionEndpoints.end.enabled,
+      GLOBAL_CONFIG.composition.endWithCircle,
+    );
+  }
+  director.dispose();
+});
+
+test("every canonical non-flock recipe owns a timing root and aliases inherit it", () => {
+  for (const [family, bundle] of Object.entries(COMPOSITION_BUNDLES)) {
+    if (family === "flock-grid") continue;
+    for (const [compositionId, definition] of Object.entries(
+      bundle.compositionDefinitions,
+    )) {
+      const owner = `${family} composition "${compositionId}"`;
+      const canonical = definition.legacyAliasFor === undefined
+        ? definition
+        : bundle.compositionDefinitions[definition.legacyAliasFor];
+      if (definition.legacyAliasFor === undefined) {
+        assert.ok(
+          Object.hasOwn(definition, "timing"),
+          `${owner} must author its absolute timing root.`,
+        );
+      } else {
+        assert.equal(
+          definition.timing,
+          undefined,
+          `${owner} should inherit timing instead of copying its canonical recipe.`,
+        );
+      }
+      const expectedTiming = resolveTimelineSettings(
+        canonical.timing,
+        `compositionDefinitions.${compositionId}.timing`,
+      );
+      for (const generatorId of definitionGeneratorIds(definition)) {
+        const generator = bundle.generatorDefinitions[generatorId];
+        const settingsKey = generator.settingsKey
+          ?? (typeof generator.options === "string" ? generator.options : null);
+        if (settingsKey === null) continue;
+        assert.deepEqual(
+          SETTINGS[settingsKey].timing,
+          expectedTiming,
+          `${owner} should inject its timing into SETTINGS.${settingsKey}.`,
+        );
+      }
+    }
   }
 });
 

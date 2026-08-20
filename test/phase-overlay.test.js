@@ -163,6 +163,15 @@ test("a text intro cascades, reveals, and hands the screen to the composition", 
   };
   settings.gameOfLife.intro = TEXT_PHASE;
   settings.gameOfLife.outro = { ...TEXT_PHASE, fallbackToIntro: true };
+  settings.gameOfLife.circleEndpoints.start = {
+    ...settings.gameOfLife.circleEndpoints.start,
+    enabled: true,
+    durationSeconds: PHASE_SECONDS,
+  };
+  settings.gameOfLife.circleEndpoints.end = {
+    ...settings.gameOfLife.circleEndpoints.end,
+    enabled: false,
+  };
 
   const run = await runFrames({
     composition: "game-of-life",

@@ -3,6 +3,19 @@ import {
   normalizeBezierCurve,
 } from "../core/cubic-bezier.js";
 import { NativeCircleEndpointTransition } from "../compositions/circle-endpoints.js";
+import {
+  createCompositionEndpointMode,
+  nativeCircleEndpointSettings,
+  resolveCompositionEndpointSettings,
+} from "../composition-endpoints/index.js";
+import {
+  compositionEndpointPaletteColor,
+  drawCompositionEndpointFrame,
+} from "../composition-endpoints/render.js";
+import {
+  requireMatchingTimelineValue,
+  resolveTimelineSettings,
+} from "../timeline/timeline-settings.js";
 import { createSceneTransitionModeRegistry } from "../scene-transitions/index.js";
 
 export const EMPTY_CELL_STATE = -1;
@@ -829,7 +842,24 @@ export class InteractiveGridGenerator {
     shapeRenderer,
     sceneTransitionTypes,
   }) {
-    this.options = options;
+    const timing = options?.timing === undefined
+      ? null
+      : resolveTimelineSettings(options.timing, "interactiveGrid.timing");
+    if (timing) {
+      requireMatchingTimelineValue(
+        options?.colorCycleSeconds,
+        timing.bodyDurationSeconds,
+        {
+          label: "interactiveGrid.colorCycleSeconds",
+          source: "interactiveGrid.timing.bodyDurationSeconds",
+        },
+      );
+    }
+    this.options = {
+      ...options,
+      ...(timing === null ? {} : { timing }),
+      colorCycleSeconds: options?.colorCycleSeconds ?? timing?.bodyDurationSeconds,
+    };
     this.runtime = runtime;
     this.shapeRenderer = shapeRenderer;
     this.random = typeof runtime?.random === "function"
@@ -843,21 +873,34 @@ export class InteractiveGridGenerator {
     if (!shapeRenderer || typeof shapeRenderer.addPath !== "function") {
       throw new TypeError("InteractiveGridGenerator requires a shape renderer.");
     }
-    const palette = paletteByName(palettes, options.palette);
+    const palette = paletteByName(palettes, this.options.palette);
     this.paletteColors = palette.slice();
-    this.colorTransition = normalizeInteractiveColorTransition(options.colorTransition);
+    if (timing && timing.beatCount !== this.paletteColors.length) {
+      throw new RangeError(
+        "interactiveGrid.timing.beatCount must match the configured palette color count.",
+      );
+    }
+    this.colorTransition = normalizeInteractiveColorTransition(this.options.colorTransition);
     paletteTransitionDurationSeconds(
-      options.colorCycleSeconds,
+      this.options.colorCycleSeconds,
       this.colorTransition.durationSeconds,
       this.paletteColors.length,
     );
     this.backgroundColor = settings?.canvas?.background ?? "#fff";
+    this.compositionEndpoints = resolveCompositionEndpointSettings(
+      settings?.composition ?? {},
+      this.options.circleEndpoints ?? {},
+    );
     this.circleEndpoint = new NativeCircleEndpointTransition({
-      settings: settings?.composition,
-      intro: options.intro,
-      outro: options.outro,
+      settings: nativeCircleEndpointSettings(this.compositionEndpoints),
+      intro: this.options.intro,
+      outro: this.options.outro,
       modeRegistry: sceneTransitionTypes ?? createSceneTransitionModeRegistry(),
     });
+    this.endCompositionEndpoint = createCompositionEndpointMode(
+      this.compositionEndpoints.end,
+      this.compositionEndpoints.modes,
+    );
     this.circleEndpointActive = false;
     this.layout = null;
     this.baseStates = new Int8Array();
@@ -876,6 +919,7 @@ export class InteractiveGridGenerator {
   enter() {
     this.active = true;
     this.circleEndpoint.reset();
+    this.endCompositionEndpoint?.reset();
     this.circleEndpointActive = false;
     const canvas = this.runtime.canvas?.();
     if (canvas?.style) canvas.style.cursor = "pointer";
@@ -1400,6 +1444,13 @@ export class InteractiveGridGenerator {
 
   draw(frame, planEntry, context) {
     const { columns, rows, cellSize, offsetX, offsetY } = this.layout;
+    const customEndpoint = frame?.compositionEndpoint?.phase === "end"
+      ? this.endCompositionEndpoint
+      : null;
+    if (customEndpoint) {
+      this.drawCustomCompositionEndpoint(context, customEndpoint, frame);
+      return;
+    }
     this.circleEndpointActive = this.circleEndpoint?.prepare?.(
       frame?.compositionEndpoint,
       this.endpointTransitionItems(),
@@ -1517,6 +1568,31 @@ export class InteractiveGridGenerator {
       }
     }
     return items;
+  }
+
+  compositionEndpointScene() {
+    const endpointCellIndices = [];
+    const faces = Array.from(this.baseStates, level => ({ level }));
+    for (let index = 0; index < this.baseStates.length; index += 1) {
+      if (this.baseStates[index] !== EMPTY_CELL_STATE) endpointCellIndices.push(index);
+    }
+    return { endpointCellIndices, faces };
+  }
+
+  drawCustomCompositionEndpoint(context, endpoint, frame) {
+    const endpointFrame = endpoint.frameAt({
+      layout: this.layout,
+      scene: this.compositionEndpointScene(),
+      cycleIndex: frame.compositionEndpoint.cycleIndex,
+      progress: frame.compositionEndpoint.progress,
+    });
+    drawCompositionEndpointFrame(context, endpointFrame, {
+      dotMargin: this.options.dotMargin,
+      colorForGlyph: ({ paletteStep }) => compositionEndpointPaletteColor(
+        this.paletteColors,
+        paletteStep,
+      ),
+    });
   }
 
   endpointPresentationFor(index, leaf) {
@@ -1831,15 +1907,6 @@ export class InteractiveGridGenerator {
     return this.options.colorCycleSeconds;
   }
 
-  endpointAutoDuration(direction) {
-    const transition = direction === "end"
-      ? (this.options.outro ?? this.options.intro)
-      : this.options.intro;
-    return Number.isFinite(transition?.durationSeconds)
-      ? transition.durationSeconds
-      : this.options.colorCycleSeconds;
-  }
-
   snapshotProjectState() {
     this.rememberVisibleSessionCellStates();
     const sessionCells = [];
@@ -1974,11 +2041,13 @@ export class InteractiveGridGenerator {
       hoveredSubdivisionLeaf: this.hoveredSubdivisionLeaf,
       focusedCell: this.focusedCell,
       subdivisionSplitCounts: this.subdivisionTrees.map(tree => tree.size),
+      compositionEndpoint: this.endCompositionEndpoint?.inspect?.() ?? null,
     };
   }
 
   dispose() {
     this.circleEndpoint.reset();
+    this.endCompositionEndpoint?.reset();
     this.baseStates = new Int8Array();
     this.subdivisionTrees = [];
     this.leafCaches = [];

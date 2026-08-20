@@ -1,4 +1,5 @@
 import { ARRANGEMENT_MODE_DEFAULTS } from "../transitions/index.js";
+import { requireDurationSetting } from "../core/automatic-duration.js";
 
 export const DEFAULT_SCENE_TRANSITION_SETTINGS = Object.freeze({
   enabled: false,
@@ -63,9 +64,10 @@ export function resolveSceneTransitionSettings(base = {}, overrides = {}) {
   if (typeof resolved.mode !== "string" || resolved.mode.trim() === "") {
     throw new TypeError("Scene-transition mode must be a non-empty string.");
   }
-  if (!Number.isFinite(resolved.durationSeconds) || resolved.durationSeconds <= 0) {
-    throw new RangeError("Scene-transition durationSeconds must be a finite positive number.");
-  }
+  requireDurationSetting(
+    resolved.durationSeconds,
+    "Scene-transition durationSeconds",
+  );
   if (typeof resolved.fallbackToIntro !== "boolean") {
     throw new TypeError("Scene-transition fallbackToIntro must be true or false.");
   }

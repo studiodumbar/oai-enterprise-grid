@@ -5,8 +5,6 @@ export const INFERENCE_LOOP_CONFIG = {
     inferenceLoop: {
       longSideCells: 5,
       dotMargin: 0.02,
-      tokenSeconds: 2.6,
-      layerPasses: 4,
       flipSeconds: 0.016,
       // Flicker starts on the selected candidate and follows outward. The
       // envelope fractions are this composition's own timing; app-wide flicker
@@ -38,6 +36,10 @@ export const INFERENCE_LOOP_CONFIG = {
 
   compositionDefinitions: {
     "inference-loop": {
+      timing: {
+        bodyDurationSeconds: 2.6,
+        beatCount: 4,
+      },
       rule: "sequence",
       steps: [{ use: "inferenceLoopGrid" }],
     },

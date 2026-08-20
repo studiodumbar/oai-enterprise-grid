@@ -8,8 +8,6 @@ export const TOOL_LOOP_CONFIG = {
     toolLoop: {
       longSideCells: 8,
       dotMargin: 0.05,
-      tokenSeconds: 4,
-      layerPasses: 2,
       flipSeconds: 0.05,
       // The dense 64-circle model field is the only region that flickers.
       flicker: {
@@ -21,38 +19,35 @@ export const TOOL_LOOP_CONFIG = {
             spatialScale: 12,
           },
           "prism-bloom": {
-            cycleSeconds: .75,
+            cycleSeconds: "calc(auto * 0.375)",
           },
           "block-drop": {
-            cycleSeconds: .5,
-          },
-          "block-drop": {
-            cycleSeconds: .45,
+            cycleSeconds: "calc(auto * 0.225)",
           },
           "crt-glide": {
-            cycleSeconds: .45,
-              rows: 15
+            cycleSeconds: "calc(auto * 0.225)",
+            rows: 15,
           },
           "echo-ring": {
-            cycleSeconds: .45,
+            cycleSeconds: "calc(auto * 0.225)",
           },
         },
       },
-
-intro: {
-    enabled: true,
-    mode: "fade",
-    durationSeconds: 1,
-    modes: {
-      fade: {
-        revealFraction: 0.5,
-        // CSS cubic-bezier control points: [x1, y1, x2, y2].
-        timingCurve: [0.42, 0, 0.58, 1],
+      intro: {
+        enabled: true,
+        mode: "text",
+        //durationSeconds: "calc(auto * 0.5)",
+        modes: {
+          fade: {
+            revealFraction: 0.5,
+            // CSS cubic-bezier control points: [x1, y1, x2, y2].
+            timingCurve: [0.42, 0, 0.58, 1],
+          },
+        },
       },
     },
   },
-},
-  },
+
   generatorDefinitions: {
     toolLoopGrid: {
       type: "inference-grid",
@@ -63,6 +58,10 @@ intro: {
 
   compositionDefinitions: {
     "tool-loop": {
+      timing: {
+        bodyDurationSeconds: 4,
+        beatCount: 2,
+      },
       rule: "sequence",
       steps: [{ use: "toolLoopGrid" }],
     },

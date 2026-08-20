@@ -4,10 +4,14 @@ import {
   DijkstraCompositionEndpoint,
 } from "./dijkstra.js";
 
-export const COMPOSITION_ENDPOINT_MODES = Object.freeze([
-  "native",
-  "dijkstra",
-]);
+export const COMPOSITION_ENDPOINT_MODE_PHASES = Object.freeze({
+  native: Object.freeze(["start", "end"]),
+  dijkstra: Object.freeze(["end"]),
+});
+
+export const COMPOSITION_ENDPOINT_MODES = Object.freeze(
+  Object.keys(COMPOSITION_ENDPOINT_MODE_PHASES),
+);
 
 function requireObject(value, label) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -28,6 +32,15 @@ function resolvePhase(direction, fallback, authored = {}) {
     throw new Error(
       `Unknown composition endpoint mode "${mode}" for ${direction}. Available modes: `
       + `${COMPOSITION_ENDPOINT_MODES.join(", ")}.`,
+    );
+  }
+  if (!COMPOSITION_ENDPOINT_MODE_PHASES[mode].includes(direction)) {
+    const available = COMPOSITION_ENDPOINT_MODES.filter(candidate => (
+      COMPOSITION_ENDPOINT_MODE_PHASES[candidate].includes(direction)
+    ));
+    throw new Error(
+      `Composition endpoint mode "${mode}" does not support ${direction}. `
+      + `Available ${direction} modes: ${available.join(", ")}.`,
     );
   }
   return Object.freeze({ enabled, durationSeconds, mode });

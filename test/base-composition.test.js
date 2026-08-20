@@ -86,13 +86,21 @@ test("base renders five densities with local flicker values over global defaults
   assert.equal(inspection.flicker.amount, BASE_CONFIG.settings.base.flicker.amount);
   assert.equal(
     SETTINGS.base.flicker.modes["echo-ring"].cycleSeconds,
-    BASE_CONFIG.settings.base.flicker.modes["echo-ring"].cycleSeconds,
+    GLOBAL_CONFIG.flicker.modes["echo-ring"].cycleSeconds,
+  );
+  assert.equal(
+    Object.hasOwn(
+      BASE_CONFIG.settings.base.flicker.modes["echo-ring"],
+      "cycleSeconds",
+    ),
+    false,
   );
   assert.equal(
     SETTINGS.base.flicker.modes.noise.speed,
     GLOBAL_CONFIG.flicker.modes.noise.speed,
   );
-  assert.equal(generator.endpointAutoDuration("start"), generator.cycleDuration());
+  assert.equal(generator.flicker.settings.autoCycleSeconds, SETTINGS.base.timing.beatSeconds);
+  assert.equal(generator.cycleDuration(), SETTINGS.base.timing.beatSeconds);
 
   generator.enter();
   generator.update({
@@ -104,10 +112,43 @@ test("base renders five densities with local flicker values over global defaults
   assert.ok(context.fills > 0);
 });
 
-test("base previews every flicker in both scopes for three repeatable cycles", () => {
+test("base sends every final parent circle through the global Dijkstra endpoint", () => {
+  const generator = createGenerator();
+  const context = drawingContext();
+
+  generator.draw({
+    compositionEndpoint: {
+      phase: "end",
+      progress: 0,
+      cycleIndex: 2,
+    },
+  }, {}, context);
+
+  assert.equal(generator.compositionEndpoints.end.mode, "dijkstra");
+  assert.deepEqual(
+    generator.inspect().compositionEndpoint,
+    {
+      mode: "dijkstra",
+      stage: "loading",
+      startIndices: [0, 1, 2, 3, 4],
+      pathCount: 5,
+      pathIndices: [0, 1, 2, 3, 4],
+      changingCellCount: 4,
+      trailLength: generator.endCompositionEndpoint.trailLength,
+      centerIndex: 2,
+      pathCost: 6,
+    },
+  );
+  assert.equal(context.arcs, 5 * 16);
+  assert.equal(context.fills, context.arcs);
+  generator.dispose();
+});
+
+test("base previews every flicker in both scopes for its configured repeat count", () => {
   const generator = createGenerator();
   const original = generator.flickerPreviewState();
-  assert.equal(original.repeats, 3);
+  const repeats = original.repeats;
+  assert.equal(repeats, SETTINGS.base.timing.beatCount);
   // The app-wide intro and outro are config choices; the preview timeline has
   // to be asserted against whichever way they are currently set.
   const introSeconds = generator.intro.settings.enabled
@@ -117,24 +158,34 @@ test("base previews every flicker in both scopes for three repeatable cycles", (
     && !generator.outro.settings.fallbackToIntro
     ? generator.outro.settings.durationSeconds
     : 0;
+  const fixedAnimationDuration = generator.animationDuration();
+  // Stay off discrete mode step boundaries; this assertion is about wrapping,
+  // not which side of a floating-point boundary owns the sample.
+  const probeSeconds = generator.cycleDuration() * 0.137;
 
   for (const scope of ["canvas", "cell"]) {
     for (const mode of flickerModes.list()) {
-      generator.useFlickerPreview({ mode, scope, repeats: 3 });
+      generator.useFlickerPreview({ mode, scope, repeats });
       generator.update({ compositionDt: 0.1 });
       const context = drawingContext();
       generator.draw({}, {}, context);
-      assert.deepEqual(generator.flickerPreviewState(), { mode, scope, repeats: 3 });
+      assert.deepEqual(generator.flickerPreviewState(), { mode, scope, repeats });
       assert.equal(context.arcs, 341, `${scope}/${mode} should render every preview dot.`);
       assert.equal(
         generator.animationDuration(),
-        generator.cycleDuration() * 3 + (introSeconds + outroSeconds) * 3,
+        generator.cycleDuration() * repeats
+          + (introSeconds + outroSeconds) * repeats,
+      );
+      assert.equal(
+        generator.animationDuration(),
+        fixedAnimationDuration,
+        `${scope}/${mode} must not move its parent composition boundary.`,
       );
 
-      generator.seek(0.1);
+      generator.seek(probeSeconds);
       const firstCycle = [...generator.paletteIndicesForCell(4, 4)];
       generator.seek(
-        generator.cycleDuration() + introSeconds + outroSeconds + 0.1,
+        generator.cycleDuration() + introSeconds + outroSeconds + probeSeconds,
       );
       assert.deepEqual(
         [...generator.paletteIndicesForCell(4, 4)],

@@ -6,64 +6,46 @@
 export const GAME_OF_LIFE_CONFIG = {
   settings: {
     gameOfLife: {
-      longSideCells: 12,
+      longSideCells: 9,
       dotMargin: 0.08,
-      //cycleSeconds: 6,
-      generationsPerCycle: 12,
       flipSeconds: 0.015,
-      initialDensity: 0.034,
+      initialDensity: 0.5,
       birthNeighbors: [1, 3],
       survivalNeighbors: [2, 4],
-      wrapEdges: false,
-      
+      wrapEdges: true,
+
       cellTransitions: {
-        enabled: true, 
+        enabled: true,
         durationSeconds: "auto",
-          modes: {
-            "sort-selection": {
-                arcHeightInCells: 0.01
-            },
-          },
-      },
-
-      outro: {
         modes: {
-            text: {
-             revealFraction: 0.05,
-               timingCurve: [1, 0.05, 0.38, 0]
-           },
-
+          "sort-selection": {
+            arcHeightInCells: 0.8,
+          },
         },
       },
-
 
       flicker: {
         amount: 1,
         cellStaggerSeconds: 0.5,
         scope: "canvas",
-        mode: "crt-glide",
-        modes: { 
-          "block-drop": {
-            //cycleSeconds: 3, 
-          },
+        mode: "noise",
+        modes: {
           noise: {
-            speed: 0.04,
-            spatialScale: 0.003,
+            speed: 0.4,
+            spatialScale: 0.03,
           },
-          "radar-arc" : {
-           beamWidth: 0.5, 
-           gridSteps: 8,
-           wakeWidth: 0.75
+          "radar-arc": {
+            beamWidth: 0.5,
+            gridSteps: 8,
+            wakeWidth: 0.75,
           },
-          "echo-ring" : {
-           //cycleSeconds: 2,
-              ringCount: 10
+          "echo-ring": {
+            ringCount: 10,
           },
-            "crt-glide": {
-                //cycleSeconds: 1.4,
-                rows: 80, 
-                decay: 0.9
-            },
+          "crt-glide": {
+            rows: 80,
+            decay: 0.9,
+          },
         },
         envelope: {
           edgeFraction: 0.15,
@@ -82,6 +64,10 @@ export const GAME_OF_LIFE_CONFIG = {
 
   compositionDefinitions: {
     "game-of-life": {
+      timing: {
+        bodyDurationSeconds: 24,
+        beatCount: 12,
+      },
       rule: "sequence",
       steps: [{ use: "gameOfLifeAutomaton" }],
     },

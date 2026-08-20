@@ -1,24 +1,24 @@
 // Voronoi Influence Field
 //
 // Fixed grid cells become competing sites. Their territories re-weight in
-// discrete passes, uncertain borders remain white, and one basin resolves to a
-// committed output. These are schematic influence regions, not live telemetry.
+// discrete passes, uncertain borders remain white, and each territory retains
+// one far-edge source after consensus. These are schematic influence regions,
+// not live telemetry.
 export const VORONOI_CONFIG = {
   settings: {
     voronoi: {
-      longSideCells: 12,
+      longSideCells: 6,
       dotMargin: 0.09,
-      cycleSeconds: 24,
-      partitionPasses: 4,
       flipSeconds: 0.28,
-      siteCount: 13,
+      // One terminal Dijkstra source is retained per territory.
+      siteCount: 16,
       // Practical ceiling is grid-dependent, not the 0.7 the validator allows:
       // at this density, above ~0.3 the boundary swallows every
       // territory interior and the region palette motion has nothing to animate.
       boundaryWhitespace: 0.45,
-      // Voronoi owns its cycle boundary. It starts directly in the field and
-      // ends through the composition-endpoint registry instead of inheriting
-      // the global grow/crossfade circle.
+      // Voronoi owns its cycle boundary. Its commit/settle body window animates
+      // loaders at the fixed far-edge sources; Dijkstra takes over exclusively
+      // at the outro boundary instead of sharing that phase with text.
       circleEndpoints: {
         start: {
           enabled: true,
@@ -51,7 +51,7 @@ export const VORONOI_CONFIG = {
       flicker: {
         scope: "canvas",
         amount: 1,
-        mode: "noise",
+        mode: "prism-bloom",
         modes: {
           noise: {
             speed: 0.3,
@@ -62,9 +62,9 @@ export const VORONOI_CONFIG = {
           },
           "strobe-stack":{
             //BUG: doesnt work with canvas
-            // cycleSeconds: 1.5,
-            columns: 8,
-            rows: 8
+            cycleSeconds: .5,
+            columns: 5*64,
+            rows: 5*64
           },
           "prism-bloom":{
             //cycleSeconds: .75 
@@ -90,6 +90,10 @@ export const VORONOI_CONFIG = {
 
   compositionDefinitions: {
     voronoi: {
+      timing: {
+        bodyDurationSeconds: 8,
+        beatCount: 4,
+      },
       rule: "sequence",
       steps: [{ use: "voronoiGrid" }],
     },

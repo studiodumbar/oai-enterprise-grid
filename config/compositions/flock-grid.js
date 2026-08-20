@@ -7,7 +7,7 @@ export const FLOCK_GRID_CONFIG = {
       dotMargin: 0.025,
       showCellGrid: false,
       fieldRadiusInCells: 1,
-      fieldGain: 0.72,
+      fieldGain: 0.072,
       riseSeconds: 0.8,
       fallSeconds: 0.75,
     },
