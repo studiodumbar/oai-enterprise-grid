@@ -30,6 +30,7 @@ function createHarness(overrides = {}) {
     exportOptions: [],
     panelVisible: overrides.panelVisible ?? true,
     synced: 0,
+    stateChanges: [],
     logged,
     exported,
   };
@@ -72,6 +73,9 @@ function createHarness(overrides = {}) {
     isPanelVisible: () => stub.panelVisible,
     syncPanel: () => {
       stub.synced += 1;
+    },
+    onStateChange: (state, changed) => {
+      stub.stateChanges.push({ state: { ...state }, changed: [...changed] });
     },
     isExporting: overrides.isExporting ?? (() => false),
     log: message => logged.push(message),
@@ -163,6 +167,7 @@ test("export runs the active composition and syncs the panel", async () => {
   assert.deepEqual(stub.exportOptions, [{ cycles: 1 }]);
   assert.equal(stub.state.fps, 24);
   assert.equal(stub.synced, 1);
+  assert.deepEqual(stub.stateChanges.map(change => change.changed), [["fps"]]);
 });
 
 test("motion export cycles are configurable, forwarded, and validated", async () => {

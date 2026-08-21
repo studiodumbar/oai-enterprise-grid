@@ -623,6 +623,32 @@ test("config facade preserves explicit global, shared, and bundle ownership", ()
   );
 });
 
+test("sort-selection avoids dot overlap by default and preserves local mode overrides", () => {
+  const mode = "sort-selection";
+  const defaults = resolveCellTransitionSettings({}, {});
+  assert.equal(defaults.modes[mode].overlapDots, false);
+  assert.equal(GLOBAL_CONFIG.cellTransitions.modes[mode].overlapDots, false);
+
+  const permissive = resolveCellTransitionSettings(GLOBAL_CONFIG.cellTransitions, {
+    modes: { [mode]: { overlapDots: true } },
+  });
+  assert.equal(permissive.modes[mode].overlapDots, true);
+  assert.equal(
+    permissive.modes[mode].arcHeightInCells,
+    GLOBAL_CONFIG.cellTransitions.modes[mode].arcHeightInCells,
+  );
+
+  const authoredGameOfLife = COMPOSITION_BUNDLES["game-of-life"]
+    .settings.gameOfLife.cellTransitions.modes[mode];
+  const assembledGameOfLife = SETTINGS.gameOfLife.cellTransitions.modes[mode];
+  assert.equal(assembledGameOfLife.arcHeightInCells, 0.8);
+  assert.equal(
+    assembledGameOfLife.overlapDots,
+    authoredGameOfLife.overlapDots
+      ?? GLOBAL_CONFIG.cellTransitions.modes[mode].overlapDots,
+  );
+});
+
 test("public compositions expose the explicit configuration hierarchy", () => {
   for (const expected of EXPECTED_GRID_HIERARCHY) {
     const composition = COMPOSITION_DEFINITIONS[expected.compositionId];

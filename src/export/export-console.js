@@ -349,6 +349,7 @@ export function createExportConsole({
   setPanelVisible,
   isPanelVisible,
   syncPanel,
+  onStateChange,
   isExporting = () => false,
   log = () => {},
 } = {}) {
@@ -364,6 +365,7 @@ export function createExportConsole({
     if (isExporting()) fail("An export is already running.");
     const changed = applyExportFlags(state, parsed.flags);
     syncPanel?.();
+    if (changed.length > 0) onStateChange?.(state, changed);
     const list = listCompositions();
     const startedOn = activeComposition();
     const targets = targetCompositions(parsed.flags, {

@@ -3,6 +3,9 @@ export const GLOBAL_CONFIG = {
     background: "#000",
     maxPixelDensity: 3,
     frameRate: 60,
+    // true follows the browser window. false keeps composition geometry tied
+    // to the requested export width/height while only CSS-fitting the preview.
+    resizeWithWindow: false,
   },
 
   ui: {
@@ -34,7 +37,7 @@ export const GLOBAL_CONFIG = {
     startWithCircleDurationSeconds: 2,
     endWithCircle: true,
     // calc(auto * n) scales the resolved outro.
-    endWithCircleDurationSeconds: 2,
+    endWithCircleDurationSeconds: 0.1,
     circleSubdivision: 1, // 1, 2, 4, 8, or 16.
     circleEndpoints: {
       // Every finite non-flock composition uses the shared path-to-centre outro.
@@ -82,6 +85,9 @@ export const GLOBAL_CONFIG = {
         seed: 13,
         revealFraction: 0.16,
         arcHeightInCells: 0.32,
+        overlapDots: false,
+        // Sweep order per pass; the list cycles, so these two alternate.
+        directions: ["top-down", "bottom-up"],
         staggerSeconds: 0.2,
         timingCurve: [0.065, 0, 0.35, 1],
       },

@@ -13,6 +13,58 @@ function smoothstep01(value) {
   return amount * amount * (3 - 2 * amount);
 }
 
+const COLLISION_GAP = 1e-7;
+
+// Selection sort finalizes exactly one slot per step, so the order in which
+// slots are finalized is what reads on screen as a sweep direction. Every
+// direction is therefore a permutation of the row-major target order: entry
+// `step` names the target order that settles at that step. Adding a direction —
+// a column-major sweep, a spiral — means adding one permutation here; nothing
+// else in the mode changes.
+const FILL_DIRECTIONS = Object.freeze({
+  "top-down": count => Array.from({ length: count }, (_, step) => step),
+  "bottom-up": count => Array.from({ length: count }, (_, step) => count - 1 - step),
+});
+
+export const SORT_SELECTION_DIRECTIONS = Object.freeze(Object.keys(FILL_DIRECTIONS));
+
+/**
+ * Normalize the `directions` option into a non-empty frozen list of known
+ * direction names. One name is a constant direction; several alternate, one per
+ * pass, in the order given.
+ */
+function normalizeDirections(value, label) {
+  const names = typeof value === "string" ? [value] : value;
+  if (!Array.isArray(names) || names.length === 0) {
+    throw new TypeError(
+      `${label} must be a direction name or a non-empty array of them.`,
+    );
+  }
+  for (const name of names) {
+    if (typeof name !== "string" || !Object.hasOwn(FILL_DIRECTIONS, name)) {
+      throw new RangeError(
+        `${label} "${name}" is unknown. `
+        + `Directions: ${SORT_SELECTION_DIRECTIONS.join(", ")}.`,
+      );
+    }
+  }
+  return Object.freeze([...names]);
+}
+
+function circleBucketKeys(x, y, radius, cellSize) {
+  const keys = [];
+  const left = Math.floor((x - radius) / cellSize);
+  const right = Math.floor((x + radius) / cellSize);
+  const top = Math.floor((y - radius) / cellSize);
+  const bottom = Math.floor((y + radius) / cellSize);
+  for (let row = top; row <= bottom; row += 1) {
+    for (let column = left; column <= right; column += 1) {
+      keys.push(`${column}:${row}`);
+    }
+  }
+  return keys;
+}
+
 function hashString(value, seed) {
   let hash = (2166136261 ^ seed) >>> 0;
   for (const character of String(value)) {
@@ -39,10 +91,6 @@ function shuffled(values, key, seed) {
     const swapIndex = Math.floor(random() * (index + 1));
     [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
   }
-  if (
-    result.length > 1
-    && result.every((value, index) => value === values[index])
-  ) result.push(result.shift());
   return result;
 }
 
@@ -103,8 +151,14 @@ function offscreenSlots(targets, layout, key, seed) {
 /**
  * A direction-neutral arrangement mode. Its zero pose is either the previous
  * scene or a translated copy of the target that is wholly outside the viewport.
- * Selection-sort swaps place each cell into its row-major target. Intro plays
- * zero-to-one, while outro plays the same plan backward.
+ * Selection-sort swaps place each cell into its target. Intro plays zero-to-one,
+ * while outro plays the same plan backward.
+ *
+ * `directions` names the sweep order in which slots are finalized: one name
+ * holds that direction for every pass, several alternate one per pass, cycling
+ * in the order given. The pass counter arrives with the event (`passIndex`) —
+ * the mode holds no cross-plan state, so an export replaying the same frames
+ * produces the same sweeps.
  */
 export class SortSelectionTransitionMode {
   constructor(options = {}) {
@@ -112,6 +166,11 @@ export class SortSelectionTransitionMode {
     const revealFraction = options.revealFraction ?? 0.16;
     const arcHeightInCells = options.arcHeightInCells ?? 0.32;
     const staggerSeconds = options.staggerSeconds ?? 0;
+    const overlapDots = options.overlapDots === undefined ? false : options.overlapDots;
+    const directions = normalizeDirections(
+      options.directions ?? "top-down",
+      "sort-selection direction",
+    );
     const timingCurve = normalizeBezierCurve(
       options.timingCurve ?? [0.65, 0, 0.35, 1],
       "sort-selection timingCurve",
@@ -132,10 +191,15 @@ export class SortSelectionTransitionMode {
     if (!Number.isFinite(staggerSeconds) || staggerSeconds < 0) {
       throw new RangeError("sort-selection staggerSeconds must be finite and non-negative.");
     }
+    if (typeof overlapDots !== "boolean") {
+      throw new TypeError("sort-selection overlapDots must be true or false.");
+    }
     this.seed = seed;
     this.revealFraction = revealFraction;
     this.arcHeightInCells = arcHeightInCells;
     this.staggerSeconds = staggerSeconds;
+    this.overlapDots = overlapDots;
+    this.directions = directions;
     this.timingCurve = Object.freeze(timingCurve);
   }
 
@@ -146,11 +210,24 @@ export class SortSelectionTransitionMode {
     layout,
     key = "scene",
     durationSeconds = 1,
+    passIndex = 0,
   }) {
+    if (!Number.isInteger(passIndex) || passIndex < 0) {
+      throw new RangeError("sort-selection passIndex must be a non-negative integer.");
+    }
     const targets = normalizeArrangementItems(
       { items, indices, layout },
       "sort-selection",
     );
+    // A `direction` names one sweep order; `sweep` is the one this pass takes.
+    // Plain "direction" stays reserved for the intro/outro sense of the word.
+    const sweep = this.directions[passIndex % this.directions.length];
+    // `fillOrder[step]` is the target order that settles at that step;
+    // `stepByOrder[order]` is its inverse. The sort minimizes the step, so the
+    // sweep is expressed entirely by this permutation.
+    const fillOrder = FILL_DIRECTIONS[sweep](targets.length);
+    const stepByOrder = new Array(targets.length);
+    fillOrder.forEach((order, step) => { stepByOrder[order] = step; });
     const slots = targets.map(item => ({ x: item.x, y: item.y, size: item.size }));
     const authoredSources = fromItems === undefined
       ? null
@@ -171,6 +248,12 @@ export class SortSelectionTransitionMode {
       key,
       this.seed,
     );
+    // A shuffle that already matches the fill order sorts in zero swaps, so the
+    // pass would render as a hold. Rotate it by one to guarantee movement.
+    if (
+      values.length > 1
+      && values.every((order, position) => stepByOrder[order] === position)
+    ) values.push(values.shift());
     const initialSlotByOrder = new Map(
       values.map((targetOrder, slot) => [targetOrder, slot]),
     );
@@ -184,13 +267,15 @@ export class SortSelectionTransitionMode {
     for (let slot = 0; slot < working.length; slot += 1) {
       let selected = slot;
       for (let candidate = slot + 1; candidate < working.length; candidate += 1) {
-        if (working[candidate] < working[selected]) selected = candidate;
+        if (stepByOrder[working[candidate]] < stepByOrder[working[selected]]) {
+          selected = candidate;
+        }
       }
       const firstTarget = working[slot];
       const secondTarget = working[selected];
       const firstStart = positionsByOrder.get(firstTarget);
       const secondStart = positionsByOrder.get(secondTarget);
-      const secondEnd = slots[slot];
+      const secondEnd = slots[fillOrder[slot]];
       if (selected === slot) {
         segmentsByOrder[secondTarget].push({
           step: slot,
@@ -201,17 +286,21 @@ export class SortSelectionTransitionMode {
         positionsByOrder.set(secondTarget, secondEnd);
       } else {
         const firstEnd = secondStart;
+        // Reversing the travel vector already reverses its normal. Equal side
+        // signs therefore put a swap pair on opposite world-space arcs.
+        const firstSide = -1;
+        const secondSide = this.overlapDots ? 1 : firstSide;
         segmentsByOrder[firstTarget].push({
           step: slot,
           start: firstStart,
           end: firstEnd,
-          side: -1,
+          side: firstSide,
         });
         segmentsByOrder[secondTarget].push({
           step: slot,
           start: secondStart,
           end: secondEnd,
-          side: 1,
+          side: secondSide,
         });
         positionsByOrder.set(firstTarget, firstEnd);
         positionsByOrder.set(secondTarget, secondEnd);
@@ -247,6 +336,9 @@ export class SortSelectionTransitionMode {
       slots,
       sourceSlots,
       targets,
+      sweep,
+      passIndex,
+      fillOrder,
       targetOrderById,
       initialSlotByOrder,
       initialPointByOrder,
@@ -259,20 +351,30 @@ export class SortSelectionTransitionMode {
       staggerSpanSeconds: staggerSpan,
       fadeIn: authoredSources === null || authoredSources.length === 0,
       sourceItemCount: authoredSources?.length ?? 0,
+      collisionCache: null,
     };
   }
 
-  presentationAt(plan, targetId, progress) {
+  rawStateAt(plan, targetOrder, progress) {
     const amount = clamp01(progress);
-    const targetOrder = plan.targetOrderById.get(targetId);
-    if (targetOrder === undefined || amount >= 1) {
-      return { offsetX: 0, offsetY: 0, opacity: 1, scale: 1 };
+    const target = plan.targets[targetOrder];
+    if (amount >= 1) {
+      return {
+        x: target.x,
+        y: target.y,
+        size: target.size,
+        opacity: 1,
+        moving: false,
+        settled: true,
+      };
     }
 
     const elapsedSeconds = amount * plan.totalDurationSeconds;
     const segments = plan.segmentsByOrder[targetOrder];
     let point = plan.initialPointByOrder.get(targetOrder);
     let visibilityProgress = 0;
+    let completedSegments = 0;
+    let moving = false;
     for (const segment of segments) {
       const startSeconds = segment.step * (
         plan.movementDurationSeconds + plan.staggerSeconds
@@ -284,8 +386,10 @@ export class SortSelectionTransitionMode {
       visibilityProgress = Math.max(visibilityProgress, linearProgress);
       if (linearProgress >= 1) {
         point = segment.end;
+        completedSegments += 1;
         continue;
       }
+      moving = true;
       const motionProgress = cubicBezierAt(linearProgress, this.timingCurve);
       const deltaX = segment.end.x - segment.start.x;
       const deltaY = segment.end.y - segment.start.y;
@@ -303,14 +407,79 @@ export class SortSelectionTransitionMode {
       break;
     }
 
-    const target = plan.targets[targetOrder];
     return {
-      offsetX: point.x - target.x,
-      offsetY: point.y - target.y,
+      x: point.x,
+      y: point.y,
+      size: Math.max(0, point.size),
       opacity: plan.fadeIn
         ? smoothstep01(visibilityProgress / this.revealFraction)
         : 1,
-      scale: Math.max(0, point.size / target.size),
+      moving,
+      settled: !moving
+        && completedSegments === segments.length
+        && Math.abs(point.x - target.x) <= COLLISION_GAP
+        && Math.abs(point.y - target.y) <= COLLISION_GAP,
+    };
+  }
+
+  collisionScalesAt(plan, amount) {
+    if (plan.collisionCache?.amount === amount) return plan.collisionCache.scales;
+    const states = plan.targets.map((_, order) => this.rawStateAt(plan, order, amount));
+    const scales = new Float64Array(states.length).fill(1);
+    const priority = states.map((state, order) => ({ state, order })).sort((a, b) => (
+      Number(b.state.settled) - Number(a.state.settled)
+      || Number(!b.state.moving) - Number(!a.state.moving)
+      || b.state.size - a.state.size
+      || a.order - b.order
+    ));
+    const cellSize = Math.max(1, ...states.map(state => state.size));
+    const buckets = new Map();
+
+    for (const { state, order } of priority) {
+      if (state.opacity <= 0 || state.size <= 0) {
+        scales[order] = 0;
+        continue;
+      }
+      const baseRadius = state.size * 0.5;
+      let radius = baseRadius;
+      const candidates = new Set();
+      for (const key of circleBucketKeys(state.x, state.y, baseRadius, cellSize)) {
+        for (const candidate of buckets.get(key) ?? []) candidates.add(candidate);
+      }
+      for (const candidate of candidates) {
+        const other = states[candidate.order];
+        const distance = Math.hypot(state.x - other.x, state.y - other.y);
+        radius = Math.min(radius, Math.max(0, distance - candidate.radius));
+      }
+      scales[order] = radius / baseRadius;
+      if (radius <= 0) continue;
+      const entry = { order, radius };
+      for (const key of circleBucketKeys(state.x, state.y, radius, cellSize)) {
+        const bucket = buckets.get(key) ?? [];
+        bucket.push(entry);
+        buckets.set(key, bucket);
+      }
+    }
+    plan.collisionCache = { amount, scales };
+    return scales;
+  }
+
+  presentationAt(plan, targetId, progress) {
+    const amount = clamp01(progress);
+    const targetOrder = plan.targetOrderById.get(targetId);
+    if (targetOrder === undefined) {
+      return { offsetX: 0, offsetY: 0, opacity: 1, scale: 1 };
+    }
+    const target = plan.targets[targetOrder];
+    const state = this.rawStateAt(plan, targetOrder, amount);
+    const collisionScale = this.overlapDots
+      ? 1
+      : this.collisionScalesAt(plan, amount)[targetOrder];
+    return {
+      offsetX: state.x - target.x,
+      offsetY: state.y - target.y,
+      opacity: state.opacity,
+      scale: Math.max(0, state.size / target.size * collisionScale),
     };
   }
 }

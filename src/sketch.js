@@ -6,6 +6,10 @@ import {
 } from "../config.js";
 import { CompositionDirector } from "./core/composition-director.js";
 import { routeCanvasPointerInput } from "./core/canvas-pointer-input.js";
+import {
+  fitCanvasDisplaySize,
+  resolveCanvasViewport,
+} from "./core/canvas-viewport.js";
 import { createCatalog } from "./catalog.js";
 import { createExportState } from "./export/export-state.js";
 import { createExportPanel } from "./export/export-panel.js";
@@ -106,6 +110,51 @@ new window.p5(p => {
     };
   }
 
+  function configuredCanvasViewport() {
+    return resolveCanvasViewport({
+      resizeWithWindow: GLOBAL_CONFIG.canvas.resizeWithWindow,
+      windowViewport: { width: p.windowWidth, height: p.windowHeight },
+      requestedViewport: { width: exportState.resW, height: exportState.resH },
+    });
+  }
+
+  // A fixed-spec canvas keeps its logical/export pixels while its CSS size
+  // follows the available browser area. DevTools can therefore change only
+  // the preview scale, never the generator layout.
+  function fitCanvasDisplay() {
+    if (!canvasElement) return;
+    const fixed = !GLOBAL_CONFIG.canvas.resizeWithWindow;
+    canvasElement.classList.toggle("fixed-spec-canvas", fixed);
+    if (!fixed) {
+      canvasElement.style.width = "";
+      canvasElement.style.height = "";
+      return;
+    }
+    const display = fitCanvasDisplaySize(
+      { width: p.width, height: p.height },
+      { width: p.windowWidth, height: p.windowHeight },
+    );
+    canvasElement.style.width = `${display.width}px`;
+    canvasElement.style.height = `${display.height}px`;
+  }
+
+  function syncCanvasViewport(reason) {
+    const viewport = configuredCanvasViewport();
+    const changed = p.width !== viewport.width || p.height !== viewport.height;
+    if (changed) {
+      p.resizeCanvas(viewport.width, viewport.height);
+      director?.resize(viewport);
+      debug.config(
+        "canvas resized reason=%s width=%d height=%d",
+        reason,
+        viewport.width,
+        viewport.height,
+      );
+    }
+    fitCanvasDisplay();
+    return changed;
+  }
+
   function renderPreview() {
     if (!director) return;
     p.background(GLOBAL_CONFIG.canvas.background);
@@ -135,12 +184,13 @@ new window.p5(p => {
     if (Number.isSafeInteger(snapshot?.timeline?.frameIndex)) {
       frameIndex = snapshot.timeline.frameIndex;
     }
+    Object.assign(exportState, snapshot.export);
+    exportPanel?.sync();
+    syncCanvasViewport("history");
     director.restoreProjectState(snapshot.director);
     director.update(currentFrame(0));
     director.seek(elapsed);
     syncDocumentTitle();
-    Object.assign(exportState, snapshot.export);
-    exportPanel?.sync();
   }
 
   function commitHistory() {
@@ -228,7 +278,8 @@ new window.p5(p => {
       }),
     });
 
-    const canvas = p.createCanvas(p.windowWidth, p.windowHeight);
+    const initialViewport = configuredCanvasViewport();
+    const canvas = p.createCanvas(initialViewport.width, initialViewport.height);
     canvas.parent("sketch");
     canvasElement = canvas.elt;
     canvasElement.setAttribute("aria-label", "Circle grid canvas");
@@ -293,9 +344,10 @@ new window.p5(p => {
     });
     window.addEventListener("blur", deactivatePointer);
     p.pixelDensity(Math.min(
-      window.devicePixelRatio || 1,
+      GLOBAL_CONFIG.canvas.resizeWithWindow ? window.devicePixelRatio || 1 : 1,
       GLOBAL_CONFIG.canvas.maxPixelDensity,
     ));
+    fitCanvasDisplay();
     p.frameRate(GLOBAL_CONFIG.canvas.frameRate);
     p.noiseSeed?.(projectSeed);
 
@@ -308,7 +360,10 @@ new window.p5(p => {
     exportPanel = createExportPanel({
       state: exportState,
       onExport: () => exportController?.run(),
-      onStateChange: () => commitHistory(),
+      onStateChange: () => {
+        syncCanvasViewport("export-spec");
+        commitHistory();
+      },
     });
     setExportPanelVisible(GLOBAL_CONFIG.ui.showExportPanel);
     exportController = createExportController({
@@ -346,8 +401,7 @@ new window.p5(p => {
         resetPreviewDelta = true;
         if (pendingWindowResize) {
           pendingWindowResize = false;
-          p.resizeCanvas(p.windowWidth, p.windowHeight);
-          director?.resize(runtime.viewport());
+          syncCanvasViewport("window");
         }
         try {
           renderPreview();
@@ -361,6 +415,7 @@ new window.p5(p => {
         if (Number.isSafeInteger(savedTimeline?.frameIndex)) {
           frameIndex = savedTimeline.frameIndex;
         }
+        syncCanvasViewport("project-restore");
         director.update(currentFrame(0));
         director.seek(elapsed);
         syncDocumentTitle();
@@ -388,6 +443,7 @@ new window.p5(p => {
       setPanelVisible: setExportPanelVisible,
       isPanelVisible: () => exportPanelVisible,
       syncPanel: () => exportPanel?.sync(),
+      onStateChange: () => syncCanvasViewport("export-spec"),
       isExporting: () => Boolean(exportController?.exporting),
       log: message => console.log(message),
     });
@@ -451,12 +507,15 @@ new window.p5(p => {
   };
 
   p.windowResized = () => {
+    if (!GLOBAL_CONFIG.canvas.resizeWithWindow) {
+      fitCanvasDisplay();
+      return;
+    }
     if (exportController?.exporting) {
       pendingWindowResize = true;
       return;
     }
-    p.resizeCanvas(p.windowWidth, p.windowHeight);
-    director?.resize(runtime.viewport());
+    syncCanvasViewport("window");
   };
 
   function installProjectDropRestore() {

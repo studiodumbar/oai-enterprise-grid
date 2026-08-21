@@ -56,6 +56,8 @@ test("cycle-boundary and between-state transition settings resolve independently
     seed: 91,
     revealFraction: 0.25,
     arcHeightInCells: 0.32,
+    overlapDots: false,
+    directions: ["top-down"],
     staggerSeconds: 0,
     timingCurve: [0.65, 0, 0.35, 1],
   });
@@ -290,6 +292,180 @@ test("sort-selection uses the previous state as its visible source arrangement",
     sources.map(point => [point.x, point.y, point.size]).sort(),
   );
   assert.ok(start.every(point => point.opacity === 1));
+});
+
+test("sort-selection sweeps in each configured direction and still lands on target", () => {
+  const indices = [0, 1, 2, 3, 4];
+  const event = { indices, layout: LAYOUT, key: "swept" };
+  const settleSteps = plan => plan.segmentsByOrder.map(
+    segments => segments.at(-1).step,
+  );
+
+  const downward = new SortSelectionTransitionMode({ seed: 12, directions: "top-down" });
+  const upward = new SortSelectionTransitionMode({ seed: 12, directions: ["bottom-up"] });
+  const downwardPlan = downward.createPlan(event);
+  const upwardPlan = upward.createPlan(event);
+
+  assert.equal(downwardPlan.sweep, "top-down");
+  assert.equal(upwardPlan.sweep, "bottom-up");
+  assert.deepEqual(downwardPlan.fillOrder, [0, 1, 2, 3, 4]);
+  assert.deepEqual(upwardPlan.fillOrder, [4, 3, 2, 1, 0]);
+  // A target settles at the step that finalizes its slot, so the settle step is
+  // the sweep read back off the plan: ascending one way, descending the other.
+  assert.deepEqual(settleSteps(downwardPlan), [0, 1, 2, 3, 4]);
+  assert.deepEqual(settleSteps(upwardPlan), [4, 3, 2, 1, 0]);
+
+  // Whichever way the sweep runs, every glyph ends on its own target.
+  for (const [mode, plan] of [[downward, downwardPlan], [upward, upwardPlan]]) {
+    assert.deepEqual(
+      indices.map(index => mode.presentationAt(plan, index, 1)),
+      indices.map(() => ({ offsetX: 0, offsetY: 0, opacity: 1, scale: 1 })),
+    );
+  }
+
+  assert.throws(
+    () => new SortSelectionTransitionMode({ directions: [] }),
+    /non-empty array/,
+  );
+  assert.throws(
+    () => new SortSelectionTransitionMode({ directions: "diagonal" }),
+    /"diagonal" is unknown/,
+  );
+  assert.throws(
+    () => downward.createPlan({ ...event, passIndex: -1 }),
+    /passIndex must be a non-negative integer/,
+  );
+});
+
+test("sort-selection alternates its sweep on each pass", () => {
+  const registry = createCellTransitionModeRegistry();
+  const transition = new CellStateTransition({
+    settings: {
+      enabled: true,
+      mode: "sort-selection",
+      durationSeconds: 1,
+      modes: {
+        "sort-selection": { seed: 12, directions: ["top-down", "bottom-up"] },
+      },
+    },
+    modeRegistry: registry,
+  });
+  const beginPass = (extra = {}) => {
+    transition.begin({ indices: [0, 1, 2, 3, 4], layout: LAYOUT, key: "state", ...extra });
+    return transition.plan.sweep;
+  };
+
+  assert.deepEqual(
+    [beginPass(), beginPass(), beginPass(), beginPass()],
+    ["top-down", "bottom-up", "top-down", "bottom-up"],
+  );
+  // Restarting the transition re-opens on the first direction, so every cycle
+  // sweeps the same way and an exported loop stays seam-perfect.
+  transition.reset();
+  assert.equal(beginPass(), "top-down");
+  // A caller that owns its own pass count may drive the cycle explicitly.
+  assert.equal(beginPass({ passIndex: 7 }), "bottom-up");
+  assert.equal(transition.inspect().sweep, "bottom-up");
+  assert.equal(transition.inspect().passIndex, 8);
+});
+
+function presentedCircle(mode, plan, targetId, progress) {
+  const target = plan.targets[plan.targetOrderById.get(targetId)];
+  const presentation = mode.presentationAt(plan, targetId, progress);
+  return {
+    x: target.x + presentation.offsetX,
+    y: target.y + presentation.offsetY,
+    radius: target.size * presentation.scale * 0.5,
+  };
+}
+
+test("sort-selection sends a swap pair around opposite midpoint arcs", () => {
+  const mode = new SortSelectionTransitionMode({
+    seed: 12,
+    arcHeightInCells: 1,
+    timingCurve: [0, 0, 1, 1],
+    overlapDots: false,
+  });
+  const items = [
+    { id: "left", x: 0, y: 0, size: 80 },
+    { id: "right", x: 200, y: 0, size: 80 },
+  ];
+  const plan = mode.createPlan({
+    items,
+    fromItems: items,
+    layout: { width: 200, height: 200 },
+    durationSeconds: 2,
+  });
+  const progress = plan.movementDurationSeconds * 0.5 / plan.totalDurationSeconds;
+  const left = presentedCircle(mode, plan, "left", progress);
+  const right = presentedCircle(mode, plan, "right", progress);
+
+  assert.equal(left.x, right.x);
+  assert.equal(Math.sign(left.y), -Math.sign(right.y));
+  assert.ok(Math.hypot(left.x - right.x, left.y - right.y) >= left.radius + right.radius);
+});
+
+test("sort-selection yields a waiting small dot to a settled large endpoint", () => {
+  const mode = new SortSelectionTransitionMode({
+    seed: 13,
+    arcHeightInCells: 0.5,
+    timingCurve: [0, 0, 1, 1],
+    overlapDots: false,
+  });
+  const plan = mode.createPlan({
+    items: [
+      { id: "large", x: 100, y: 0, size: 100 },
+      { id: "small-a", x: 300, y: 0, size: 20 },
+      { id: "small-b", x: 500, y: 0, size: 20 },
+    ],
+    fromItems: [
+      { id: "source-a", x: 0, y: 0, size: 20 },
+      { id: "source-blocker", x: 100, y: 0, size: 20 },
+      { id: "source-large", x: 500, y: 0, size: 100 },
+    ],
+    layout: { width: 600, height: 300 },
+    key: "block-0",
+    durationSeconds: 3,
+  });
+  const progress = plan.movementDurationSeconds / plan.totalDurationSeconds;
+  const large = presentedCircle(mode, plan, "large", progress);
+  const waiting = presentedCircle(mode, plan, "small-b", progress);
+
+  assert.equal(large.x, waiting.x);
+  assert.equal(large.radius, 50);
+  assert.equal(waiting.radius, 0);
+});
+
+test("sort-selection overlapDots true preserves permissive swap geometry", () => {
+  const mode = new SortSelectionTransitionMode({
+    seed: 12,
+    arcHeightInCells: 1,
+    timingCurve: [0, 0, 1, 1],
+    overlapDots: true,
+  });
+  const items = [
+    { id: "left", x: 0, y: 0, size: 80 },
+    { id: "right", x: 200, y: 0, size: 80 },
+  ];
+  const plan = mode.createPlan({
+    items,
+    fromItems: items,
+    layout: { width: 200, height: 200 },
+    durationSeconds: 2,
+  });
+  const progress = plan.movementDurationSeconds * 0.5 / plan.totalDurationSeconds;
+  const left = presentedCircle(mode, plan, "left", progress);
+  const right = presentedCircle(mode, plan, "right", progress);
+
+  assert.deepEqual(left, right);
+  assert.equal(left.radius, 40);
+});
+
+test("sort-selection rejects a non-boolean overlapDots value", () => {
+  assert.throws(
+    () => new SortSelectionTransitionMode({ overlapDots: "false" }),
+    /overlapDots must be true or false/,
+  );
 });
 
 test("intro and outro reuse the same registered mode name in opposite directions", () => {
@@ -573,7 +749,8 @@ test("cell transitions run between states without replaying or pausing the intro
   assert.equal(betweenStates.intro.key, firstStateKey);
   assert.equal(betweenStates.intro.progress, 1);
   assert.equal(betweenStates.cellTransition.active, true);
-  assert.equal(Object.hasOwn(betweenStates.cellTransition, "direction"), false);
+  assert.equal(betweenStates.cellTransition.sweep, "top-down");
+  assert.equal(betweenStates.cellTransition.overlapDots, false);
   assert.equal(betweenStates.cellTransition.progress, 0);
   assert.equal(betweenStates.cellTransition.startsOffscreen, false);
   assert.ok(betweenStates.cellTransition.sourceItemCount > 0);

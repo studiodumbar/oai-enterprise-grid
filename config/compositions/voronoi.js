@@ -7,15 +7,15 @@
 export const VORONOI_CONFIG = {
   settings: {
     voronoi: {
-      longSideCells: 6,
-      dotMargin: 0.09,
+      longSideCells: 12,
+      dotMargin: 0.12,
       flipSeconds: 0.28,
       // One terminal Dijkstra source is retained per territory.
-      siteCount: 16,
+      siteCount: 8,
       // Practical ceiling is grid-dependent, not the 0.7 the validator allows:
       // at this density, above ~0.3 the boundary swallows every
       // territory interior and the region palette motion has nothing to animate.
-      boundaryWhitespace: 0.45,
+      boundaryWhitespace: 0.6,
       // Voronoi owns its cycle boundary. Its commit/settle body window animates
       // loaders at the fixed far-edge sources; Dijkstra takes over exclusively
       // at the outro boundary instead of sharing that phase with text.
@@ -51,11 +51,11 @@ export const VORONOI_CONFIG = {
       flicker: {
         scope: "canvas",
         amount: 1,
-        mode: "prism-bloom",
+        mode: "noise",
         modes: {
           noise: {
             speed: 0.3,
-            spatialScale: 0.012,
+            spatialScale: 0.092,
           },
           "echo-ring":{
             // cycleSeconds: 0.55

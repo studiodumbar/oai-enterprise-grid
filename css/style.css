@@ -55,12 +55,19 @@ body {
 }
 
 #sketch {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     width: 100%;
     height: 100%;
 }
 
 canvas {
     display: block;
+}
+
+canvas.fixed-spec-canvas {
+    flex: none;
 }
 
 #export-ui {

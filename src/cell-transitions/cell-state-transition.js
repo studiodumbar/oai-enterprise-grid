@@ -50,22 +50,33 @@ export class CellStateTransition {
     this.key = null;
     this.active = false;
     this.begun = false;
+    // The pass counter is lifecycle state, not wall-clock state: it restarts
+    // wherever the transition restarts, so a mode that alternates its sweep per
+    // pass opens every cycle on the same one and an export stays seam-perfect.
+    this.passIndex = 0;
   }
 
   begin(event) {
     if (!this.settings.enabled) return false;
+    const passIndex = Number.isInteger(event?.passIndex) && event.passIndex >= 0
+      ? event.passIndex
+      : this.passIndex;
+    this.plan = this.mode.createPlan({
+      ...event,
+      passIndex,
+      durationSeconds: this.settings.durationSeconds,
+    });
+    this.passIndex = passIndex + 1;
     debug.transition(
-      "scene=state mode=%s targets=%d sources=%d duration=%.3f key=%s",
+      "scene=state mode=%s targets=%d sources=%d duration=%.3f key=%s pass=%d sweep=%s",
       this.settings.mode,
       event?.items?.length ?? event?.indices?.length ?? 0,
       event?.fromItems?.length ?? 0,
       this.settings.durationSeconds,
       event?.key ?? "-",
+      passIndex,
+      this.plan?.sweep ?? "-",
     );
-    this.plan = this.mode.createPlan({
-      ...event,
-      durationSeconds: this.settings.durationSeconds,
-    });
     this.elapsed = 0;
     this.key = event.key ?? null;
     this.active = true;
@@ -110,6 +121,9 @@ export class CellStateTransition {
         ? Math.min(1, this.elapsed / this.settings.durationSeconds)
         : 0,
       key: this.key,
+      passIndex: this.passIndex,
+      sweep: this.plan?.sweep ?? null,
+      overlapDots: this.mode?.overlapDots ?? null,
       itemCount: this.plan?.targets?.length ?? 0,
       sourceItemCount: this.plan?.sourceItemCount ?? 0,
       startsOffscreen: this.plan?.fadeIn ?? false,

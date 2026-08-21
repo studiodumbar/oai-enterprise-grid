@@ -61,6 +61,10 @@ const ARRANGEMENT_MODES = Object.freeze([
       seed: 173,
       revealFraction: 0.16,
       arcHeightInCells: 0.32,
+      overlapDots: false,
+      // One name holds that sweep for every pass; several alternate, one per
+      // pass, cycling in the order given.
+      directions: Object.freeze(["top-down"]),
       staggerSeconds: 0,
       timingCurve: Object.freeze([0.65, 0, 0.35, 1]),
     }),

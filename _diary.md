@@ -1,26 +1,25 @@
-
+> 2h
 
 [ === pen == ]
 
-[] composition name in the tab name
 [] More organic feel, less computer
     [] night sky
     [] water ripples
     [] autora
 [] Too dense
-[] Scanning worked well
-[] Clear movements that feel organic
-[] sort selection ramp up
+[] sort selection aurorized
 
 [ === wip === ]
 
-[o] Try out x4 or x5 times slower
-[o] typeface
-
+[x] canvas not to be affected by console
 
 
 [ === arc === ]
 
+[x] Try out x4 or x5 times slower
+[x] composition name in the tab name
+[x] Clear movements that feel organic
+[x] typeface
 [x] Extra pallete shade 
 [x] refactor for better understanding
 [x] debug mode

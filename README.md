@@ -328,6 +328,12 @@ WebM, and a numbered PNG sequence. Resolution and aspect presets update the
 authoritative width and height fields, and video dimensions are rounded down to
 even values when necessary.
 
+`GLOBAL_CONFIG.canvas.resizeWithWindow` controls the preview's logical canvas.
+When `false` (the default), composition geometry uses the requested export
+width and height; browser or DevTools resizing only CSS-fits that canvas on
+screen. Set it to `true` to make composition geometry follow the browser
+window instead.
+
 Motion export pauses the p5 loop, locks canvas/UI input, and advances a separate
 generator session on fixed 60 Hz simulation steps. Output frames are sampled at
 exactly `i / fps`, so encoding speed cannot change animation timing and the
@@ -819,6 +825,7 @@ cellTransitions: {
       seed: 173,
       revealFraction: 0.16,
       arcHeightInCells: 0.32,
+      overlapDots: false,
       staggerSeconds: 0.02,
       timingCurve: [0.65, 0, 0.35, 1],
     },
@@ -835,6 +842,12 @@ inside subdivided cells. On a state change, the previous state's real glyph
 positions and sizes become the next plan's source slots. Selection-sort swaps
 then move them into row-major destinations on paired opposite arcs. The
 transition does not replay the intro or extend `animationDuration()`.
+
+`overlapDots: false` keeps rendered circle footprints disjoint. Swap partners
+take opposite arcs; if an occupied destination or another stationary circle
+still blocks a route, the lower-priority dot shrinks until there is clearance
+and grows back as the route clears. Set it to `true` only when the composition
+deliberately permits routes to cross or circles to overlap.
 
 `staggerSeconds` requests spacing between selection movements while
 `durationSeconds` remains the complete transition duration. Dense plans compress
