@@ -30,7 +30,14 @@ import {
   DEFAULT_TEXT_REVEAL_SETTINGS,
   TextRevealArrangementMode,
 } from "./text-reveal.js";
-import { SortSelectionTransitionMode } from "../cell-transitions/sort-selection.js";
+import {
+  DEFAULT_SORT_SELECTION_SETTINGS,
+  SortSelectionTransitionMode,
+} from "../cell-transitions/sort-selection.js";
+import {
+  AuroraTransitionMode,
+  DEFAULT_AURORA_SETTINGS,
+} from "../cell-transitions/aurora.js";
 
 const ARRANGEMENT_PHASES = Object.freeze(["intro", "outro", "state"]);
 
@@ -57,18 +64,16 @@ const ARRANGEMENT_MODES = Object.freeze([
     // target degenerates into an offscreen slide-in — the defect measured in
     // REFACTOR_PLAN.md §1.3. The mode is therefore state-only.
     phases: Object.freeze(["state"]),
-    defaults: Object.freeze({
-      seed: 173,
-      revealFraction: 0.16,
-      arcHeightInCells: 0.32,
-      overlapDots: false,
-      // One name holds that sweep for every pass; several alternate, one per
-      // pass, cycling in the order given.
-      directions: Object.freeze(["top-down"]),
-      staggerSeconds: 0,
-      timingCurve: Object.freeze([0.65, 0, 0.35, 1]),
-    }),
+    defaults: DEFAULT_SORT_SELECTION_SETTINGS,
     create: options => new SortSelectionTransitionMode(options),
+  }),
+  Object.freeze({
+    name: "aurora",
+    // Aurora reshapes the same deterministic selection-sort plan into a
+    // traveling light curtain, so it shares the mode's state-only boundary.
+    phases: Object.freeze(["state"]),
+    defaults: DEFAULT_AURORA_SETTINGS,
+    create: options => new AuroraTransitionMode(options),
   }),
 ]);
 

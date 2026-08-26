@@ -45,6 +45,7 @@ Commands
   use <composition>             switch the live composition
   export [flags]                export the active composition (or --all / --composition)
   panel show|hide|toggle        show or hide the export panel
+  noise-preview show|hide|toggle show the active noise generator's four fields
   debug [channels|all|off]      trace subsystem state changes to the console
 
 Export flags
@@ -351,12 +352,15 @@ export function createExportConsole({
   syncPanel,
   onStateChange,
   isExporting = () => false,
+  setNoisePreviewVisible = () => {},
+  isNoisePreviewVisible = () => false,
   log = () => {},
 } = {}) {
   function snapshot() {
     return {
       composition: activeComposition(),
       panelVisible: isPanelVisible(),
+      noisePreviewVisible: isNoisePreviewVisible(),
       export: { ...state },
     };
   }
@@ -527,6 +531,13 @@ export function createExportConsole({
         log(`Export panel ${isPanelVisible() ? "visible" : "hidden"}.`);
         return { ok: true, panelVisible: isPanelVisible() };
       }
+      case "noise-preview": {
+        const action = panelAction(parsed);
+        const visible = action === "toggle" ? !isNoisePreviewVisible() : action === "show";
+        setNoisePreviewVisible(visible);
+        log(`Noise preview ${isNoisePreviewVisible() ? "visible" : "hidden"}.`);
+        return { ok: true, noisePreviewVisible: isNoisePreviewVisible() };
+      }
       case "export":
         return runExportCommand(parsed);
       case "":
@@ -554,6 +565,7 @@ export function createExportConsole({
   run.list = () => run("list");
   run.status = () => run("status");
   run.panel = action => run(`panel ${action ?? "toggle"}`);
+  run.noisePreview = action => run(`noise-preview ${action ?? "toggle"}`);
   run.export = flags => run(`export ${flags ?? ""}`);
 
   return run;

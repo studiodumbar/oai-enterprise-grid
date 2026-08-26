@@ -4,20 +4,20 @@
 [cg:timeline] f=0000 phase=start cycle=0 duration=2.000 paused=yes
 [cg:plan] f=0000 enter=gameOfLifeAutomaton
 [cg:plan] f=0000 render=[gameOfLifeAutomaton@1.00]
-[cg:transition] f=0000 endpoint=start mode=text cycle=0 targets=297 sources=1 padded=0 subdivision=1 unpaired=296
+[cg:transition] f=0000 endpoint=start mode=text cycle=0 targets=182 sources=1 padded=0 subdivision=1 unpaired=181
 [cg:transition] f=0000 text hold clamped authored=3 requested=3.000 applied=1.200 phase=2.000
 [cg:transition] f=0000 overlay=intro mode=text
 [cg:transition] f=0000 text hold clamped authored=3 requested=3.000 applied=1.200 phase=2.000
 [cg:timeline] f=0120 phase=core cycle=0 duration=24.000 paused=no
 [cg:transition] f=0120 overlay=- mode=-
-[cg:transition] f=0240 scene=state mode=sort-selection targets=976 sources=297 duration=2.000 key=game-of-life:1:0:1:11x7
-[cg:transition] f=0360 scene=state mode=sort-selection targets=1792 sources=976 duration=2.000 key=game-of-life:1:0:2:11x7
-[cg:transition] f=0480 scene=state mode=sort-selection targets=940 sources=1792 duration=2.000 key=game-of-life:1:0:3:11x7
-[cg:transition] f=0599 scene=state mode=sort-selection targets=1040 sources=940 duration=2.000 key=game-of-life:1:0:4:11x7
-[cg:transition] f=0719 scene=state mode=sort-selection targets=1560 sources=1040 duration=2.000 key=game-of-life:1:0:5:11x7
-[cg:transition] f=0839 scene=state mode=sort-selection targets=932 sources=1560 duration=2.000 key=game-of-life:1:0:6:11x7
+[cg:transition] f=0240 scene=state mode=aurora targets=508 sources=182 duration=2.000 key=game-of-life:1:0:1:9x5 pass=0 sweep=top-down
+[cg:transition] f=0360 scene=state mode=aurora targets=984 sources=508 duration=2.000 key=game-of-life:1:0:2:9x5 pass=1 sweep=bottom-up
+[cg:transition] f=0480 scene=state mode=aurora targets=652 sources=984 duration=2.000 key=game-of-life:1:0:3:9x5 pass=2 sweep=top-down
+[cg:transition] f=0599 scene=state mode=aurora targets=928 sources=652 duration=2.000 key=game-of-life:1:0:4:9x5 pass=3 sweep=bottom-up
+[cg:transition] f=0719 scene=state mode=aurora targets=528 sources=928 duration=2.000 key=game-of-life:1:0:5:9x5 pass=4 sweep=top-down
+[cg:transition] f=0839 scene=state mode=aurora targets=548 sources=528 duration=2.000 key=game-of-life:1:0:6:9x5 pass=5 sweep=bottom-up
 
 # draw volume
 blankFrames=0
 firstDrawnFrame=0
-totalFill=868157
+totalFill=416734

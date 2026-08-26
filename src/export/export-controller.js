@@ -9,6 +9,7 @@ import { createPngSequenceSink } from "./png-sequence-sink.js";
 import { createSvgRecordingContext } from "./svg-recording-context.js";
 import { createVideoEncoder } from "./video-encoder.js";
 import { evenSize } from "./resolution.js";
+import { diogoniseImport, isDiogonisatorImport } from "./diogonisator.js";
 
 const signature = projectSignature;
 const INACTIVE_POINTER = Object.freeze({ active: false, x: 0, y: 0 });
@@ -359,7 +360,8 @@ export function createExportController({
 
   function restorePayload(saved) {
     const compatibleApp = saved?.app === "circle-grid" && saved?.project === "circle-grid";
-    if (!compatibleApp || saved.version !== 1) {
+    const diogonisatorImport = isDiogonisatorImport(saved);
+    if ((!compatibleApp || saved.version !== 1) && !diogonisatorImport) {
       throw new Error("This file does not contain compatible Circle Grid state.");
     }
     const director = getDirector();
@@ -379,11 +381,12 @@ export function createExportController({
       });
       if (!params.timeline) onProjectRestored?.(params);
     };
+    const imported = diogonisatorImport ? diogoniseImport(saved, before) : saved.params;
     try {
-      apply(saved.params);
+      apply(imported);
       panel.sync();
       renderPreview();
-      return saved.params;
+      return imported;
     } catch (error) {
       try {
         apply(before);
@@ -400,9 +403,8 @@ export function createExportController({
     const saved = signature.extract(
       await file.arrayBuffer(),
       value => (
-        value?.version === 1
-        && value.app === "circle-grid"
-        && value.project === "circle-grid"
+        (value?.version === 1 && value.app === "circle-grid" && value.project === "circle-grid")
+        || isDiogonisatorImport(value)
       ),
     );
     if (!saved) throw new Error("No embedded Circle Grid project state was found.");

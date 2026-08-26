@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import { GLOBAL_CONFIG, SETTINGS } from "../config.js";
 import { InferenceGridGenerator } from "../src/generators/inference-grid-generator.js";
+import { INFERENCE_LOOP_PHASES } from "../src/generators/grid-scene-strategies.js";
 import {
   SceneTransition,
   createSceneTransitionModeRegistry,
@@ -13,6 +14,7 @@ import {
   TextRevealArrangementMode,
 } from "../src/transitions/text-reveal.js";
 import { captureDebug } from "../src/debug/index.js";
+import { AuroraTransitionMode } from "../src/cell-transitions/aurora.js";
 import { SortSelectionTransitionMode } from "../src/cell-transitions/sort-selection.js";
 import { resolveCellTransitionSettings } from "../src/cell-transitions/transition-settings.js";
 import {
@@ -26,6 +28,14 @@ const LAYOUT = Object.freeze({
   cellSize: 100,
   offsetX: 0,
   offsetY: 20,
+});
+
+const GRID_LAYOUT = Object.freeze({
+  columns: 5,
+  rows: 5,
+  cellSize: 100,
+  offsetX: 0,
+  offsetY: 0,
 });
 
 test("cycle-boundary and between-state transition settings resolve independently", () => {
@@ -77,19 +87,14 @@ test("cycle-boundary and between-state transition settings resolve independently
   );
   assert.equal(SETTINGS.lTree.cellTransitions.mode, GLOBAL_CONFIG.cellTransitions.mode);
   assert.equal(Object.hasOwn(SETTINGS.base.intro, "trigger"), false);
-  // A composition that authors no outro takes the app-wide one when there is
-  // one, and otherwise replays its own intro backward.
+  // L-tree's authored outro overrides the app-wide duration without changing
+  // the fallback behavior supplied by the global lifecycle settings.
   const appWideOutro = GLOBAL_CONFIG.outro !== undefined;
   assert.equal(SETTINGS.lTree.outro.fallbackToIntro, !appWideOutro);
+  assert.equal(SETTINGS.lTree.outro.durationSeconds, 1.5);
   assert.equal(
-    SETTINGS.lTree.outro.durationSeconds,
-    appWideOutro
-      ? GLOBAL_CONFIG.outro.durationSeconds
-      : SETTINGS.lTree.intro.durationSeconds,
-  );
-  assert.deepEqual(
-    SETTINGS.base.intro.modes[GLOBAL_CONFIG.intro.mode],
-    SETTINGS.lTree.intro.modes[GLOBAL_CONFIG.intro.mode],
+    SETTINGS.lTree.intro.modes[GLOBAL_CONFIG.intro.mode].colorBy,
+    "level",
   );
 });
 
@@ -182,6 +187,100 @@ test("sort-selection deterministically shuffles, swaps, and lands on target cell
       opacity: 1,
       scale: 1,
     })),
+  );
+});
+
+test("aurora bends only the sorting frontier while reusing grid presentations", () => {
+  const mode = new AuroraTransitionMode({
+    seed: 12,
+    directions: ["top-down", "bottom-up"],
+    waveAmplitudeInCells: 1.5,
+    waveCycles: 1,
+    beamLengthInCells: 0,
+  });
+  const event = {
+    indices: Array.from({ length: 25 }, (_, index) => index),
+    layout: GRID_LAYOUT,
+    key: "aurora-grid",
+    durationSeconds: 1,
+    passIndex: 0,
+  };
+  const plan = mode.createPlan(event);
+  const repeated = mode.createPlan(event);
+
+  assert.deepEqual(plan.fillOrder, repeated.fillOrder);
+  assert.deepEqual(plan.frontierDepthByOrder, repeated.frontierDepthByOrder);
+  assert.equal(typeof mode.presentationsAt, "undefined");
+  assert.ok(new Set(plan.fillOrder.slice(0, 5).map(order => (
+    Math.floor(order / GRID_LAYOUT.columns)
+  ))).size > 1);
+
+  const middle = event.indices.map(index => mode.presentationAt(plan, index, 0.5));
+  assert.ok(middle.every(presentation => (
+    Number.isFinite(presentation.offsetX)
+    && Number.isFinite(presentation.offsetY)
+    && presentation.opacity >= 0
+    && presentation.opacity <= 1
+    && Number.isFinite(presentation.scale)
+    && presentation.scale >= 0
+  )));
+  assert.deepEqual(
+    event.indices.map(index => mode.presentationAt(plan, index, 1)),
+    event.indices.map(() => ({ offsetX: 0, offsetY: 0, opacity: 1, scale: 1 })),
+  );
+});
+
+test("aurora beam decay stays behind the edge and alternates direction", () => {
+  const mode = new AuroraTransitionMode({
+    seed: 29,
+    directions: ["top-down", "bottom-up"],
+    waveAmplitudeInCells: 1.1,
+    waveCycles: 1.25,
+    beamLengthInCells: 3,
+  });
+  const event = {
+    indices: Array.from({ length: 25 }, (_, index) => index),
+    layout: GRID_LAYOUT,
+    key: "aurora-beams",
+    durationSeconds: 1,
+  };
+  const topDown = mode.createPlan({ ...event, passIndex: 0 });
+  const bottomUp = mode.createPlan({ ...event, passIndex: 1 });
+  const repeated = mode.createPlan({ ...event, passIndex: 0 });
+
+  assert.equal(topDown.sweep, "top-down");
+  assert.equal(bottomUp.sweep, "bottom-up");
+  assert.deepEqual(topDown.fillOrder, repeated.fillOrder);
+  assert.deepEqual(topDown.beamLagByOrder, repeated.beamLagByOrder);
+  assert.ok(topDown.beamLagByOrder.some(lag => lag > 0));
+  assert.ok(topDown.beamLagByOrder.every(lag => lag >= 0 && lag <= 3));
+  assert.ok(new Set(topDown.beamLagByOrder).size <= 16);
+  assert.ok(topDown.beamLagByOrder.every((lag, order) => (
+    topDown.frontierDepthByOrder[order] + lag
+    >= topDown.frontierDepthByOrder[order]
+  )));
+
+  const averageRow = (plan, orders) => orders.reduce((sum, order) => (
+    sum + Math.floor(order / GRID_LAYOUT.columns)
+  ), 0) / orders.length;
+  assert.ok(
+    averageRow(topDown, topDown.fillOrder.slice(0, 5))
+    < averageRow(topDown, topDown.fillOrder.slice(-5)),
+  );
+  assert.ok(
+    averageRow(bottomUp, bottomUp.fillOrder.slice(0, 5))
+    > averageRow(bottomUp, bottomUp.fillOrder.slice(-5)),
+  );
+});
+
+test("aurora validates its wave and beam controls at startup", () => {
+  assert.throws(
+    () => new AuroraTransitionMode({ waveAmplitudeInCells: -1 }),
+    /aurora waveAmplitudeInCells/,
+  );
+  assert.throws(
+    () => new AuroraTransitionMode({ beamLengthInCells: 17 }),
+    /aurora beamLengthInCells/,
   );
 });
 
@@ -292,6 +391,36 @@ test("sort-selection uses the previous state as its visible source arrangement",
     sources.map(point => [point.x, point.y, point.size]).sort(),
   );
   assert.ok(start.every(point => point.opacity === 1));
+});
+
+test("sort-selection expands a smaller real source set without offscreen flashes", () => {
+  const mode = new SortSelectionTransitionMode({ seed: 12 });
+  const targets = Array.from({ length: 5 }, (_, index) => ({
+    id: `new-${index}`,
+    x: 50 + index * 100,
+    y: 70,
+    size: 40,
+  }));
+  const sources = [
+    { id: "old-a", x: 100, y: 70, size: 40 },
+    { id: "old-b", x: 400, y: 70, size: 40 },
+  ];
+  const plan = mode.createPlan({
+    items: targets,
+    fromItems: sources,
+    layout: LAYOUT,
+    key: "source-expansion",
+  });
+  const sourcePoses = new Set(sources.map(source => `${source.x}:${source.y}`));
+  const startPositions = targets.map(target => {
+    const presentation = mode.presentationAt(plan, target.id, 0);
+    return `${target.x + presentation.offsetX}:${target.y + presentation.offsetY}`;
+  });
+
+  assert.equal(plan.sourceItemCount, 2);
+  assert.equal(plan.expandedSourceCount, 3);
+  assert.equal(plan.fadeIn, false);
+  assert.ok(startPositions.every(position => sourcePoses.has(position)));
 });
 
 test("sort-selection sweeps in each configured direction and still lands on target", () => {
@@ -524,11 +653,16 @@ test("scene transitions reject unresolved automatic durations before frame arith
 test("the arrangement pool refuses a phase a mode does not declare", () => {
   const registry = createSceneTransitionModeRegistry();
   assert.deepEqual(registry.namesForPhase("intro"), ["fade", "text"]);
-  assert.deepEqual(registry.namesForPhase("state"), ["fade", "sort-selection"]);
+  assert.deepEqual(
+    registry.namesForPhase("state"),
+    ["fade", "sort-selection", "aurora"],
+  );
   assert.equal(registry.supports("text", "outro"), true);
   assert.equal(registry.supports("text", "state"), false);
   assert.equal(registry.supports("fade", "outro"), true);
   assert.equal(registry.supports("sort-selection", "outro"), false);
+  assert.equal(registry.supports("aurora", "state"), true);
+  assert.equal(registry.supports("aurora", "intro"), false);
   assert.throws(
     () => registry.supports("fade", "cycle"),
     /Arrangement phase must be one of intro, outro, state/,
@@ -744,7 +878,9 @@ test("cell transitions run between states without replaying or pausing the intro
   assert.equal(generator.inspect().timelinePhase, "cycle");
   assert.equal(generator.inspect().cycleElapsed, 0);
 
-  generator.update({ compositionDt: 0.5 });
+  const firstParallelPassSeconds = generator.options.timing.beatSeconds
+    * INFERENCE_LOOP_PHASES.parallelEnd;
+  generator.update({ compositionDt: firstParallelPassSeconds });
   const betweenStates = generator.inspect();
   assert.equal(betweenStates.intro.key, firstStateKey);
   assert.equal(betweenStates.intro.progress, 1);
@@ -755,21 +891,34 @@ test("cell transitions run between states without replaying or pausing the intro
   assert.equal(betweenStates.cellTransition.startsOffscreen, false);
   assert.ok(betweenStates.cellTransition.sourceItemCount > 0);
   assert.equal(betweenStates.timelinePhase, "cycle");
-  assert.equal(betweenStates.cycleElapsed, 0.5);
-  const movingId = generator.cellTransition.plan.targets[0].id;
-  const startingPresentation = generator.cellTransition.presentationFor(movingId);
+  assert.equal(betweenStates.cycleElapsed, firstParallelPassSeconds);
+  const transitionIds = generator.cellTransition.plan.targets.map(target => target.id);
+  const startingPresentations = transitionIds.map(id => (
+    generator.cellTransition.presentationFor(id)
+  ));
 
   generator.update({ compositionDt: 0.1 });
   assert.ok(generator.inspect().cellTransition.progress > 0);
   assert.equal(generator.scenePresentationTransition, generator.cellTransition);
-  assert.notDeepEqual(
-    generator.cellTransition.presentationFor(movingId),
-    startingPresentation,
+  assert.ok(transitionIds.some((id, index) => {
+    const current = generator.cellTransition.presentationFor(id);
+    const starting = startingPresentations[index];
+    return current.offsetX !== starting.offsetX
+      || current.offsetY !== starting.offsetY
+      || current.opacity !== starting.opacity
+      || current.scale !== starting.scale;
+  }));
+  assert.equal(
+    generator.inspect().cycleElapsed,
+    firstParallelPassSeconds + 0.1,
   );
-  assert.equal(generator.inspect().cycleElapsed, 0.6);
   assert.equal(generator.animationDuration(), generator.options.cycleSeconds + 1);
 
-  generator.update({ compositionDt: generator.options.cycleSeconds - 0.6 });
+  generator.update({
+    compositionDt: generator.options.cycleSeconds
+      - firstParallelPassSeconds
+      - 0.1,
+  });
   assert.equal(generator.inspect().timelinePhase, "intro");
   assert.notEqual(generator.inspect().intro.key, firstStateKey);
   assert.equal(generator.inspect().cycleElapsed, generator.options.cycleSeconds);

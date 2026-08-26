@@ -1,21 +1,32 @@
-> 2h
 
-[ === pen == ]
+[ === tbd== ]
 
-[] More organic feel, less computer
-    [] night sky
-    [] water ripples
-    [] autora
+
+[] fractal
 [] Too dense
-[] sort selection aurorized
+[] generative backdrops?
+    connecting thread is an open ai logo
+    30sec loops stitched together
+    think of it as chapters happening one after another, from 1a to 1d and etc
+[] figure out diogos tool
+[] png sequence export
 
 [ === wip === ]
 
-[x] canvas not to be affected by console
+[] debug diogo
+
 
 
 [ === arc === ]
 
+[] More organic feel, less computer
+    [] night sky
+    [] water ripples
+    [x] autora
+
+[x] import diogo
+[x] sort selection aurorized
+[x] canvas not to be affected by console
 [x] Try out x4 or x5 times slower
 [x] composition name in the tab name
 [x] Clear movements that feel organic

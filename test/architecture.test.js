@@ -568,6 +568,7 @@ test("the configured flock composition runs through the complete adapter", () =>
   const catalog = createCatalog({ palettes: PALETTES });
   assert.ok(catalog.cellTransitionTypes.has("none"));
   assert.ok(catalog.cellTransitionTypes.has("sort-selection"));
+  assert.ok(catalog.cellTransitionTypes.has("aurora"));
   // One shared pool, with each mode declaring the phases it can run in.
   assert.ok(catalog.sceneTransitionTypes.has("fade"));
   assert.deepEqual(
@@ -580,7 +581,7 @@ test("the configured flock composition runs through the complete adapter", () =>
   );
   assert.deepEqual(
     catalog.cellTransitionTypes.namesForPhase("state"),
-    ["fade", "sort-selection", "none"],
+    ["fade", "sort-selection", "aurora", "none"],
   );
   const compositions = {
     ...COMPOSITION_DEFINITIONS,

@@ -1390,8 +1390,13 @@ function createLTreeScene({ layout, cycleIndex, progress, options }) {
     orientation: tree.orientation,
     rootIndex: tree.rootIndex,
     terminalIndex: tree.terminalIndex,
+    endpointCellIndices: [tree.terminalIndex],
     treeIndices: tree.treeIndices,
     selectedPathIndices: tree.selectedPathIndices,
+    // The final parent cell is Dijkstra's source. Letting the state
+    // arrangement interpolate 72 committed glyphs into this one target makes
+    // that target glide before the endpoint even begins.
+    transitionStyle: phase === "settle" ? "cut" : "animate",
     ...(paletteMotion ? { paletteMotion } : {}),
     toolEnabled: false,
   };

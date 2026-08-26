@@ -829,13 +829,15 @@ cellTransitions: {
       staggerSeconds: 0.02,
       timingCurve: [0.65, 0, 0.35, 1],
     },
+    aurora: {},
   },
 }
 ```
 
 `mode` selects the between-state behavior used by discrete scene generators.
 `none` switches immediately, while `sort-selection` rearranges the complete
-glyph set. The `none` block also configures flock's static circle renderer.
+glyph set and `aurora` carries that rearrangement through an organic light
+curtain. The `none` block also configures flock's static circle renderer.
 
 `sort-selection` treats every visible circle as an item, including circles
 inside subdivided cells. On a state change, the previous state's real glyph
@@ -855,8 +857,18 @@ movement and delay proportionally. Here `"auto"` takes the shortest hold between
 body state changes. `timingCurve: [x1, y1, x2, y2]` uses CSS cubic-bezier
 semantics; `[0, 0, 1, 1]` is linear.
 
+`aurora` keeps the deterministic selection-sort pairing and exact grid
+presentations, but changes the order in which destinations settle. A sinusoid
+bends the sorting frontier; `waveAmplitudeInCells` controls its depth and
+`waveCycles` controls how many ridges cross the grid. `beamLengthInCells` adds a
+deterministic density decay behind that edge: zero is a crisp frontier, while a
+larger value leaves a longer ordered-dot gradient of not-yet-sorted cells. With
+`directions: ["top-down", "bottom-up"]`, the sweep and its trailing side
+alternate on each pass.
+
 Lifecycle settings contain no `state`/`cycle` trigger. Intro and outro select
-phase-capable modes such as `fade` and `text`; `sort-selection` is state-only:
+phase-capable modes such as `fade` and `text`; `sort-selection` and `aurora`
+are state-only:
 
 ```js
 intro: {

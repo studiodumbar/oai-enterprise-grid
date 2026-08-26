@@ -10,6 +10,7 @@ export const GLOBAL_CONFIG = {
 
   ui: {
     showExportPanel: false,
+    noisePreview: false,
   },
 
   // Machine-readable tracing. Channels: timeline, transition, plan, cells,
@@ -29,7 +30,8 @@ export const GLOBAL_CONFIG = {
     // context-window
     // game-of-life
     // voronoi,
-    active: "game-of-life",
+    // noise-grid
+    active: "noise-grid",
     // Legacy phase defaults stay flat while compositions are migrated one by
     // one. A migrated composition overrides them through circleEndpoints.
     startWithCircle: true,
@@ -37,7 +39,7 @@ export const GLOBAL_CONFIG = {
     startWithCircleDurationSeconds: 2,
     endWithCircle: true,
     // calc(auto * n) scales the resolved outro.
-    endWithCircleDurationSeconds: 0.1,
+    endWithCircleDurationSeconds: 0.5,
     circleSubdivision: 1, // 1, 2, 4, 8, or 16.
     circleEndpoints: {
       // Every finite non-flock composition uses the shared path-to-centre outro.
@@ -70,11 +72,19 @@ export const GLOBAL_CONFIG = {
   // app-wide palette, composition overrides it
   palette: "green",
 
+  noiseFields: {
+    enabled: true,
+    levelCount: 5,
+    dotMargin: 0.08,
+    modes: {},
+    layers: {},
+  },
+
   // Motion between discrete scene states. This runs inside the cycle; it is
   // independent from the intro/outro phases at the cycle boundaries.
   cellTransitions: {
     enabled: true,
-    mode: "sort-selection",
+    mode: "aurora",
     // "auto" uses the active composition's shortest state hold.
     durationSeconds: 'auto',
     modes: {
@@ -91,6 +101,14 @@ export const GLOBAL_CONFIG = {
         staggerSeconds: 0.2,
         timingCurve: [0.065, 0, 0.35, 1],
       },
+      // Selection sort with a wavy frontier and grid-bound decay behind it.
+      // The mode-owned defaults live beside its implementation.
+      aurora: {
+        waveAmplitudeInCells: 5,
+        waveCycles: 4,
+        beamLengthInCells: 5,
+        // directions: ["top-down", "bottom-up"],
+      },
     },
   },
 
@@ -106,10 +124,10 @@ export const GLOBAL_CONFIG = {
         timingCurve: [0.42, 0, 0.58, 1], // CSS cubic-bezier control points: [x1, y1, x2, y2].
       },
       text: {
-        text: "Open AI // Cyber",
+        text: "Open AI",
         fontFamily: "'OpenAI Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif",
-        fontWeight: 600,
-        sizeInCells: 0.5,
+        fontWeight: 900,
+        sizeInCells: 0.35,
         // Pixels from the exact canvas centre.
         offsetX: 0,
         offsetY: 0,

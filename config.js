@@ -13,6 +13,7 @@ import { VORONOI_CONFIG } from "./config/compositions/voronoi.js";
 import { L_TREE_CONFIG } from "./config/compositions/l-tree.js";
 import { GAME_OF_LIFE_CONFIG } from "./config/compositions/game-of-life.js";
 import { BASE_CONFIG } from "./config/compositions/base.js";
+import { NOISE_GRID_CONFIG } from "./config/compositions/noise-grid.js";
 import { mergeFlickerSettings } from "./src/visuals/flicker/index.js";
 import { resolveSceneTransitionSettings } from "./src/scene-transitions/index.js";
 import { resolveCellTransitionSettings } from "./src/cell-transitions/transition-settings.js";
@@ -36,9 +37,11 @@ export { VORONOI_CONFIG } from "./config/compositions/voronoi.js";
 export { L_TREE_CONFIG } from "./config/compositions/l-tree.js";
 export { GAME_OF_LIFE_CONFIG } from "./config/compositions/game-of-life.js";
 export { BASE_CONFIG } from "./config/compositions/base.js";
+export { NOISE_GRID_CONFIG } from "./config/compositions/noise-grid.js";
 
 export const COMPOSITION_BUNDLES = Object.freeze({
   base: BASE_CONFIG,
+  "noise-grid": NOISE_GRID_CONFIG,
   "inference-loop": INFERENCE_LOOP_CONFIG,
   "context-window": CONTEXT_WINDOW_CONFIG,
   "tool-loop": TOOL_LOOP_CONFIG,
@@ -248,6 +251,7 @@ export const SETTINGS = withResolvedCompositionTiming(
       canvas: GLOBAL_CONFIG.canvas,
       composition: GLOBAL_CONFIG.composition,
       cellTransitions: GLOBAL_CONFIG.cellTransitions,
+      noiseFields: GLOBAL_CONFIG.noiseFields,
     },
     SHARED_CONFIG.settings,
     ...compositionConfigs.map(config => withGlobalCompositionDefaults(config.settings)),

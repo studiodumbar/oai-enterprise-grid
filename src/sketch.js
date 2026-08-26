@@ -18,6 +18,7 @@ import { createProjectState, createSnapshotHistory } from "./export/project-stat
 import { createExportConsole } from "./export/export-console.js";
 import { flickerModes } from "./visuals/flicker/index.js";
 import { configureDebug, debug, resolveDebugChannels } from "./debug/index.js";
+import { createNoisePreviewPanel } from "./noise-fields/noise-preview-panel.js";
 
 if (typeof window.p5 !== "function") {
   throw new Error("p5.js did not load. Check the CDN request before starting the sketch.");
@@ -39,6 +40,7 @@ new window.p5(p => {
   let history = null;
   let pendingWindowResize = false;
   let resetPreviewDelta = false;
+  let noisePreviewPanel = null;
   let projectSeed = createProjectSeed();
   const pointer = { active: false, x: 0, y: 0 };
   const exportState = createExportState();
@@ -78,7 +80,7 @@ new window.p5(p => {
   function syncDocumentTitle() {
     const composition = director?.inspect().compositionId
       ?? activeCompositionFromConfig();
-    document.title = `OAI//${composition}`;
+    document.title = `OAI // ${composition}`;
   }
 
   function createDirectorForRuntime(runtimeOverride) {
@@ -218,9 +220,25 @@ new window.p5(p => {
       .filter(id => !COMPOSITION_DEFINITIONS[id]?.legacyAliasFor);
   }
 
+  function activeCompositionUi() {
+    const compositionId = director?.inspect().compositionId;
+    const definition = COMPOSITION_DEFINITIONS[compositionId];
+    const generatorId = definition?.steps?.find(step => typeof step?.use === "string")?.use;
+    const settingsKey = GENERATOR_DEFINITIONS[generatorId]?.settingsKey;
+    return {
+      ...GLOBAL_CONFIG.ui,
+      ...(settingsKey ? SETTINGS[settingsKey]?.ui : null),
+    };
+  }
+
+  function syncCompositionUi() {
+    noisePreviewPanel?.setVisible(activeCompositionUi().noisePreview === true);
+  }
+
   function useCompositionFromConsole(id) {
     director.use(id);
     director.update(currentFrame(0));
+    syncCompositionUi();
     syncDocumentTitle();
     commitHistory();
     renderPreview();
@@ -242,6 +260,7 @@ new window.p5(p => {
         if (inputLocked) return director.inspect().compositionId;
         director.use(name);
         director.update(currentFrame(0));
+        syncCompositionUi();
         syncDocumentTitle();
         commitHistory();
         return name;
@@ -419,6 +438,7 @@ new window.p5(p => {
         director.update(currentFrame(0));
         director.seek(elapsed);
         syncDocumentTitle();
+        syncCompositionUi();
       },
       renderPreview,
       setInputLocked: value => {
@@ -445,8 +465,18 @@ new window.p5(p => {
       syncPanel: () => exportPanel?.sync(),
       onStateChange: () => syncCanvasViewport("export-spec"),
       isExporting: () => Boolean(exportController?.exporting),
+      setNoisePreviewVisible: visible => noisePreviewPanel?.setVisible(visible),
+      isNoisePreviewVisible: () => noisePreviewPanel?.isVisible() ?? false,
       log: message => console.log(message),
     });
+    noisePreviewPanel = createNoisePreviewPanel({
+      document,
+      isExporting: () => Boolean(exportController?.exporting),
+      snapshot: options => director.inspect().compositionId === "noise-grid"
+        ? director.generator("noiseGrid").noisePreviewSnapshot(options)
+        : null,
+    });
+    syncCompositionUi();
     Object.defineProperty(window, "cg", {
       configurable: true,
       value: consoleCommands,
@@ -485,6 +515,7 @@ new window.p5(p => {
     p.background(GLOBAL_CONFIG.canvas.background);
     director.update(frame);
     director.draw(frame);
+    noisePreviewPanel?.update();
   };
 
   p.mouseMoved = () => {
@@ -532,6 +563,27 @@ new window.p5(p => {
       overlay?.remove();
       overlay = null;
     };
+    const restoreFile = async file => {
+      if (!file || exportController?.exporting) return false;
+      const before = projectSnapshot();
+      inputLocked = true;
+      document.body.classList.add("restoring-project");
+      try {
+        await exportController.restoreFile(file);
+        const after = projectSnapshot();
+        if (!sameSnapshot(before, after)) history.commit(after);
+        return true;
+      } catch (error) {
+        console.warn("Project-state restore failed:", error);
+        window.alert(error.message);
+        restoreProjectSnapshot(before);
+        renderPreview();
+        return false;
+      } finally {
+        inputLocked = false;
+        document.body.classList.remove("restoring-project");
+      }
+    };
     window.addEventListener("dragenter", event => {
       if (![...(event.dataTransfer?.items ?? [])].some(item => item.kind === "file")) return;
       event.preventDefault();
@@ -553,23 +605,7 @@ new window.p5(p => {
       const file = event.dataTransfer?.files?.[0];
       if (!file) return;
       event.preventDefault();
-      if (exportController?.exporting) return;
-      const before = projectSnapshot();
-      inputLocked = true;
-      document.body.classList.add("restoring-project");
-      try {
-        await exportController.restoreFile(file);
-        const after = projectSnapshot();
-        if (!sameSnapshot(before, after)) history.commit(after);
-      } catch (error) {
-        console.warn("Project-state restore failed:", error);
-        window.alert(error.message);
-        restoreProjectSnapshot(before);
-        renderPreview();
-      } finally {
-        inputLocked = false;
-        document.body.classList.remove("restoring-project");
-      }
+      await restoreFile(file);
     });
 
     window.addEventListener("keydown", event => {

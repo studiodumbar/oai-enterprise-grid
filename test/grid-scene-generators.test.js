@@ -778,6 +778,8 @@ test("L-tree grows, prunes, and commits without moving a node", () => {
   assert.equal(settle.paletteMotion, undefined);
   assert.equal(settle.faces.filter(face => face.level >= 0).length, 1);
   assert.equal(settle.faces[settle.terminalIndex].level, 0);
+  assert.deepEqual(settle.endpointCellIndices, [settle.terminalIndex]);
+  assert.equal(settle.transitionStyle, "cut");
 
   const portraitLayout = createCircleGridSceneLayout(
     { width: 390, height: 844 },

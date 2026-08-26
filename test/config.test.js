@@ -27,6 +27,11 @@ const EXPECTED_BUNDLE_OWNERSHIP = Object.freeze({
     generators: ["baseGrid"],
     compositions: ["base"],
   },
+  "noise-grid": {
+    settings: ["noiseGrid"],
+    generators: ["noiseGrid"],
+    compositions: ["noise-grid"],
+  },
   "inference-loop": {
     settings: ["inferenceLoop"],
     generators: ["inferenceLoopGrid"],
@@ -554,6 +559,7 @@ test("config facade preserves explicit global, shared, and bundle ownership", ()
       "debug",
       "flicker",
       "intro",
+      "noiseFields",
       "outro",
       "palette",
       "palettes",
@@ -581,6 +587,7 @@ test("config facade preserves explicit global, shared, and bundle ownership", ()
     canvas: GLOBAL_CONFIG.canvas,
     cellTransitions: GLOBAL_CONFIG.cellTransitions,
     composition: GLOBAL_CONFIG.composition,
+    noiseFields: GLOBAL_CONFIG.noiseFields,
   };
   const settingGroups = [
     ["global", globalSettings],
@@ -788,11 +795,20 @@ test("every canonical non-flock recipe owns a timing root and aliases inherit it
   }
 });
 
+test("inference-loop runs as four one-second composition beats", () => {
+  assert.deepEqual(SETTINGS.inferenceLoop.timing, {
+    bodyDurationSeconds: 4,
+    beatCount: 4,
+    beatSeconds: 1,
+  });
+});
+
 test("all configured settings and implementation references resolve", () => {
   const globalSettings = {
     canvas: GLOBAL_CONFIG.canvas,
     cellTransitions: GLOBAL_CONFIG.cellTransitions,
     composition: GLOBAL_CONFIG.composition,
+    noiseFields: GLOBAL_CONFIG.noiseFields,
   };
   const catalog = createCatalog({ palettes: PALETTES });
 

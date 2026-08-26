@@ -11,6 +11,8 @@ import { WaveFieldGenerator } from "./generators/wave-field-generator.js";
 import { PathfindingGenerator } from "./generators/pathfinding-generator.js";
 import { BaseCompositionGenerator } from "./generators/base-composition-generator.js";
 import { createSceneTransitionModeRegistry } from "./scene-transitions/index.js";
+import { NoiseCircleGridGenerator } from "./generators/noise-circle-grid-generator.js";
+import { createNoiseFieldRegistry } from "./noise-fields/index.js";
 
 // This is the implementation catalog. Generator factories are registered here;
 // cell-transition factories live in cell-transitions/index.js. Compositions
@@ -21,10 +23,16 @@ export function createCatalog({ palettes }) {
   const cellTransitionTypes = createCellTransitionModeRegistry();
   const sceneTransitionTypes = createSceneTransitionModeRegistry();
   const shapeRenderer = new RoundedRectRenderer();
+  const noiseFieldModes = createNoiseFieldRegistry();
 
   compositionRules.register(
     "sequence",
     ({ definition }) => new SequenceRule(definition),
+  );
+
+  generatorTypes.register(
+    "noise-circle-grid",
+    creationContext => new NoiseCircleGridGenerator({ ...creationContext, palettes, noiseFieldModes }),
   );
 
   generatorTypes.register(
@@ -112,5 +120,6 @@ export function createCatalog({ palettes }) {
     compositionRules,
     cellTransitionTypes,
     sceneTransitionTypes,
+    noiseFieldModes,
   };
 }

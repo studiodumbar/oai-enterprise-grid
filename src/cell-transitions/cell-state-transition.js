@@ -126,8 +126,11 @@ export class CellStateTransition {
       overlapDots: this.mode?.overlapDots ?? null,
       itemCount: this.plan?.targets?.length ?? 0,
       sourceItemCount: this.plan?.sourceItemCount ?? 0,
+      expandedSourceCount: this.plan?.expandedSourceCount ?? 0,
       startsOffscreen: this.plan?.fadeIn ?? false,
       staggerSeconds: this.plan?.staggerSeconds ?? 0,
+      waveAmplitudeInCells: this.plan?.waveAmplitudeInCells ?? null,
+      beamLengthInCells: this.plan?.beamLengthInCells ?? null,
     };
   }
 }

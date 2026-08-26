@@ -28,6 +28,16 @@ const FILL_DIRECTIONS = Object.freeze({
 
 export const SORT_SELECTION_DIRECTIONS = Object.freeze(Object.keys(FILL_DIRECTIONS));
 
+export const DEFAULT_SORT_SELECTION_SETTINGS = Object.freeze({
+  seed: 173,
+  revealFraction: 0.16,
+  arcHeightInCells: 0.32,
+  overlapDots: false,
+  directions: Object.freeze(["top-down"]),
+  staggerSeconds: 0,
+  timingCurve: Object.freeze([0.65, 0, 0.35, 1]),
+});
+
 /**
  * Normalize the `directions` option into a non-empty frozen list of known
  * direction names. One name is a constant direction; several alternate, one per
@@ -162,17 +172,21 @@ function offscreenSlots(targets, layout, key, seed) {
  */
 export class SortSelectionTransitionMode {
   constructor(options = {}) {
-    const seed = options.seed ?? 173;
-    const revealFraction = options.revealFraction ?? 0.16;
-    const arcHeightInCells = options.arcHeightInCells ?? 0.32;
-    const staggerSeconds = options.staggerSeconds ?? 0;
-    const overlapDots = options.overlapDots === undefined ? false : options.overlapDots;
+    const seed = options.seed ?? DEFAULT_SORT_SELECTION_SETTINGS.seed;
+    const revealFraction = options.revealFraction
+      ?? DEFAULT_SORT_SELECTION_SETTINGS.revealFraction;
+    const arcHeightInCells = options.arcHeightInCells
+      ?? DEFAULT_SORT_SELECTION_SETTINGS.arcHeightInCells;
+    const staggerSeconds = options.staggerSeconds
+      ?? DEFAULT_SORT_SELECTION_SETTINGS.staggerSeconds;
+    const overlapDots = options.overlapDots
+      ?? DEFAULT_SORT_SELECTION_SETTINGS.overlapDots;
     const directions = normalizeDirections(
-      options.directions ?? "top-down",
+      options.directions ?? DEFAULT_SORT_SELECTION_SETTINGS.directions,
       "sort-selection direction",
     );
     const timingCurve = normalizeBezierCurve(
-      options.timingCurve ?? [0.65, 0, 0.35, 1],
+      options.timingCurve ?? DEFAULT_SORT_SELECTION_SETTINGS.timingCurve,
       "sort-selection timingCurve",
     );
     if (!Number.isSafeInteger(seed)) {
@@ -203,6 +217,10 @@ export class SortSelectionTransitionMode {
     this.timingCurve = Object.freeze(timingCurve);
   }
 
+  fillOrderFor({ targets, sweep }) {
+    return FILL_DIRECTIONS[sweep](targets.length);
+  }
+
   createPlan({
     items,
     indices,
@@ -225,7 +243,25 @@ export class SortSelectionTransitionMode {
     // `fillOrder[step]` is the target order that settles at that step;
     // `stepByOrder[order]` is its inverse. The sort minimizes the step, so the
     // sweep is expressed entirely by this permutation.
-    const fillOrder = FILL_DIRECTIONS[sweep](targets.length);
+    const fillOrder = this.fillOrderFor({
+      targets,
+      sweep,
+      layout,
+      key,
+      passIndex,
+    });
+    if (
+      !Array.isArray(fillOrder)
+      || fillOrder.length !== targets.length
+      || new Set(fillOrder).size !== targets.length
+      || fillOrder.some(order => (
+        !Number.isInteger(order) || order < 0 || order >= targets.length
+      ))
+    ) {
+      throw new Error(
+        `sort-selection ${sweep} fill order must contain every target exactly once.`,
+      );
+    }
     const stepByOrder = new Array(targets.length);
     fillOrder.forEach((order, step) => { stepByOrder[order] = step; });
     const slots = targets.map(item => ({ x: item.x, y: item.y, size: item.size }));
@@ -235,9 +271,20 @@ export class SortSelectionTransitionMode {
         { items: fromItems, layout },
         "sort-selection source",
       );
-    const offscreen = offscreenSlots(targets, layout, key, this.seed);
+    const offscreen = authoredSources?.length > 0
+      ? []
+      : offscreenSlots(targets, layout, key, this.seed);
     const sourceSlots = targets.map((target, slot) => {
-      const source = authoredSources?.[slot] ?? offscreen[slot] ?? target;
+      // Expand a smaller real source set across the normalized target order.
+      // Every repeated source remains on the authored grid; an offscreen slot
+      // is reserved for a transition that truly has no previous scene.
+      const sourceIndex = authoredSources?.length > 0
+        ? Math.min(
+          authoredSources.length - 1,
+          Math.floor(slot * authoredSources.length / targets.length),
+        )
+        : -1;
+      const source = authoredSources?.[sourceIndex] ?? offscreen[slot] ?? target;
       return { x: source.x, y: source.y, size: source.size };
     });
     const targetOrderById = new Map(
@@ -351,6 +398,9 @@ export class SortSelectionTransitionMode {
       staggerSpanSeconds: staggerSpan,
       fadeIn: authoredSources === null || authoredSources.length === 0,
       sourceItemCount: authoredSources?.length ?? 0,
+      expandedSourceCount: authoredSources?.length > 0
+        ? Math.max(0, targets.length - authoredSources.length)
+        : 0,
       collisionCache: null,
     };
   }
