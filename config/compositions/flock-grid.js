@@ -2,61 +2,117 @@
 // generator, so switching IDs keeps the live flock.
 export const FLOCK_GRID_CONFIG = {
   settings: {
-    grid: {
-      longSideCells: 12,
-      dotMargin: 0.025,
-      showCellGrid: false,
-      fieldRadiusInCells: 1,
-      fieldGain: 0.072,
-      riseSeconds: 0.8,
-      fallSeconds: 0.75,
-    },
-
-    typography: {
-      text: "",
-      textLockup: true,
-      fontFamily: "Helvetica Neue, Helvetica, Arial, sans-serif",
-      weight: 600,
-      sizeInCanvasHeights: 0.2,
-      influencesGrid: false,
-      gridInfluence: 0.09,
-      flockAvoidance: 10,
-      halo: 2,
-      restingOpacity: 0.0,
-      pulseScale: 0.0,
-    },
-
     flock: {
-      showBoids: false,
-      boidColor: "#ff0035",
-      boidOpacity: 0.72,
-      boidSize: 40,
-      pulseEverySeconds: 2.2,
-      pulseDecaySeconds: 1.7,
-      birthsPerPulse: 50,
-      emissionSeconds: 0.09,
-      lifetimeSeconds: 18,
-      fadeStartsAt: 0.5,
-      initialSpeed: 48,
-      count: 100,
-      perceptionRadius: 75,
-      separationRadius: 10,
-      maxSpeed: 520,
-      maxForce: 720,
-      alignment: 0.78,
-      cohesion: 0.054,
-      separation: 5,
-      pointerRadius: 100,
-      pointerForce: 0,
+      ui: {
+        flockPreview: true,
+      },
+      // Flock uses the shared phase system without reintroducing typography.
+      intro: {
+        enabled: true,
+        mode: "text",
+        durationSeconds: "auto",
+      },
+      outro: {
+        enabled: false,
+        mode: "text",
+        durationSeconds: "auto",
+      },
+      circleEndpoints: {
+        start: { enabled: true, durationSeconds: "auto", mode: "native" },
+        end: { enabled: true, durationSeconds: "auto", mode: "dijkstra" },
+        modes: {
+          dijkstra: {
+            // Give route growth a full beat-scale gesture instead of six frames.
+            pathFraction: 0.4,
+          },
+        },
+      },
+      flicker: {
+        // Match Base: the local preset repeats across the glyphs inside every
+        // subdivided parent cell, with a deterministic time stagger per cell.
+        scope: "cell",
+        mode: "radar-arc",
+        modes: {
+          // Only the block matching `mode` is active. Keeping it local makes
+          // flock tuning visible here instead of hiding it in global defaults.
+          "prism-bloom": {
+            cycleSeconds: "auto",
+            blendSeconds: 1,
+            baseIntensity: 0.08,
+          },
+      "radar-arc": { 
+        cycleSeconds: "calc(auto * 0.5)",
+        gridSteps: 5,
+        beamWidth: 0.55,
+        wakeWidth: 1.15,
+        ringInnerRadius: 1.6,
+        ringOuterRadius: 1.8,
+        baseIntensity: 0.4,
+      },
+ 
+          "noise": {
+            speed: 2,
+            spatialScale: 0.5,
+          },
+        },
+        envelope: {
+          // WHEN flicker is applied. Switch back to "end-of-life" to use the
+          // age ramp below instead of selecting cells as their energy falls.
+          trigger: "disappearing-cell",
+          probability: 0.2,
+          // 0, 1, 2, 3 render 1, 4, 16, 64 glyphs in a selected parent cell.
+          subdivisionLevel: 1,
+          endOfLifeStart: 0.5,
+        },
+      },
+      grid: {
+        longSideCells: 22,
+        dotMargin: 0.0,
+        showCellGrid: false,
+        fieldRadiusInCells: 1,
+        fieldGain: 1,
+        riseSeconds: 0.8,
+        fallSeconds: 0.5,
+        emptyBelow: 0.01,
+        paletteMode: "step",
+      },
+      field: {
+        longSidePixels: 240,
+        boidSize: 20,
+      },
+      simulation: {
+        wrapEdges: false,
+        // One emission pulse per resolved composition beat.
+        pulseEverySeconds: "auto",
+        pulseDecaySeconds: 1.5,
+        birthsPerPulse: 5,
+        emissionSeconds: 0.1,
+        lifetimeSeconds: 8,
+        fadeStartsAt: 5,
+        initialSpeed: 1000,
+        spawnRadius: 0.01,
+        count: 20,
+        perceptionRadius: 5,
+        separationRadius: 10,
+        maxSpeed: 520,
+        maxForce: 720,
+        acceleration: 360,
+        drag: 520,
+        proximityRadius: 75,
+        proximityExponent: 1.4,
+        alignment: 0.78,
+        cohesion: 54,
+        separation: 500,
+        pointerRadius: 10,
+        pointerForce: 100,
+      },
     },
   },
 
   generatorDefinitions: {
     flockGrid: {
       type: "flock-grid",
-      gridSettings: "grid",
-      typographySettings: "typography",
-      flockSettings: "flock",
+      settingsKey: "flock",
       cellTransition: { type: "none", options: "none" },
     },
   },
@@ -65,12 +121,20 @@ export const FLOCK_GRID_CONFIG = {
     flock: {
       rule: "sequence",
       loop: true,
+      timing: {
+        bodyDurationSeconds: 30,
+        beatCount: 10,
+      },
       steps: [{ use: "flockGrid" }],
     },
 
     "flock-circles": {
       rule: "sequence",
       loop: true,
+      timing: {
+        bodyDurationSeconds: 30,
+        beatCount: 10,
+      },
       steps: [
         {
           use: "flockGrid",

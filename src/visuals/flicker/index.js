@@ -94,6 +94,11 @@ export {
 } from "./radar-arc-mode.js";
 export { FieldGeometry } from "./field-geometry.js";
 export {
+  FLICKER_DOTS_PER_CELL_AXIS,
+  flickerPaletteIndicesAtCoordinates,
+  flickerPaletteIndicesForCell,
+} from "./cell-palette.js";
+export {
   AUTO_FLICKER_CYCLE_SECONDS,
   DEFAULT_FLICKER_SETTINGS,
   FLICKER_SCOPES,

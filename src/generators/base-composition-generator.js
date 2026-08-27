@@ -1,4 +1,9 @@
-import { createFlicker, FLICKER_SCOPES } from "../visuals/flicker/index.js";
+import {
+  FLICKER_DOTS_PER_CELL_AXIS,
+  FLICKER_SCOPES,
+  createFlicker,
+  flickerPaletteIndicesForCell,
+} from "../visuals/flicker/index.js";
 import { hashUnit } from "./grid-scene-strategies.js";
 import {
   SceneTransition,
@@ -22,7 +27,7 @@ import {
 
 export const BASE_CELL_LEVELS = Object.freeze([0, 1, 2, 3, 4]);
 
-const DOTS_PER_FINEST_AXIS = 1 << BASE_CELL_LEVELS.at(-1);
+const DOTS_PER_FINEST_AXIS = FLICKER_DOTS_PER_CELL_AXIS;
 const TAU = Math.PI * 2;
 
 function requireFinitePositive(value, label) {
@@ -365,72 +370,16 @@ export class BaseCompositionGenerator {
       + hashUnit(index, BASE_CELL_LEVELS.length, 977) * this.flicker.cellStaggerSeconds;
   }
 
-  sampleCoordinates(index, subColumn, subRow, coordinateStep) {
-    const halfStep = coordinateStep * 0.5;
-    if (this.flicker.scope === "cell") {
-      return {
-        x: subColumn * coordinateStep + halfStep,
-        y: subRow * coordinateStep + halfStep,
-      };
-    }
+  paletteIndicesForCell(index, level) {
     const parentColumn = this.layout.horizontal ? index : 0;
     const parentRow = this.layout.horizontal ? 0 : index;
-    return {
-      x: parentColumn * DOTS_PER_FINEST_AXIS + subColumn * coordinateStep + halfStep,
-      y: parentRow * DOTS_PER_FINEST_AXIS + subRow * coordinateStep + halfStep,
-    };
-  }
-
-  paletteIndicesForCell(index, level) {
-    const subdivisions = 1 << level;
-    const glyphCount = subdivisions * subdivisions;
-    const coordinateStep = DOTS_PER_FINEST_AXIS / subdivisions;
-    const samples = new Float32Array(glyphCount);
-    const order = Array.from({ length: glyphCount }, (_, glyphIndex) => glyphIndex);
-    const time = this.flickerTimeFor(index);
-
-    for (let glyphIndex = 0; glyphIndex < glyphCount; glyphIndex += 1) {
-      const subColumn = glyphIndex % subdivisions;
-      const subRow = Math.floor(glyphIndex / subdivisions);
-      const point = this.sampleCoordinates(index, subColumn, subRow, coordinateStep);
-      samples[glyphIndex] = this.flicker.sampleAt(point.x, point.y, time);
-    }
-
-    const paletteCount = this.flicker.paletteColors.length;
-    const useRank = this.flicker.spreadsRankAcrossCell(glyphCount);
-    if (useRank) {
-      order.sort((first, second) => samples[first] - samples[second] || first - second);
-    }
-
-    const basePosition = 0.5;
-    const indices = new Uint16Array(glyphCount);
-    for (let rank = 0; rank < glyphCount; rank += 1) {
-      const glyphIndex = useRank ? order[rank] : rank;
-      if (useRank) {
-        const target = Math.min(
-          paletteCount - 1,
-          Math.floor(rank * paletteCount / glyphCount),
-        ) / Math.max(1, paletteCount - 1);
-        indices[glyphIndex] = this.flicker.paletteIndexFromSample(
-          basePosition,
-          target,
-          this.flicker.amount,
-        );
-      } else if (this.flicker.distribution === "level") {
-        indices[glyphIndex] = this.flicker.paletteIndexFromSample(
-          basePosition,
-          samples[glyphIndex],
-          this.flicker.amount,
-        );
-      } else {
-        indices[glyphIndex] = this.flicker.paletteIndexFromNoise(
-          basePosition,
-          samples[glyphIndex],
-          this.flicker.amount,
-        );
-      }
-    }
-    return indices;
+    return flickerPaletteIndicesForCell({
+      flicker: this.flicker,
+      level,
+      time: this.flickerTimeFor(index),
+      parentColumn,
+      parentRow,
+    });
   }
 
   compositionEndpointScene() {
@@ -654,12 +603,7 @@ export class BaseCompositionGenerator {
       previewRepeats: this.previewRepeats,
       cycleDuration: this.cycleDuration(),
       animationDuration: this.animationDuration(),
-      flicker: {
-        enabled: this.flicker.enabled,
-        mode: this.flicker.modeName,
-        scope: this.flicker.scope,
-        amount: this.flicker.amount,
-      },
+      flicker: this.flicker.inspect(),
       intro: this.intro.inspect(),
       outro: this.outro.inspect(),
       compositionEndpoint: this.endCompositionEndpoint?.inspect?.() ?? null,

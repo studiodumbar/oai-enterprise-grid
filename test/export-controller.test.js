@@ -230,7 +230,7 @@ test("the confirmed legacy MP4 imports through restoreFile", async t => {
   });
   let bytes;
   try {
-    bytes = await readFile(new URL("../assets/NOISE-GRID_circle-grid-20260819105741.mp4", import.meta.url));
+    bytes = await readFile(new URL("../assets/circle-grid-20260819105741.mp4", import.meta.url));
   } catch (error) {
     if (error?.code !== "ENOENT") throw error;
     t.skip("confirmed legacy MP4 fixture is not present in assets/");

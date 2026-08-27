@@ -51,6 +51,26 @@ const DEFAULT_LEVEL_TRANSITION = Object.freeze({
   hysteresis: 0.03,
 });
 
+function visibilitySettingsAt(base, effect) {
+  if (!effect) return base;
+  const amount = Math.max(0, Math.min(1, Number(effect.amount) || 0));
+  if (amount === 0) return base;
+  if (amount === 1) {
+    return {
+      ...base,
+      threshold: effect.threshold,
+      contrast: effect.contrast,
+      softness: effect.softness,
+    };
+  }
+  return {
+    ...base,
+    threshold: base.threshold + (effect.threshold - base.threshold) * amount,
+    contrast: base.contrast + (effect.contrast - base.contrast) * amount,
+    softness: base.softness + (effect.softness - base.softness) * amount,
+  };
+}
+
 function mergeNoiseFields(base = {}, overrides = {}) {
   const layers = {};
   for (const name of new Set([
@@ -130,6 +150,8 @@ export class NoiseCircleGridGenerator {
     this.sampled = null;
     this.outputState = null;
     this.cellAnimation = null;
+    this.visibilityEffectPhase = null;
+    this.visibilityEffectActive = false;
     this.resize(runtime.viewport());
   }
 
@@ -144,6 +166,8 @@ export class NoiseCircleGridGenerator {
       bodyDurationSeconds: this.generatorSettings.durationSeconds,
       beatSeconds: this.generatorSettings.durationSeconds / this.options.timing.beatCount,
     };
+    this.visibilitySettings = this.noiseSettings.layers.visibility;
+    this.samplingSettings = this.noiseSettings;
     this.palette = this.generatorSettings.paletteColors
       ? [...this.generatorSettings.paletteColors]
       : [...paletteByName(this.palettes, this.generatorSettings.palette)];
@@ -180,11 +204,42 @@ export class NoiseCircleGridGenerator {
 
   update(frame = {}) {
     const duration = this.generatorSettings.durationSeconds;
-    this.progress = duration > 0 ? (((frame.time ?? 0) / duration) % 1 + 1) % 1 : 0;
-    this.elapsedTime = Math.max(0, Number(frame.time) || 0);
+    const timelineTime = Math.max(0, Number(frame.timelineTime ?? frame.time) || 0);
+    this.progress = duration > 0 ? ((timelineTime / duration) % 1 + 1) % 1 : 0;
+    this.elapsedTime = timelineTime;
+    this.applyPhaseEffects(frame);
     this.sample(frame.exporting === true ? 'cpu' : this.generatorSettings.backend);
     this.updateOutputState(this.elapsedTime);
     this.updateCellAnimation(Math.max(0, Number(frame.dt) || 0));
+  }
+
+  applyPhaseEffects(frame) {
+    const effect = frame?.phaseEffects?.noiseVisibility ?? null;
+    this.visibilityEffectActive = effect !== null;
+    this.visibilitySettings = visibilitySettingsAt(
+      this.noiseSettings.layers.visibility,
+      effect,
+    );
+    this.samplingSettings = effect === null
+      ? this.noiseSettings
+      : {
+        ...this.noiseSettings,
+        layers: {
+          ...this.noiseSettings.layers,
+          visibility: this.visibilitySettings,
+        },
+      };
+    const phase = effect === null ? null : frame?.compositionEndpoint?.phase ?? null;
+    if (phase !== this.visibilityEffectPhase) {
+      debug.transition(
+        "noise-visibility phase=%s threshold=%.3f contrast=%.3f softness=%.3f",
+        phase ?? "-",
+        effect?.threshold ?? this.visibilitySettings.threshold,
+        effect?.contrast ?? this.visibilitySettings.contrast,
+        effect?.softness ?? this.visibilitySettings.softness,
+      );
+      this.visibilityEffectPhase = phase;
+    }
   }
 
   sample(backend = this.generatorSettings.backend) {
@@ -194,7 +249,7 @@ export class NoiseCircleGridGenerator {
       progress: this.progress,
       timeSeconds: this.elapsedTime,
       projectSeed: this.runtime.projectSeed?.() ?? 0,
-      settings: this.noiseSettings,
+      settings: this.samplingSettings,
       backend,
     });
   }
@@ -213,7 +268,7 @@ export class NoiseCircleGridGenerator {
     const modulated = Math.max(0, Math.min(0.999999, base + influence * (contrast - 0.5)));
     const color = Math.min(this.palette.length - 1, Math.floor(modulated * this.palette.length));
 
-    const visibilityLayer = this.noiseSettings.layers.visibility;
+    const visibilityLayer = this.visibilitySettings;
     const visibilityLevel = this.sampled.visibilityLevels[levelIndex];
     const visibilityValue = visibilityLayer.softness <= 1e-7
       ? this.sampled.visibilityLevels[4].data[cell] / 255
@@ -254,7 +309,11 @@ export class NoiseCircleGridGenerator {
       return;
     }
     const colorHold = this.noiseSettings.layers.color.holdSeconds;
-    const visibilityHold = this.noiseSettings.layers.visibility.holdSeconds;
+    // The text envelope is already a timed visibility transition. Applying the
+    // field's output hold on top can outlast the whole intro and hide the ramp.
+    const visibilityHold = this.visibilityEffectActive
+      ? 0
+      : this.noiseSettings.layers.visibility.holdSeconds;
     for (let levelIndex = 0; levelIndex < this.sampled.contrastLevels.length; levelIndex += 1) {
       const colorState = this.outputState.color[levelIndex];
       const visibilityState = this.outputState.visibility[levelIndex];
@@ -418,7 +477,7 @@ export class NoiseCircleGridGenerator {
         progress: this.progress,
         timeSeconds: this.elapsedTime,
         projectSeed: this.runtime.projectSeed?.() ?? 0,
-        settings: this.noiseSettings,
+        settings: this.samplingSettings,
       })
       : null;
     return {
@@ -430,9 +489,13 @@ export class NoiseCircleGridGenerator {
       previewDimensions: continuous?.dimensions ?? null,
       contrast: this.sampled.contrastLevels[0].data.slice(),
       visibility: Uint8Array.from(this.sampled.visibilityLevels[0].data, value => (
-        Math.round(visibilityFill(value / 255, this.noiseSettings.layers.visibility) * 255)
+        Math.round(visibilityFill(value / 255, this.visibilitySettings) * 255)
       )),
-      visibilitySettings: { threshold: this.noiseSettings.layers.visibility.threshold, softness: this.noiseSettings.layers.visibility.softness },
+      visibilitySettings: {
+        threshold: this.visibilitySettings.threshold,
+        contrast: this.visibilitySettings.contrast,
+        softness: this.visibilitySettings.softness,
+      },
     };
   }
 
@@ -463,7 +526,7 @@ export class NoiseCircleGridGenerator {
     return true;
   }
   contentBounds() { return { x: 0, y: 0, width: this.layout.width, height: this.layout.height }; }
-  inspect() { const preview = this.noisePreviewSnapshot(); return { generatorType: 'noise-circle-grid', active: this.active, progress: this.progress, backend: preview?.backend ?? null, levels: this.sampled ? Array.from(this.sampled.size, (_, index) => this.levelForCell(index)) : [] }; }
+  inspect() { const preview = this.noisePreviewSnapshot(); return { generatorType: 'noise-circle-grid', active: this.active, progress: this.progress, fieldTime: this.elapsedTime, visibilitySettings: { threshold: this.visibilitySettings.threshold, contrast: this.visibilitySettings.contrast, softness: this.visibilitySettings.softness }, backend: preview?.backend ?? null, levels: this.sampled ? Array.from(this.sampled.size, (_, index) => this.levelForCell(index)) : [] }; }
   settingsSnapshot() { return structuredClone(this.generatorSettings); }
   applySettings(value, { time = this.elapsedTime } = {}) {
     this.generatorSettings = normalizeGeneratorSettings(value, this.generatorSettings);

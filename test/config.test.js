@@ -57,6 +57,11 @@ const EXPECTED_BUNDLE_OWNERSHIP = Object.freeze({
     generators: ["lTreeGrid"],
     compositions: ["l-tree"],
   },
+  mold: {
+    settings: ["mold"],
+    generators: ["moldGrid"],
+    compositions: ["mold"],
+  },
   "game-of-life": {
     settings: ["gameOfLife"],
     generators: ["gameOfLifeAutomaton"],
@@ -68,7 +73,7 @@ const EXPECTED_BUNDLE_OWNERSHIP = Object.freeze({
     compositions: ["interactive-grid"],
   },
   "flock-grid": {
-    settings: ["flock", "grid", "typography"],
+    settings: ["flock"],
     generators: ["flockGrid"],
     compositions: ["flock", "flock-circles"],
   },
@@ -123,6 +128,13 @@ const EXPECTED_GRID_HIERARCHY = Object.freeze([
     generatorType: "procedural-topology",
     settingsKey: "lTree",
     strategy: "l-tree",
+  },
+  {
+    compositionId: "mold",
+    generatorInstanceId: "moldGrid",
+    generatorType: "procedural-topology",
+    settingsKey: "mold",
+    strategy: "mold",
   },
   {
     compositionId: "game-of-life",
@@ -236,6 +248,7 @@ function assertInheritsGlobalDefaults(assembled, authored, name, inheritsPalette
     intro: assembledIntro,
     outro: assembledOutro,
     palette: assembledPalette,
+    simulation: assembledSimulation,
     timing: assembledTiming,
     ...assembledRest
   } = assembled;
@@ -247,6 +260,7 @@ function assertInheritsGlobalDefaults(assembled, authored, name, inheritsPalette
     intro: authoredIntro,
     outro: authoredOutro,
     palette: authoredPalette,
+    simulation: authoredSimulation,
     timing: authoredTiming,
     ...authoredRest
   } = authored;
@@ -294,6 +308,7 @@ function assertInheritsGlobalDefaults(assembled, authored, name, inheritsPalette
     assert.deepEqual(assembledOutro, unresolvedOutro);
     assert.deepEqual(assembledCircleEndpoints, authoredCircleEndpoints);
     assert.deepEqual(assembledColorTransition, authoredColorTransition);
+    assert.deepEqual(assembledSimulation, authoredSimulation);
   } else {
     assert.deepEqual(assembledTiming, timing);
     const expectedIntro = phaseWithResolvedDuration(
@@ -358,6 +373,22 @@ function assertInheritsGlobalDefaults(assembled, authored, name, inheritsPalette
             {
               automaticSeconds: timing.beatSeconds,
               label: `SETTINGS.${name}.colorTransition.durationSeconds`,
+              source: "composition-beat",
+            },
+          ).seconds,
+        },
+    );
+    assert.deepEqual(
+      assembledSimulation,
+      authoredSimulation?.pulseEverySeconds === undefined
+        ? authoredSimulation
+        : {
+          ...authoredSimulation,
+          pulseEverySeconds: resolveTimelineDuration(
+            authoredSimulation.pulseEverySeconds,
+            {
+              automaticSeconds: timing.beatSeconds,
+              label: `SETTINGS.${name}.simulation.pulseEverySeconds`,
               source: "composition-beat",
             },
           ).seconds,
@@ -697,16 +728,11 @@ test("public compositions expose the explicit configuration hierarchy", () => {
   }
 });
 
-test("global Dijkstra reaches every non-flock composition while flock stays native", () => {
+test("global Dijkstra reaches every composition including flock", () => {
   assert.equal(GLOBAL_CONFIG.composition.circleEndpoints.end.mode, "dijkstra");
   assert.equal(GLOBAL_CONFIG.composition.circleEndpoints.end.enabled, true);
   for (const [compositionId, definition] of Object.entries(COMPOSITION_DEFINITIONS)) {
     const generatorIds = definitionGeneratorIds(definition);
-    const flockOnly = generatorIds.every(
-      id => GENERATOR_DEFINITIONS[id]?.type === "flock-grid",
-    );
-    if (flockOnly) continue;
-
     const settingsKeys = generatorIds.map(id => settingsKeyForDefinition(
       GENERATOR_DEFINITIONS[id],
       `Generator "${id}"`,
@@ -745,18 +771,17 @@ test("global Dijkstra reaches every non-flock composition while flock stays nati
   for (const compositionId of ["flock", "flock-circles"]) {
     director.use(compositionId);
     assert.equal(director.compositionEndpoints.start.mode, "native");
-    assert.equal(director.compositionEndpoints.end.mode, "native");
+    assert.equal(director.compositionEndpoints.end.mode, "dijkstra");
     assert.equal(
       director.compositionEndpoints.end.enabled,
-      GLOBAL_CONFIG.composition.endWithCircle,
+      true,
     );
   }
   director.dispose();
 });
 
-test("every canonical non-flock recipe owns a timing root and aliases inherit it", () => {
+test("every canonical recipe owns a timing root and aliases inherit it", () => {
   for (const [family, bundle] of Object.entries(COMPOSITION_BUNDLES)) {
-    if (family === "flock-grid") continue;
     for (const [compositionId, definition] of Object.entries(
       bundle.compositionDefinitions,
     )) {
@@ -801,6 +826,20 @@ test("inference-loop runs as four one-second composition beats", () => {
     beatCount: 4,
     beatSeconds: 1,
   });
+});
+
+test("flock derives pulses and phase durations from its composition beat", () => {
+  assert.deepEqual(SETTINGS.flock.timing, {
+    bodyDurationSeconds: 10,
+    beatCount: 4,
+    beatSeconds: 2.5,
+  });
+  assert.equal(SETTINGS.flock.simulation.pulseEverySeconds, 2.5);
+  assert.equal(SETTINGS.flock.intro.durationSeconds, 2.5);
+  assert.equal(SETTINGS.flock.outro.durationSeconds, 2.5);
+  assert.equal(SETTINGS.flock.circleEndpoints.start.durationSeconds, 2.5);
+  assert.equal(SETTINGS.flock.circleEndpoints.end.durationSeconds, 2.5);
+  assert.equal(SETTINGS.flock.circleEndpoints.modes.dijkstra.pathFraction, 0.4);
 });
 
 test("all configured settings and implementation references resolve", () => {

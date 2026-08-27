@@ -14,6 +14,7 @@ export const INFERENCE_GRID_STRATEGIES = Object.freeze([
 export const PROCEDURAL_TOPOLOGY_STRATEGIES = Object.freeze([
   "voronoi",
   "l-tree",
+  "mold",
 ]);
 
 export const CELLULAR_AUTOMATA_STRATEGIES = Object.freeze([
@@ -59,6 +60,11 @@ export const L_TREE_PHASES = Object.freeze({
   growEnd: 0.58,
   pruneEnd: 0.78,
   commitEnd: 0.9,
+});
+
+export const MOLD_PHASES = Object.freeze({
+  reconEnd: 0.5,
+  digestEnd: 11 / 12,
 });
 
 const TAU = Math.PI * 2;
@@ -226,6 +232,13 @@ export function lTreePhaseAt(progress) {
   return "settle";
 }
 
+export function moldPhaseAt(progress) {
+  const value = clamp01(progress);
+  if (value < MOLD_PHASES.reconEnd) return "recon";
+  if (value < MOLD_PHASES.digestEnd) return "digest";
+  return "settle";
+}
+
 export function minimumSceneHoldFraction(strategy, layerPasses) {
   if (strategy === "inference-loop") {
     return Math.min(
@@ -273,6 +286,9 @@ export function minimumSceneHoldFraction(strategy, layerPasses) {
       L_TREE_PHASES.commitEnd - L_TREE_PHASES.pruneEnd,
       1 - L_TREE_PHASES.commitEnd,
     );
+  }
+  if (strategy === "mold") {
+    return 1 / layerPasses;
   }
   if (strategy === "life-like") {
     return 1 / layerPasses;
@@ -858,6 +874,15 @@ function createToolLoopScene({ layout, cycleIndex, progress, options }) {
 
 // Procedural-topology strategies -------------------------------------------
 
+function gridSceneCycleSeed(projectSeed, cycleIndex) {
+  const seed = (
+    Number.isInteger(projectSeed)
+    && projectSeed >= 0
+    && projectSeed <= 0xffffffff
+  ) ? projectSeed >>> 0 : 0;
+  return ((cycleIndex >>> 0) ^ Math.imul(seed, 0x9e3779b1)) >>> 0;
+}
+
 function normalizedGridDistance(layout, firstIndex, secondIndex) {
   const firstColumn = indexColumn(layout, firstIndex);
   const firstRow = indexRow(layout, firstIndex);
@@ -871,34 +896,74 @@ function normalizedGridDistance(layout, firstIndex, secondIndex) {
   );
 }
 
-export function voronoiSitesForLayout(layout, cycleIndex, siteCount = 4) {
+function scatteredIndicesFromCandidates(
+  layout,
+  candidateIndices,
+  seed,
+  count,
+  excludedIndices = [],
+) {
   const cellCount = layout.columns * layout.rows;
-  if (!Number.isInteger(siteCount) || siteCount < 2 || siteCount > cellCount) {
-    throw new RangeError("siteCount must fit at least two Voronoi sites in the grid.");
+  const excluded = new Set(excludedIndices);
+  const indices = [...new Set(candidateIndices)].filter(index => (
+    Number.isInteger(index)
+    && index >= 0
+    && index < cellCount
+    && !excluded.has(index)
+  ));
+  if (!Number.isInteger(count) || count < 1 || count > indices.length) {
+    throw new RangeError("Scattered point count must fit inside the available grid cells.");
   }
-  const indices = Array.from({ length: cellCount }, (_, index) => index);
-  const ranked = rankedIndices(indices, cycleIndex, 809);
-  const sites = [ranked[0]];
-  const selected = new Set(sites);
+  const ranked = rankedIndices(indices, seed, 809);
+  const selectedIndices = [ranked[0]];
+  const selected = new Set(selectedIndices);
 
-  while (sites.length < siteCount) {
+  while (selectedIndices.length < count) {
     let bestIndex = -1;
     let bestScore = -Infinity;
     for (const index of indices) {
       if (selected.has(index)) continue;
       const separation = Math.min(
-        ...sites.map(siteIndex => normalizedGridDistance(layout, index, siteIndex)),
+        ...selectedIndices.map(
+          selectedIndex => normalizedGridDistance(layout, index, selectedIndex),
+        ),
       );
-      const score = separation + hashUnit(cycleIndex, index, 811) * 0.06;
+      const score = separation + hashUnit(seed, index, 811) * 0.06;
       if (score > bestScore) {
         bestScore = score;
         bestIndex = index;
       }
     }
-    sites.push(bestIndex);
+    selectedIndices.push(bestIndex);
     selected.add(bestIndex);
   }
-  return sites;
+  return selectedIndices;
+}
+
+function scatteredIndicesForLayout(
+  layout,
+  seed,
+  count,
+  excludedIndices = [],
+) {
+  return scatteredIndicesFromCandidates(
+    layout,
+    Array.from(
+      { length: layout.columns * layout.rows },
+      (_, index) => index,
+    ),
+    seed,
+    count,
+    excludedIndices,
+  );
+}
+
+export function voronoiSitesForLayout(layout, cycleIndex, siteCount = 4) {
+  const cellCount = layout.columns * layout.rows;
+  if (!Number.isInteger(siteCount) || siteCount < 2 || siteCount > cellCount) {
+    throw new RangeError("siteCount must fit at least two Voronoi sites in the grid.");
+  }
+  return scatteredIndicesForLayout(layout, cycleIndex, siteCount);
 }
 
 function voronoiAssignmentsAt(layout, sites, cycleIndex, passIndex) {
@@ -1402,6 +1467,672 @@ function createLTreeScene({ layout, cycleIndex, progress, options }) {
   };
 }
 
+const MOLD_SCOUT_SUBDIVISIONS = 1 << MAX_GRID_FACE_LEVEL;
+const MOLD_TOPOLOGY_CACHE_LIMIT = 32;
+const MOLD_GROWTH_ORDER_CACHE_LIMIT = 4096;
+const moldTopologyCache = new Map();
+const moldGrowthOrderCache = new Map();
+
+function moldMicroPointKey(point) {
+  return `${point.microColumn}:${point.microRow}`;
+}
+
+function moldScoutPoint(layout, microColumn, microRow) {
+  const cellColumn = Math.floor(microColumn / MOLD_SCOUT_SUBDIVISIONS);
+  const cellRow = Math.floor(microRow / MOLD_SCOUT_SUBDIVISIONS);
+  const glyphColumn = microColumn % MOLD_SCOUT_SUBDIVISIONS;
+  const glyphRow = microRow % MOLD_SCOUT_SUBDIVISIONS;
+  return {
+    microColumn,
+    microRow,
+    cellIndex: cellRow * layout.columns + cellColumn,
+    glyphIndex: glyphRow * MOLD_SCOUT_SUBDIVISIONS + glyphColumn,
+  };
+}
+
+function moldMicroCardinalNeighbors(layout, point) {
+  const columns = layout.columns * MOLD_SCOUT_SUBDIVISIONS;
+  const rows = layout.rows * MOLD_SCOUT_SUBDIVISIONS;
+  const { microColumn: column, microRow: row } = point;
+  const neighbors = [];
+  if (row > 0) neighbors.push(moldScoutPoint(layout, column, row - 1));
+  if (column > 0) neighbors.push(moldScoutPoint(layout, column - 1, row));
+  if (column + 1 < columns) neighbors.push(moldScoutPoint(layout, column + 1, row));
+  if (row + 1 < rows) neighbors.push(moldScoutPoint(layout, column, row + 1));
+  return neighbors;
+}
+
+function moldReconnaissancePath(
+  layout,
+  rootColumn,
+  rootRow,
+  seed,
+  explorationOrder,
+  maximumSteps,
+  sharedTrail,
+  trailEnergyDiscount,
+) {
+  const requestedSteps = Math.max(
+    2,
+    Math.round(
+      maximumSteps
+      * (0.55 + hashUnit(seed, explorationOrder, 881) * 0.45),
+    ),
+  );
+  const start = moldScoutPoint(
+    layout,
+    rootColumn * MOLD_SCOUT_SUBDIVISIONS
+      + Math.floor(MOLD_SCOUT_SUBDIVISIONS * 0.5),
+    rootRow * MOLD_SCOUT_SUBDIVISIONS
+      + Math.floor(MOLD_SCOUT_SUBDIVISIONS * 0.5),
+  );
+  const scoutPoints = [start];
+  const visitCounts = new Map([[moldMicroPointKey(start), 1]]);
+  for (let step = 0; step < requestedSteps; step += 1) {
+    const current = scoutPoints.at(-1);
+    const previous = scoutPoints.at(-2);
+    const candidates = moldMicroCardinalNeighbors(layout, current)
+      .sort((first, second) => {
+        const energyFor = point => {
+          const key = moldMicroPointKey(point);
+          const immediateBacktrack = previous
+            && point.microColumn === previous.microColumn
+            && point.microRow === previous.microRow;
+          return (sharedTrail.has(key) ? 0 : trailEnergyDiscount)
+            + (visitCounts.get(key) ?? 0) * 0.18
+            + (immediateBacktrack ? 0.35 : 0)
+            + hashUnit(
+              seed ^ explorationOrder,
+              point.microRow * layout.columns * MOLD_SCOUT_SUBDIVISIONS
+                + point.microColumn,
+              883 + step,
+            );
+        };
+        return energyFor(first) - energyFor(second)
+          || first.microRow - second.microRow
+          || first.microColumn - second.microColumn;
+      });
+    if (candidates.length === 0) break;
+    const next = candidates[0];
+    scoutPoints.push(next);
+    const nextKey = moldMicroPointKey(next);
+    visitCounts.set(nextKey, (visitCounts.get(nextKey) ?? 0) + 1);
+  }
+  const indices = scoutPoints.reduce((path, point) => {
+    if (path.at(-1) !== point.cellIndex) path.push(point.cellIndex);
+    return path;
+  }, []);
+  return { indices, scoutPoints };
+}
+
+export function moldTopologyForLayout(
+  layout,
+  cycleIndex,
+  targetCount = 6,
+  projectSeed = 0,
+  explorationCount = 18,
+  explorationStepCount = 2048,
+  trailEnergyDiscount = 0.55,
+) {
+  const cellCount = layout.columns * layout.rows;
+  if (!Number.isInteger(targetCount) || targetCount < 1 || targetCount >= cellCount) {
+    throw new RangeError(
+      "Mold targetCount must fit at least one target beside the origin.",
+    );
+  }
+  if (!Number.isInteger(explorationCount) || explorationCount < targetCount) {
+    throw new RangeError(
+      "Mold explorationCount must be an integer at least as large as targetCount.",
+    );
+  }
+  if (!Number.isInteger(explorationStepCount) || explorationStepCount < 2) {
+    throw new RangeError("Mold explorationStepCount must be an integer of at least 2.");
+  }
+  if (
+    !Number.isFinite(trailEnergyDiscount)
+    || trailEnergyDiscount < 0
+    || trailEnergyDiscount > 1
+  ) {
+    throw new RangeError("Mold trailEnergyDiscount must be between 0 and 1.");
+  }
+  const rootColumn = Math.round(layout.columns * 0.5 - 0.5);
+  const rootRow = Math.round(layout.rows * 0.5 - 0.5);
+  const rootIndex = rootRow * layout.columns + rootColumn;
+  const seed = gridSceneCycleSeed(projectSeed, cycleIndex);
+  const cacheKey = [
+    layout.columns,
+    layout.rows,
+    cycleIndex,
+    targetCount,
+    seed,
+    explorationCount,
+    explorationStepCount,
+    trailEnergyDiscount,
+  ].join(":");
+  const cached = moldTopologyCache.get(cacheKey);
+  if (cached) return cached;
+  const sharedTrail = new Set();
+  const explorations = [];
+  for (let explorationOrder = 0; explorationOrder < explorationCount; explorationOrder += 1) {
+    const path = moldReconnaissancePath(
+      layout,
+      rootColumn,
+      rootRow,
+      seed,
+      explorationOrder,
+      explorationStepCount,
+      sharedTrail,
+      trailEnergyDiscount,
+    );
+    explorations.push({ explorationOrder, ...path });
+    path.scoutPoints.forEach(point => sharedTrail.add(moldMicroPointKey(point)));
+  }
+  const discoveryCandidates = explorations.flatMap(exploration => {
+    const lastPointByCell = new Map();
+    exploration.scoutPoints.forEach((point, pointIndex) => {
+      if (point.cellIndex !== rootIndex) lastPointByCell.set(point.cellIndex, pointIndex);
+    });
+    return [...lastPointByCell.entries()].map(([cellIndex, pointIndex]) => ({
+      explorationOrder: exploration.explorationOrder,
+      pointIndex,
+      cellIndex,
+    }));
+  });
+  const selectedCandidates = [];
+  const selectedCells = new Set();
+  const selectedExplorations = new Set();
+  while (selectedCandidates.length < targetCount) {
+    let bestCandidate = null;
+    let bestScore = -Infinity;
+    for (const candidate of discoveryCandidates) {
+      if (
+        selectedCells.has(candidate.cellIndex)
+        || selectedExplorations.has(candidate.explorationOrder)
+      ) continue;
+      const exploration = explorations[candidate.explorationOrder];
+      const separation = selectedCandidates.length === 0
+        ? 0
+        : Math.min(...selectedCandidates.map(selected => (
+          normalizedGridDistance(layout, candidate.cellIndex, selected.cellIndex)
+        )));
+      const pathProgress = candidate.pointIndex
+        / Math.max(1, exploration.scoutPoints.length - 1);
+      const score = separation
+        + pathProgress * 0.15
+        + hashUnit(seed ^ candidate.explorationOrder, candidate.cellIndex, 891) * 0.06;
+      if (score > bestScore) {
+        bestScore = score;
+        bestCandidate = candidate;
+      }
+    }
+    if (!bestCandidate) break;
+    selectedCandidates.push(bestCandidate);
+    selectedCells.add(bestCandidate.cellIndex);
+    selectedExplorations.add(bestCandidate.explorationOrder);
+  }
+  if (selectedCandidates.length < targetCount) {
+    throw new Error(
+      `Mold reconnaissance found only ${selectedCandidates.length} distinct scout `
+      + `discoveries for ${targetCount} food points. Increase explorationCount.`,
+    );
+  }
+  const discoveries = selectedCandidates.map((candidate, targetOrder) => {
+    const exploration = explorations[candidate.explorationOrder];
+    const scoutPoints = exploration.scoutPoints
+      .slice(0, candidate.pointIndex + 1)
+      .map(point => ({ ...point }));
+    const indices = scoutPoints.reduce((path, point) => {
+      if (path.at(-1) !== point.cellIndex) path.push(point.cellIndex);
+      return path;
+    }, []);
+    return {
+      targetIndex: candidate.cellIndex,
+      targetOrder,
+      explorationOrder: exploration.explorationOrder,
+      glyphSeed: seed ^ exploration.explorationOrder,
+      indices,
+      scoutPoints,
+    };
+  });
+  const targetIndices = discoveries.map(discovery => discovery.targetIndex);
+  const successfulExplorations = new Set(
+    discoveries.map(discovery => discovery.explorationOrder),
+  );
+  const discoveryByExploration = new Map(
+    discoveries.map(discovery => [discovery.explorationOrder, discovery]),
+  );
+  const pathIndices = [...new Set(discoveries.flatMap(path => path.indices))];
+  const topology = {
+    seed,
+    rootIndex,
+    targetIndices,
+    explorations: explorations.map(exploration => {
+      const discovery = discoveryByExploration.get(exploration.explorationOrder);
+      return discovery
+        ? {
+          ...exploration,
+          indices: [...discovery.indices],
+          scoutPoints: discovery.scoutPoints.map(point => ({ ...point })),
+          success: true,
+        }
+        : { ...exploration, success: false };
+    }),
+    discoveries,
+    failedExplorationIndices: explorations.flatMap(exploration => (
+      successfulExplorations.has(exploration.explorationOrder)
+        ? []
+        : [exploration.explorationOrder]
+    )),
+    pathIndices,
+  };
+  moldTopologyCache.set(cacheKey, topology);
+  if (moldTopologyCache.size > MOLD_TOPOLOGY_CACHE_LIMIT) {
+    moldTopologyCache.delete(moldTopologyCache.keys().next().value);
+  }
+  return topology;
+}
+
+function moldGrowthSeedGlyphIndex(seed, targetIndex, level) {
+  const subdivisions = 1 << level;
+  const column = Math.min(
+    subdivisions - 1,
+    Math.floor(hashUnit(seed, targetIndex, 887) * subdivisions),
+  );
+  const row = Math.min(
+    subdivisions - 1,
+    Math.floor(hashUnit(seed, targetIndex, 889) * subdivisions),
+  );
+  return row * subdivisions + column;
+}
+
+function moldGlyphIndexAtLevel(finestGlyphIndex, level) {
+  const subdivisions = 1 << level;
+  const scale = MOLD_SCOUT_SUBDIVISIONS / subdivisions;
+  const finestColumn = finestGlyphIndex % MOLD_SCOUT_SUBDIVISIONS;
+  const finestRow = Math.floor(finestGlyphIndex / MOLD_SCOUT_SUBDIVISIONS);
+  return Math.floor(finestRow / scale) * subdivisions
+    + Math.floor(finestColumn / scale);
+}
+
+function addMoldTrailDeposit(deposits, exploration, point, visitTimeInBeats) {
+  const key = moldMicroPointKey(point);
+  let deposit = deposits.get(key);
+  if (!deposit) {
+    deposit = {
+      point,
+      lastVisitTimeInBeats: visitTimeInBeats,
+      visitCount: 0,
+      selectedIndex: exploration.explorationOrder,
+    };
+    deposits.set(key, deposit);
+  }
+  deposit.lastVisitTimeInBeats = Math.max(
+    deposit.lastVisitTimeInBeats,
+    visitTimeInBeats,
+  );
+  deposit.visitCount += 1;
+  deposit.selectedIndex = exploration.explorationOrder;
+}
+
+export function moldTrailLifetimeBeats(
+  visitCount,
+  decayBeats,
+  reuseBonusBeats,
+) {
+  const visits = Math.max(1, Number.isFinite(visitCount) ? visitCount : 1);
+  return decayBeats + Math.log2(visits) * reuseBonusBeats;
+}
+
+function applyMoldTrailDecay({
+  faces,
+  deposits,
+  beatPosition,
+  decayBeats,
+  reuseBonusBeats,
+}) {
+  const traces = new Map();
+  let expiredTrailGlyphCount = 0;
+  let maximumTrailReuse = 0;
+  for (const deposit of deposits.values()) {
+    const lifetime = moldTrailLifetimeBeats(
+      deposit.visitCount,
+      decayBeats,
+      reuseBonusBeats,
+    );
+    const remainingLifeBeats = lifetime
+      - (beatPosition - deposit.lastVisitTimeInBeats);
+    if (remainingLifeBeats <= 0) {
+      expiredTrailGlyphCount += 1;
+      continue;
+    }
+    const { point } = deposit;
+    let trace = traces.get(point.cellIndex);
+    if (!trace) {
+      trace = {
+        glyphs: new Set(),
+        highwayGlyphs: 0,
+        maximumReuse: 0,
+        maximumRemainingLifeBeats: 0,
+        selectedIndex: deposit.selectedIndex,
+      };
+      traces.set(point.cellIndex, trace);
+    }
+    trace.glyphs.add(point.glyphIndex);
+    if (deposit.visitCount > 1) trace.highwayGlyphs += 1;
+    trace.maximumReuse = Math.max(trace.maximumReuse, deposit.visitCount);
+    trace.maximumRemainingLifeBeats = Math.max(
+      trace.maximumRemainingLifeBeats,
+      remainingLifeBeats,
+    );
+    maximumTrailReuse = Math.max(maximumTrailReuse, deposit.visitCount);
+  }
+  let activeTrailGlyphCount = 0;
+  let highwayGlyphCount = 0;
+  for (const [index, trace] of traces) {
+    const isHighway = trace.highwayGlyphs > 0;
+    activeTrailGlyphCount += trace.glyphs.size;
+    highwayGlyphCount += trace.highwayGlyphs;
+    faces[index] = makeFace(
+      MAX_GRID_FACE_LEVEL,
+      isHighway
+        ? Math.min(
+          GRID_FACE_PALETTE_STEP_COUNT - 1,
+          Math.max(1, Math.floor(Math.log2(trace.maximumReuse))),
+        )
+        : 0,
+      isHighway ? "mold-highway" : "mold-scout-trace",
+      {
+        kind: "mold-recon-dot",
+        stage: isHighway ? "highway" : "trail",
+        seed: index,
+        selectedIndex: trace.selectedIndex,
+        maximumReuse: trace.maximumReuse,
+        remainingLifeBeats: trace.maximumRemainingLifeBeats,
+        visibleGlyphIndices: [...trace.glyphs].sort((first, second) => first - second),
+      },
+    );
+  }
+  return {
+    activeTrailGlyphCount,
+    expiredTrailGlyphCount,
+    highwayGlyphCount,
+    maximumTrailReuse,
+  };
+}
+
+export function moldProliferationStateAt(growthUnits) {
+  let remaining = Math.max(0, Number.isFinite(growthUnits) ? growthUnits : 0);
+  for (let level = MAX_GRID_FACE_LEVEL; level >= 0; level -= 1) {
+    const capacity = 1 << (level * 2);
+    if (level === 0 || remaining < capacity) {
+      return {
+        level,
+        capacity,
+        visibleCount: Math.min(capacity, Math.floor(remaining) + 1),
+      };
+    }
+    remaining -= capacity;
+  }
+  return { level: 0, capacity: 1, visibleCount: 1 };
+}
+
+function moldGrowthGlyphOrder(seed, index, level, finestGlyphIndex = null) {
+  const cacheKey = `${seed}:${index}:${level}:${finestGlyphIndex ?? "seeded"}`;
+  const cached = moldGrowthOrderCache.get(cacheKey);
+  if (cached) return cached;
+  const subdivisions = 1 << level;
+  const capacity = subdivisions * subdivisions;
+  const startIndex = finestGlyphIndex === null
+    ? moldGrowthSeedGlyphIndex(seed, index, level)
+    : moldGlyphIndexAtLevel(finestGlyphIndex, level);
+  const startColumn = startIndex % subdivisions;
+  const startRow = Math.floor(startIndex / subdivisions);
+  const order = Array.from({ length: capacity }, (_, glyphIndex) => glyphIndex)
+    .sort((first, second) => {
+      const firstDistance = Math.abs(first % subdivisions - startColumn)
+        + Math.abs(Math.floor(first / subdivisions) - startRow);
+      const secondDistance = Math.abs(second % subdivisions - startColumn)
+        + Math.abs(Math.floor(second / subdivisions) - startRow);
+      return firstDistance - secondDistance
+        || hashUnit(seed ^ index, first, 897) - hashUnit(seed ^ index, second, 897)
+        || first - second;
+    });
+  moldGrowthOrderCache.set(cacheKey, order);
+  if (moldGrowthOrderCache.size > MOLD_GROWTH_ORDER_CACHE_LIMIT) {
+    moldGrowthOrderCache.delete(moldGrowthOrderCache.keys().next().value);
+  }
+  return order;
+}
+
+function moldProliferatingFace({
+  seed,
+  index,
+  targetOrder,
+  growthUnits,
+  finestGlyphIndex = null,
+}) {
+  const state = moldProliferationStateAt(growthUnits);
+  return makeFace(
+    state.level,
+    1 + (targetOrder % (GRID_FACE_PALETTE_STEP_COUNT - 1)),
+    "mold-proliferating",
+    {
+      kind: "mold-proliferation",
+      stage: `level-${state.level}`,
+      seed: index,
+      selectedIndex: targetOrder,
+      growthUnits,
+      capacity: state.capacity,
+      visibleGlyphIndices: moldGrowthGlyphOrder(
+        seed,
+        index,
+        state.level,
+        finestGlyphIndex,
+      ).slice(0, state.visibleCount),
+    },
+  );
+}
+
+function setMoreMatureMoldFace(faces, index, face) {
+  const current = faces[index];
+  const currentCount = current.detail?.visibleGlyphIndices?.length ?? 0;
+  const nextCount = face.detail.visibleGlyphIndices.length;
+  if (
+    current.level < 0
+    || face.level < current.level
+    || (face.level === current.level && nextCount >= currentCount)
+  ) faces[index] = face;
+}
+
+function applyMoldProliferation({
+  faces,
+  discovery,
+  ageInBeats,
+  glyphsPerBeat,
+  decayPerCell,
+}) {
+  const cellsFromFood = [];
+  const seen = new Set();
+  for (let order = discovery.indices.length - 1; order >= 0; order -= 1) {
+    const index = discovery.indices[order];
+    if (seen.has(index)) continue;
+    seen.add(index);
+    cellsFromFood.push(index);
+  }
+  let mostMatureLevel = MAX_GRID_FACE_LEVEL;
+  cellsFromFood.forEach((index, distanceFromFood) => {
+    const localAge = ageInBeats - distanceFromFood * decayPerCell;
+    if (localAge < 0) return;
+    const existingTinyCount = faces[index].level === MAX_GRID_FACE_LEVEL
+      ? faces[index].detail?.visibleGlyphIndices?.length ?? 0
+      : 0;
+    const finestGlyphIndex = index === discovery.targetIndex
+      ? discovery.scoutPoints.at(-1).glyphIndex
+      : null;
+    const face = moldProliferatingFace({
+      seed: discovery.glyphSeed,
+      index,
+      targetOrder: discovery.targetOrder,
+      growthUnits: Math.max(0, existingTinyCount - 1) + localAge * glyphsPerBeat,
+      finestGlyphIndex,
+    });
+    mostMatureLevel = Math.min(mostMatureLevel, face.level);
+    setMoreMatureMoldFace(faces, index, face);
+  });
+  return mostMatureLevel;
+}
+
+function createMoldScene({ layout, cycleIndex, progress, options }) {
+  const phase = moldPhaseAt(progress);
+  const projectSeed = Number.isInteger(options.projectSeed)
+    ? options.projectSeed >>> 0
+    : 0;
+  const actualTargetCount = Math.min(
+    options.targetCount,
+    layout.columns * layout.rows - 1,
+  );
+  const topology = moldTopologyForLayout(
+    layout,
+    cycleIndex,
+    actualTargetCount,
+    projectSeed,
+    options.explorationCount,
+    options.explorationStepCount,
+    options.trailEnergyDiscount,
+  );
+  const faces = faceArray(layout, "mold-whitespace");
+  const beatPosition = Math.min(
+    options.layerPasses - Number.EPSILON,
+    clamp01(progress) * options.layerPasses,
+  );
+  const beatIndex = Math.min(
+    options.layerPasses - 1,
+    Math.floor(beatPosition),
+  );
+  const beatProgress = beatPosition - beatIndex;
+  const reconBeatCount = Math.max(
+    1,
+    Math.round(options.layerPasses * MOLD_PHASES.reconEnd),
+  );
+  const scoutStepsPerBeat = options.explorationStepCount / reconBeatCount;
+  const scoutMotionStepIndex = Math.floor(beatPosition * scoutStepsPerBeat);
+  const bodyDurationSeconds = options.cycleSeconds
+    ?? options.timing?.bodyDurationSeconds;
+  const scoutStepSeconds = bodyDurationSeconds
+    / options.layerPasses
+    / scoutStepsPerBeat;
+  const debugScoutStepIndex = Math.min(7, Math.floor(beatProgress * 8));
+  const explorationsPerBeat = Math.max(
+    1,
+    Math.ceil(options.explorationCount / reconBeatCount),
+  );
+  const launchedExplorationCount = Math.min(
+    options.explorationCount,
+    (Math.min(beatIndex, reconBeatCount - 1) + 1) * explorationsPerBeat,
+  );
+  const trailDeposits = new Map();
+  for (const exploration of topology.explorations.slice(0, launchedExplorationCount)) {
+    const launchBeat = Math.floor(
+      exploration.explorationOrder / explorationsPerBeat,
+    );
+    const visibleScoutPointIndex = Math.min(
+      exploration.scoutPoints.length - 1,
+      Math.max(0, Math.floor((beatPosition - launchBeat) * scoutStepsPerBeat)),
+    );
+    exploration.scoutPoints
+      .slice(0, visibleScoutPointIndex + 1)
+      .forEach((point, pointIndex) => addMoldTrailDeposit(
+        trailDeposits,
+        exploration,
+        point,
+        launchBeat + pointIndex / scoutStepsPerBeat,
+      ));
+  }
+  const trailDecay = applyMoldTrailDecay({
+    faces,
+    deposits: trailDeposits,
+    beatPosition,
+    decayBeats: options.trailDecayBeats,
+    reuseBonusBeats: options.trailReuseBonusBeats,
+  });
+  let mostMatureProliferationLevel = MAX_GRID_FACE_LEVEL;
+  const discoveries = topology.discoveries.map(discovery => {
+    const launchBeat = Math.floor(
+      discovery.explorationOrder / explorationsPerBeat,
+    );
+    const discoveryTimeInBeats = launchBeat
+      + (discovery.scoutPoints.length - 1) / scoutStepsPerBeat;
+    const found = beatPosition >= discoveryTimeInBeats;
+    const ageInBeats = found ? beatPosition - discoveryTimeInBeats : 0;
+    if (found) {
+      mostMatureProliferationLevel = Math.min(
+        mostMatureProliferationLevel,
+        applyMoldProliferation({
+          faces,
+          discovery,
+          ageInBeats,
+          glyphsPerBeat: options.proliferationGlyphsPerBeat,
+          decayPerCell: options.proliferationDelayBeatsPerCell,
+        }),
+      );
+    }
+    return {
+      ...discovery,
+      launchBeat,
+      discoveryBeat: Math.floor(discoveryTimeInBeats),
+      discoveryTimeInBeats,
+      found,
+      ageInBeats,
+    };
+  });
+  // The habitat is one full-cell glyph; scouts leave it as single level-3 glyphs.
+  faces[topology.rootIndex] = makeFace(0, 0, "mold-origin");
+
+  const visibleIndices = faces.flatMap((face, index) => (
+    face.level >= 0 ? [index] : []
+  ));
+  const paletteMotion = options.flicker?.enabled === true
+    ? {
+      kind: "mold-living-network",
+      indices: visibleIndices,
+      amount: 1,
+    }
+    : null;
+  return {
+    key: `mold:${projectSeed}:${cycleIndex}:${phase}:${beatIndex}`
+      + `:${scoutMotionStepIndex}`,
+    phase,
+    stepIndex: beatIndex,
+    faces,
+    seed: topology.seed,
+    rootIndex: topology.rootIndex,
+    targetIndices: topology.targetIndices,
+    requestedTargetCount: options.targetCount,
+    actualTargetCount,
+    explorations: topology.explorations,
+    explorationCount: topology.explorations.length,
+    visibleExplorationCount: launchedExplorationCount,
+    scoutStepsPerBeat,
+    scoutStepSeconds,
+    scoutMotionStepIndex,
+    ...trailDecay,
+    failedExplorationIndices: topology.failedExplorationIndices,
+    discoveries,
+    discoveredTargetIndices: discoveries.flatMap(discovery => (
+      discovery.found ? [discovery.targetIndex] : []
+    )),
+    pathIndices: topology.pathIndices,
+    endpointCellIndices: topology.targetIndices,
+    mostMatureProliferationLevel,
+    transitionStyle: "cut",
+    debugTransition: true,
+    debugTransitionKey: `mold:${projectSeed}:${cycleIndex}:${phase}:${beatIndex}`
+      + `:${debugScoutStepIndex}`,
+    ...(paletteMotion ? { paletteMotion } : {}),
+    toolEnabled: false,
+  };
+}
+
 // Cellular-automata strategies ---------------------------------------------
 
 function requireGameOfLifeState(state, layout) {
@@ -1478,15 +2209,6 @@ export function nextGameOfLifeState(state, layout, rules = {}) {
   return { state: nextState, neighborCounts };
 }
 
-function gameOfLifeCycleSeed(projectSeed, cycleIndex) {
-  const seed = (
-    Number.isInteger(projectSeed)
-    && projectSeed >= 0
-    && projectSeed <= 0xffffffff
-  ) ? projectSeed >>> 0 : 0;
-  return ((cycleIndex >>> 0) ^ Math.imul(seed, 0x9e3779b1)) >>> 0;
-}
-
 export function initialGameOfLifeStateAt(
   layout,
   cycleIndex,
@@ -1498,7 +2220,7 @@ export function initialGameOfLifeStateAt(
     ? cellCount
     : Math.max(1, Math.min(cellCount - 1, Math.round(density * cellCount)));
   const indices = Array.from({ length: cellCount }, (_, index) => index);
-  const cycleSeed = gameOfLifeCycleSeed(projectSeed, cycleIndex);
+  const cycleSeed = gridSceneCycleSeed(projectSeed, cycleIndex);
   const aliveIndices = rankedIndices(indices, cycleSeed, 907).slice(0, aliveCount);
   const state = new Uint8Array(cellCount);
   for (const index of aliveIndices) state[index] = 1;
@@ -1555,7 +2277,7 @@ function createGameOfLifeScene({ layout, cycleIndex, progress, options }) {
     && options.projectSeed >= 0
     && options.projectSeed <= 0xffffffff
   ) ? options.projectSeed >>> 0 : 0;
-  const cycleSeed = gameOfLifeCycleSeed(projectSeed, cycleIndex);
+  const cycleSeed = gridSceneCycleSeed(projectSeed, cycleIndex);
   const generationIndex = gameOfLifeGenerationAt(progress, options.layerPasses);
   const generationPosition = clamp01(progress) * options.layerPasses;
   const generationProgress = generationPosition - generationIndex;
@@ -1675,6 +2397,9 @@ export function createGridSceneAt({
   }
   if (strategy === "l-tree") {
     return createLTreeScene(input);
+  }
+  if (strategy === "mold") {
+    return createMoldScene(input);
   }
   return createGameOfLifeScene(input);
 }

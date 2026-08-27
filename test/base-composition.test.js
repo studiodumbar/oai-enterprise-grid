@@ -81,7 +81,10 @@ test("base renders five densities with local flicker values over global defaults
   assert.deepEqual(inspection.levels, BASE_CELL_LEVELS);
   assert.deepEqual(inspection.dotCounts, [1, 4, 16, 64, 256]);
   assert.equal(Object.hasOwn(BASE_CONFIG, "flicker"), false);
-  assert.equal(inspection.flicker.mode, GLOBAL_CONFIG.flicker.mode);
+  assert.equal(
+    inspection.flicker.mode,
+    BASE_CONFIG.settings.base.flicker.mode ?? GLOBAL_CONFIG.flicker.mode,
+  );
   assert.equal(inspection.flicker.scope, BASE_CONFIG.settings.base.flicker.scope);
   assert.equal(inspection.flicker.amount, BASE_CONFIG.settings.base.flicker.amount);
   assert.equal(

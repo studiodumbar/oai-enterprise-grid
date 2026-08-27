@@ -2,13 +2,15 @@ export const NOISE_GRID_CONFIG = {
   settings: {
     noiseGrid: {
       ui: {
-        noisePreview: true,
+          noisePreview: false,
         // noisePreview: false,
       },
       longSideCells: 5, //3..31
       frameMargin: 0, // 0..10 half-cell padding steps
       dotMargin: 0.0, // 0..0.9 
       palette: "green",
+      // Keep the Diogo source ramp: the app-wide green palette has one fewer step.
+      paletteColors: ["#003415", "#00692a", "#00a240", "#04b84c", "#40c977", "#8cdfad"],
       backgroundColor: "#000000",
       backend: "auto", // auto, cpu, shader;
 
@@ -19,49 +21,48 @@ export const NOISE_GRID_CONFIG = {
           size: {
             mode: "simplex", // simplex, value, voronoi, gradient
             cyclesPerLoop: 0,
-            speed: 0.12, // field units/second; simplex drift is not seam-perfect
+            speed: 0.02, // field units/second; simplex drift is not seam-perfect
             // Loopable-mode alternative: replace cyclesPerLoop/speed above with
             // cyclesPerLoop: "auto", // one repeat per beat
             // speed: null,
-            scale: 24,
-            contrast: 1.15,
-            seed: 1,
+            scale: 1.17,
+            contrast: 1.48,
+            seed: 63,
             gamma: 1,
             invert: false,
             emptyBelow: 0,
           },
           color: {
-            mode: "gradient", // mode: "life", simplex, value, voronoi, gradient, life
-            // One full-loop cycle moves continuously and closes at the seam.
-            cyclesPerLoop: 1,
-            speed: null, // field units/second; negative reverses drift
-            holdSeconds: 0.2, // per-glyph minimum; 0 disables, "auto" = one beat
+            mode: "simplex", // mode: "life", simplex, value, voronoi, gradient, life
+            cyclesPerLoop: 0,
+            speed: 0.15, // field units/second; negative reverses drift
+            holdSeconds: 0.25, // per-glyph minimum; 0 disables, "auto" = one beat
             // Faster loop: cyclesPerLoop: "auto", speed: null,
-            scale: 0.2,
+            scale: 0.45,
             contrast: 1.1,
-            seed: 17,
+            seed: 69,
           },
           contrast: {
             mode: "simplex", // mode: "voronoi", // simplex, value, voronoi, gradient
             cyclesPerLoop: 0,
-            speed: 0.5,
+            speed: 0.05,
             // Loopable alternative: cyclesPerLoop: "auto", speed: null,
-            scale: 2.1,
+            scale: 0.69,
             contrast: 1,
-            seed: 43,
+            seed: 26,
             influence: 1,
           },
           visibility: {
             mode: "simplex", // simplex, value, voronoi, gradient
             cyclesPerLoop: 0,
-            speed: 0.07, // original free-drift rate; simplex is not seam-perfect
-            holdSeconds: 0.2, // per-glyph minimum; 0 disables, "auto" = one beat
+            speed: 0.05, // original free-drift rate; simplex is not seam-perfect
+            holdSeconds: "auto", // per-glyph minimum; 0 disables, "auto" = one beat
             // Seam-perfect alternative: mode: "gradient", cyclesPerLoop: 1, speed: null,
-            scale: 1.6,
+            scale: 0.69,
             contrast: 1.2,
-            seed: 29,
-            threshold: 0.5,
-            softness: 0.1,
+            seed: 26,
+            threshold: 0.36,
+            softness: 0.1
           },
         },
       },
@@ -82,7 +83,7 @@ export const NOISE_GRID_CONFIG = {
   compositionDefinitions: {
     "noise-grid": {
       rule: "sequence",
-      timing: { bodyDurationSeconds: 12, beatCount: 4 },
+      timing: { bodyDurationSeconds: 30, beatCount: 4 },
       steps: [{ use: "noiseGrid" }],
     },
   },

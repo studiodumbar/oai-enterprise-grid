@@ -46,6 +46,7 @@ Commands
   export [flags]                export the active composition (or --all / --composition)
   panel show|hide|toggle        show or hide the export panel
   noise-preview show|hide|toggle show the active noise generator's four fields
+  flock-preview show|hide|toggle show the offscreen field driving the flock grid
   debug [channels|all|off]      trace subsystem state changes to the console
 
 Export flags
@@ -354,6 +355,8 @@ export function createExportConsole({
   isExporting = () => false,
   setNoisePreviewVisible = () => {},
   isNoisePreviewVisible = () => false,
+  setFlockPreviewVisible = () => {},
+  isFlockPreviewVisible = () => false,
   log = () => {},
 } = {}) {
   function snapshot() {
@@ -361,6 +364,7 @@ export function createExportConsole({
       composition: activeComposition(),
       panelVisible: isPanelVisible(),
       noisePreviewVisible: isNoisePreviewVisible(),
+      flockPreviewVisible: isFlockPreviewVisible(),
       export: { ...state },
     };
   }
@@ -538,6 +542,13 @@ export function createExportConsole({
         log(`Noise preview ${isNoisePreviewVisible() ? "visible" : "hidden"}.`);
         return { ok: true, noisePreviewVisible: isNoisePreviewVisible() };
       }
+      case "flock-preview": {
+        const action = panelAction(parsed);
+        const visible = action === "toggle" ? !isFlockPreviewVisible() : action === "show";
+        setFlockPreviewVisible(visible);
+        log(`Flock preview ${isFlockPreviewVisible() ? "visible" : "hidden"}.`);
+        return { ok: true, flockPreviewVisible: isFlockPreviewVisible() };
+      }
       case "export":
         return runExportCommand(parsed);
       case "":
@@ -566,6 +577,7 @@ export function createExportConsole({
   run.status = () => run("status");
   run.panel = action => run(`panel ${action ?? "toggle"}`);
   run.noisePreview = action => run(`noise-preview ${action ?? "toggle"}`);
+  run.flockPreview = action => run(`flock-preview ${action ?? "toggle"}`);
   run.export = flags => run(`export ${flags ?? ""}`);
 
   return run;

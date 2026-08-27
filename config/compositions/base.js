@@ -85,9 +85,8 @@ export const BASE_CONFIG = {
 
       flicker: {
         // enabled: true,
-        // mode: "noise", // noise, echo-ring, strobe-stack, block-drop,
-        // prism-bloom, crt-glide, or radar-arc.
         amount: 1,
+        mode: "noise", // noise, echo-ring, strobe-stack, block-drop, prism-bloom, crt-glide, or radar-arc.
         scope: "cell",
         // cellStaggerSeconds: 0.9,
         modes: {

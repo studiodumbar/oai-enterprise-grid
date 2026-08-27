@@ -3,7 +3,9 @@
 See [AGENTS.md](./AGENTS.md) — it is the single source of project instructions
 for all coding agents.
 
-Before structural work, also read [REFACTOR_PLAN.md](./REFACTOR_PLAN.md).
+Before structural work, read AGENTS.md §8: it lists the subsystems that are
+still doubled on purpose. [refactor.md](./refactor.md) holds the open note on
+composition timing ownership.
 
 Two rules worth repeating here because they are violated most often:
 

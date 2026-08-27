@@ -1,7 +1,20 @@
 import { SpatialHash } from "./spatial-hash.js";
+import { debug } from "../debug/index.js";
+
+const GOLDEN_RATIO_CONJUGATE = 0.6180339887498949;
+const GOLDEN_ANGLE = 2.399963229728653;
+
+function unitSequence(index, offset) {
+  const value = offset + index * GOLDEN_RATIO_CONJUGATE;
+  return value - Math.floor(value);
+}
 
 export class Boid {
   constructor() {
+    this.reset();
+  }
+
+  reset() {
     this.x = 0;
     this.y = 0;
     this.vx = 0;
@@ -15,6 +28,9 @@ export class Boid {
     this.spawnIndex = 0;
     this.scheduled = false;
     this.active = false;
+    this.targetSpeed = 0;
+    this.endOfLifeProgress = 0;
+    return this;
   }
 
   schedule(x, y, angle, speed, birthDelay, lifetime, spawnIndex) {
@@ -32,6 +48,8 @@ export class Boid {
     this.spawnIndex = spawnIndex;
     this.scheduled = true;
     this.active = birthDelay <= 0;
+    this.targetSpeed = speed;
+    this.endOfLifeProgress = 0;
     if (this.active) this.opacity = 1;
   }
 
@@ -64,104 +82,199 @@ export class Boid {
     this.opacity = 1 - easedFade;
   }
 
-  integrate(dt, width, height, maxSpeed) {
+  integrate(
+    dt,
+    width,
+    height,
+    maxSpeed,
+    wrapEdges = true,
+    speedControl = null,
+  ) {
     this.vx += this.ax * dt;
     this.vy += this.ay * dt;
 
-    const speed = Math.hypot(this.vx, this.vy);
+    let speed = Math.hypot(this.vx, this.vy);
     if (speed > maxSpeed) {
       const scale = maxSpeed / speed;
       this.vx *= scale;
       this.vy *= scale;
+      speed = maxSpeed;
     }
 
-    this.x = ((this.x + this.vx * dt) % width + width) % width;
-    this.y = ((this.y + this.vy * dt) % height + height) % height;
+    if (speedControl && speed > 1e-9) {
+      const target = Math.max(0, Math.min(maxSpeed, this.targetSpeed));
+      const rate = target > speed
+        ? speedControl.acceleration
+        : speedControl.drag;
+      const maximumChange = Math.max(0, rate) * dt;
+      const nextSpeed = target > speed
+        ? Math.min(target, speed + maximumChange)
+        : Math.max(target, speed - maximumChange);
+      const scale = nextSpeed / speed;
+      this.vx *= scale;
+      this.vy *= scale;
+      speed = nextSpeed;
+      if (speed <= 1e-9) {
+        this.vx = 0;
+        this.vy = 0;
+      }
+    }
+
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+    if (wrapEdges) {
+      this.x = ((this.x % width) + width) % width;
+      this.y = ((this.y % height) + height) % height;
+    }
   }
 }
 
 export class Flock {
   constructor(options) {
-    this.options = options;
+    this.options = {
+      wrapEdges: true,
+      spawnRadius: 0,
+      acceleration: 360,
+      drag: 720,
+      proximityExponent: 1,
+      ...options,
+    };
+    this.options.proximityRadius ??= this.options.perceptionRadius;
+    if (typeof this.options.wrapEdges !== "boolean") {
+      throw new TypeError("flock.simulation.wrapEdges must be a boolean.");
+    }
+    if (!Number.isFinite(this.options.spawnRadius) || this.options.spawnRadius < 0) {
+      throw new RangeError("flock.simulation.spawnRadius must be finite and non-negative.");
+    }
+    for (const name of ["acceleration", "drag"]) {
+      if (!Number.isFinite(this.options[name]) || this.options[name] < 0) {
+        throw new RangeError(`flock.simulation.${name} must be finite and non-negative.`);
+      }
+    }
+    if (!Number.isFinite(this.options.proximityExponent) || this.options.proximityExponent <= 0) {
+      throw new RangeError("flock.simulation.proximityExponent must be finite and positive.");
+    }
+    if (!Number.isFinite(this.options.proximityRadius) || this.options.proximityRadius <= 0) {
+      throw new RangeError("flock.simulation.proximityRadius must be finite and positive.");
+    }
     this.boids = Array.from({ length: options.count }, () => new Boid());
-    this.hash = new SpatialHash(options.perceptionRadius, options.count);
+    this.hash = new SpatialHash(
+      Math.max(this.options.perceptionRadius, this.options.proximityRadius),
+      this.options.count,
+    );
     this.time = 0;
     this.nextPulseTime = 0;
     this.lastPulseTime = -Infinity;
     this.birthIndex = 0;
-    this.force = { x: 0, y: 0 };
+    this.pulseIndex = 0;
+    this.residenceSeconds = this.effectiveResidenceSeconds();
+    debug.config(
+      "flock-life authored=%.3f residence=%.3f capacity=%d births=%d",
+      this.options.lifetimeSeconds,
+      this.residenceSeconds,
+      this.options.count,
+      this.options.birthsPerPulse,
+    );
   }
 
-  update(dt, width, height, typeField, pointer) {
+  reset() {
+    for (const boid of this.boids) boid.reset();
+    this.time = 0;
+    this.nextPulseTime = 0;
+    this.lastPulseTime = -Infinity;
+    this.birthIndex = 0;
+    this.pulseIndex = 0;
+    return this;
+  }
+
+  effectiveResidenceSeconds() {
+    const births = Math.max(1, Math.min(
+      this.options.count,
+      Math.round(this.options.birthsPerPulse),
+    ));
+    const capacitySeconds = this.options.count / births
+      * Math.max(0.1, this.options.pulseEverySeconds);
+    return Math.min(this.options.lifetimeSeconds, capacitySeconds);
+  }
+
+  update(dt, width, height, pointer = { active: false }) {
     this.time += dt;
-    for (const boid of this.boids) boid.advanceLife(dt, this.options.fadeStartsAt);
+    for (const boid of this.boids) {
+      boid.advanceLife(dt, this.options.fadeStartsAt);
+      boid.endOfLifeProgress = boid.active
+        ? Math.min(1, boid.age / this.residenceSeconds)
+        : 0;
+    }
 
     const pulseEvery = Math.max(0.1, this.options.pulseEverySeconds);
     while (this.time >= this.nextPulseTime) {
-      this.emitPulse(typeField);
+      this.emitPulse(width, height);
       this.nextPulseTime += pulseEvery;
     }
 
-    this.hash.rebuild(width, height, this.boids);
+    this.hash.rebuild(width, height, this.boids, {
+      wrapEdges: this.options.wrapEdges,
+    });
     for (let index = 0; index < this.boids.length; index += 1) {
       if (!this.boids[index].active) continue;
-      this.computeAcceleration(index, width, height, typeField, pointer);
-    }
-    for (const boid of this.boids) {
-      if (!boid.active) continue;
-      boid.integrate(dt, width, height, this.options.maxSpeed);
-    }
-  }
-
-  draw(context, isBoidHidden) {
-    if (!this.options.showBoids) return;
-    context.save();
-    context.fillStyle = this.options.boidColor;
-    const inheritedAlpha = context.globalAlpha;
-    const radius = this.options.boidSize * 0.5;
-    for (const boid of this.boids) {
-      if (!boid.active) continue;
-      if (
-        typeof isBoidHidden === "function"
-        && isBoidHidden(boid.x, boid.y, radius)
-      ) {
+      if (!this.options.wrapEdges && !this.isOnscreen(this.boids[index], width, height)) {
+        this.boids[index].ax = 0;
+        this.boids[index].ay = 0;
+        this.boids[index].targetSpeed = 0;
         continue;
       }
-      context.globalAlpha = inheritedAlpha * this.options.boidOpacity * boid.opacity;
-      context.beginPath();
-      context.moveTo(boid.x + radius, boid.y);
-      context.arc(boid.x, boid.y, radius, 0, Math.PI * 2);
-      context.fill();
+      this.computeAcceleration(index, width, height, pointer);
     }
-    context.restore();
+    for (const boid of this.boids) {
+      if (!boid.active) continue;
+      boid.integrate(
+        dt,
+        width,
+        height,
+        this.options.maxSpeed,
+        this.options.wrapEdges,
+        {
+          acceleration: this.options.acceleration,
+          drag: this.options.drag,
+        },
+      );
+    }
+    const metrics = this.speedMetrics();
+    debug.cells(
+      "flock-speed active=%d stopped=%d mean=%.3f target=%.3f",
+      metrics.active,
+      metrics.stopped,
+      metrics.mean,
+      metrics.meanTarget,
+    );
   }
 
-  emitPulse(typeField) {
+  emitPulse(width, height) {
     const births = Math.min(
       this.boids.length,
       Math.max(1, Math.round(this.options.birthsPerPulse)),
     );
     this.lastPulseTime = this.time;
+    const pulse = this.pulseIndex;
+    const originX = width * 0.5;
+    const originY = height * 0.5;
+    const baseAngle = pulse * GOLDEN_ANGLE;
 
     for (let indexInPulse = 0; indexInPulse < births; indexInPulse += 1) {
       const boid = this.nextBirthSlot();
       const index = this.birthIndex;
-      const origin = typeField.spawnPointAt(index);
-      const fromCenterX = origin.x - typeField.width * 0.5;
-      const fromCenterY = origin.y - typeField.height * 0.5;
-      const radialAngle = Math.hypot(fromCenterX, fromCenterY) > 1
-        ? Math.atan2(fromCenterY, fromCenterX)
-        : index * 2.399963229728653;
-      const directionOffset = (((index * 0.3819660112501051) % 1) - 0.5) * 0.7;
-      const speedScale = 0.7 + ((index * 0.7548776662466927) % 1) * 0.3;
+      const spreadAngle = index * GOLDEN_ANGLE;
+      const spreadRadius = Math.sqrt(unitSequence(index, 0.41)) * this.options.spawnRadius;
+      const directionOffset = (unitSequence(index, 0.29) - 0.5) * 0.7;
+      const speedScale = 0.7 + unitSequence(index, 0.73) * 0.3;
       const delay = births > 1
         ? indexInPulse / (births - 1) * this.options.emissionSeconds
         : 0;
 
       boid.schedule(
-        origin.x,
-        origin.y,
-        radialAngle + directionOffset,
+        originX + Math.cos(spreadAngle) * spreadRadius,
+        originY + Math.sin(spreadAngle) * spreadRadius,
+        baseAngle + directionOffset,
         this.options.initialSpeed * speedScale,
         delay,
         this.options.lifetimeSeconds,
@@ -169,6 +282,13 @@ export class Flock {
       );
       this.birthIndex += 1;
     }
+    this.pulseIndex += 1;
+    debug.cells(
+      "flock-pulse=%d births=%d active=%d",
+      pulse,
+      births,
+      this.boids.reduce((total, boid) => total + Number(boid.active), 0),
+    );
   }
 
   nextBirthSlot() {
@@ -187,20 +307,47 @@ export class Flock {
     return Math.exp(-age / decay);
   }
 
-  repositionUnborn(typeField) {
+  speedMetrics() {
+    let active = 0;
+    let stopped = 0;
+    let speed = 0;
+    let targetSpeed = 0;
     for (const boid of this.boids) {
-      if (boid.active || !boid.scheduled) continue;
-      const origin = typeField.spawnPointAt(boid.spawnIndex);
-      boid.x = origin.x;
-      boid.y = origin.y;
+      if (!boid.active) continue;
+      const value = Math.hypot(boid.vx, boid.vy);
+      active += 1;
+      speed += value;
+      targetSpeed += boid.targetSpeed;
+      if (value <= 1e-6) stopped += 1;
+    }
+    return {
+      active,
+      stopped,
+      mean: active > 0 ? speed / active : 0,
+      meanTarget: active > 0 ? targetSpeed / active : 0,
+    };
+  }
+
+  resize(previousViewport, nextViewport) {
+    const scaleX = nextViewport.width / Math.max(1, previousViewport.width);
+    const scaleY = nextViewport.height / Math.max(1, previousViewport.height);
+    for (const boid of this.boids) {
+      boid.x *= scaleX;
+      boid.y *= scaleY;
     }
   }
 
-  computeAcceleration(index, width, height, typeField, pointer) {
+  isOnscreen(boid, width, height) {
+    return boid.x >= 0 && boid.x < width && boid.y >= 0 && boid.y < height;
+  }
+
+  computeAcceleration(index, width, height, pointer) {
     const boid = this.boids[index];
     const options = this.options;
     const radius = options.perceptionRadius;
     const radiusSquared = radius * radius;
+    const proximityRadius = options.proximityRadius;
+    const proximityRadiusSquared = proximityRadius * proximityRadius;
     const separationSquared = options.separationRadius * options.separationRadius;
     const cellX = Math.floor(boid.x / this.hash.cellSize);
     const cellY = Math.floor(boid.y / this.hash.cellSize);
@@ -212,6 +359,8 @@ export class Flock {
     let separateX = 0;
     let separateY = 0;
     let neighbours = 0;
+    let proximityNeighbours = 0;
+    let nearestDistanceSquared = Infinity;
 
     const firstRowOffset = this.hash.rows === 1 ? 0 : -1;
     const lastRowOffset = this.hash.rows >= 3 ? 1 : 0;
@@ -228,20 +377,38 @@ export class Flock {
         offsetX <= lastColumnOffset;
         offsetX += 1
       ) {
-        let otherIndex = this.hash.heads[
-          this.hash.wrappedBucket(cellX + offsetX, cellY + offsetY)
-        ];
+        const bucketColumn = cellX + offsetX;
+        const bucketRow = cellY + offsetY;
+        if (
+          !options.wrapEdges
+          && (
+            bucketColumn < 0
+            || bucketColumn >= this.hash.columns
+            || bucketRow < 0
+            || bucketRow >= this.hash.rows
+          )
+        ) continue;
+        const bucket = options.wrapEdges
+          ? this.hash.wrappedBucket(bucketColumn, bucketRow)
+          : bucketRow * this.hash.columns + bucketColumn;
+        let otherIndex = this.hash.heads[bucket];
         while (otherIndex !== -1) {
           if (otherIndex !== index) {
             const other = this.boids[otherIndex];
             let deltaX = other.x - boid.x;
             let deltaY = other.y - boid.y;
-            if (deltaX > width * 0.5) deltaX -= width;
-            if (deltaX < -width * 0.5) deltaX += width;
-            if (deltaY > height * 0.5) deltaY -= height;
-            if (deltaY < -height * 0.5) deltaY += height;
+            if (options.wrapEdges) {
+              if (deltaX > width * 0.5) deltaX -= width;
+              if (deltaX < -width * 0.5) deltaX += width;
+              if (deltaY > height * 0.5) deltaY -= height;
+              if (deltaY < -height * 0.5) deltaY += height;
+            }
             const distanceSquared = deltaX * deltaX + deltaY * deltaY;
 
+            if (distanceSquared > 0 && distanceSquared < proximityRadiusSquared) {
+              nearestDistanceSquared = Math.min(nearestDistanceSquared, distanceSquared);
+              proximityNeighbours += 1;
+            }
             if (distanceSquared > 0 && distanceSquared < radiusSquared) {
               alignX += other.vx;
               alignY += other.vy;
@@ -262,17 +429,38 @@ export class Flock {
 
     boid.ax = 0;
     boid.ay = 0;
+    const proximity = proximityNeighbours > 0
+      ? 1 - Math.sqrt(nearestDistanceSquared) / proximityRadius
+      : 0;
+    boid.targetSpeed = options.maxSpeed * Math.pow(
+      Math.max(0, Math.min(1, proximity)),
+      options.proximityExponent,
+    );
     if (neighbours > 0) {
-      this.addSteer(boid, alignX / neighbours, alignY / neighbours, options.alignment);
-      this.addSteer(boid, centerX / neighbours, centerY / neighbours, options.cohesion);
-      this.addSteer(boid, separateX, separateY, options.separation);
+      this.addSteer(
+        boid,
+        alignX / neighbours,
+        alignY / neighbours,
+        options.alignment,
+        boid.targetSpeed,
+      );
+      this.addSteer(
+        boid,
+        centerX / neighbours,
+        centerY / neighbours,
+        options.cohesion,
+        boid.targetSpeed,
+      );
+      this.addSteer(
+        boid,
+        separateX,
+        separateY,
+        options.separation,
+        boid.targetSpeed,
+      );
     }
 
-    typeField.forceAt(boid.x, boid.y, this.force);
-    boid.ax += this.force.x;
-    boid.ay += this.force.y;
-
-    if (pointer.active) {
+    if (pointer?.active) {
       const deltaX = pointer.x - boid.x;
       const deltaY = pointer.y - boid.y;
       const distance = Math.hypot(deltaX, deltaY);
@@ -291,10 +479,10 @@ export class Flock {
     }
   }
 
-  addSteer(boid, x, y, weight) {
+  addSteer(boid, x, y, weight, targetSpeed = this.options.maxSpeed) {
     const magnitude = Math.hypot(x, y);
     if (magnitude < 1e-6) return;
-    const scale = this.options.maxSpeed / magnitude;
+    const scale = targetSpeed / magnitude;
     boid.ax += (x * scale - boid.vx) * weight;
     boid.ay += (y * scale - boid.vy) * weight;
   }

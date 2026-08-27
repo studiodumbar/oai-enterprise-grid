@@ -1,0 +1,29 @@
+# composition: mold
+# frames: 900
+
+[cg:timeline] f=0000 phase=start cycle=0 duration=4.000 paused=yes
+[cg:plan] f=0000 enter=moldGrid
+[cg:plan] f=0000 render=[moldGrid@1.00]
+[cg:transition] f=0000 scene=cut strategy=mold key=mold:1:0:recon:0:0
+[cg:transition] f=0000 endpoint=start mode=fade cycle=0 targets=1 sources=1 padded=0 subdivision=1 unpaired=0
+[cg:timeline] f=0240 phase=core cycle=0 duration=48.000 paused=no
+[cg:transition] f=0300 scene=cut strategy=mold key=mold:1:0:recon:0:2
+[cg:transition] f=0330 scene=cut strategy=mold key=mold:1:0:recon:0:3
+[cg:transition] f=0390 scene=cut strategy=mold key=mold:1:0:recon:0:5
+[cg:transition] f=0420 scene=cut strategy=mold key=mold:1:0:recon:0:6
+[cg:transition] f=0480 scene=cut strategy=mold key=mold:1:0:recon:1:0
+[cg:transition] f=0509 scene=cut strategy=mold key=mold:1:0:recon:1:1
+[cg:transition] f=0539 scene=cut strategy=mold key=mold:1:0:recon:1:2
+[cg:transition] f=0599 scene=cut strategy=mold key=mold:1:0:recon:1:4
+[cg:transition] f=0629 scene=cut strategy=mold key=mold:1:0:recon:1:5
+[cg:transition] f=0689 scene=cut strategy=mold key=mold:1:0:recon:1:7
+[cg:transition] f=0719 scene=cut strategy=mold key=mold:1:0:recon:2:0
+[cg:transition] f=0779 scene=cut strategy=mold key=mold:1:0:recon:2:2
+[cg:transition] f=0809 scene=cut strategy=mold key=mold:1:0:recon:2:3
+[cg:transition] f=0869 scene=cut strategy=mold key=mold:1:0:recon:2:5
+[cg:transition] f=0899 scene=cut strategy=mold key=mold:1:0:recon:2:6
+
+# draw volume
+blankFrames=0
+firstDrawnFrame=0
+totalFill=265409

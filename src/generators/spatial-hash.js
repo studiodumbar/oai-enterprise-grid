@@ -15,7 +15,7 @@ export class SpatialHash {
     this.heads = new Int32Array(this.columns * this.rows);
   }
 
-  rebuild(width, height, boids) {
+  rebuild(width, height, boids, { wrapEdges = true } = {}) {
     const columns = Math.max(1, Math.ceil(width / this.cellSize));
     const rows = Math.max(1, Math.ceil(height / this.cellSize));
     if (columns !== this.columns || rows !== this.rows) this.resize(width, height);
@@ -24,6 +24,10 @@ export class SpatialHash {
     for (let index = 0; index < boids.length; index += 1) {
       const boid = boids[index];
       if (!boid.active) continue;
+      if (
+        !wrapEdges
+        && (boid.x < 0 || boid.x >= width || boid.y < 0 || boid.y >= height)
+      ) continue;
       const column = Math.min(
         this.columns - 1,
         Math.max(0, Math.floor(boid.x / this.cellSize)),

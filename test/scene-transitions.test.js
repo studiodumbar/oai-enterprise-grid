@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { GLOBAL_CONFIG, SETTINGS } from "../config.js";
+import { COMPOSITION_DEFINITIONS, GLOBAL_CONFIG, SETTINGS } from "../config.js";
 import { InferenceGridGenerator } from "../src/generators/inference-grid-generator.js";
 import { INFERENCE_LOOP_PHASES } from "../src/generators/grid-scene-strategies.js";
 import {
@@ -91,7 +91,13 @@ test("cycle-boundary and between-state transition settings resolve independently
   // the fallback behavior supplied by the global lifecycle settings.
   const appWideOutro = GLOBAL_CONFIG.outro !== undefined;
   assert.equal(SETTINGS.lTree.outro.fallbackToIntro, !appWideOutro);
-  assert.equal(SETTINGS.lTree.outro.durationSeconds, 1.5);
+  // Derived, not pinned: the authored value is `calc(auto * 0.25)`, so editing
+  // the recipe's timing root must not break this test.
+  const lTreeTiming = COMPOSITION_DEFINITIONS["l-tree"].timing;
+  assert.equal(
+    SETTINGS.lTree.outro.durationSeconds,
+    (lTreeTiming.bodyDurationSeconds / lTreeTiming.beatCount) * 0.25,
+  );
   assert.equal(
     SETTINGS.lTree.intro.modes[GLOBAL_CONFIG.intro.mode].colorBy,
     "level",

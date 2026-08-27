@@ -19,6 +19,7 @@ import { createExportConsole } from "./export/export-console.js";
 import { flickerModes } from "./visuals/flicker/index.js";
 import { configureDebug, debug, resolveDebugChannels } from "./debug/index.js";
 import { createNoisePreviewPanel } from "./noise-fields/noise-preview-panel.js";
+import { createFlockPreviewPanel } from "./fields/flock-preview-panel.js";
 
 if (typeof window.p5 !== "function") {
   throw new Error("p5.js did not load. Check the CDN request before starting the sketch.");
@@ -41,6 +42,7 @@ new window.p5(p => {
   let pendingWindowResize = false;
   let resetPreviewDelta = false;
   let noisePreviewPanel = null;
+  let flockPreviewPanel = null;
   let projectSeed = createProjectSeed();
   const pointer = { active: false, x: 0, y: 0 };
   const exportState = createExportState();
@@ -233,6 +235,7 @@ new window.p5(p => {
 
   function syncCompositionUi() {
     noisePreviewPanel?.setVisible(activeCompositionUi().noisePreview === true);
+    flockPreviewPanel?.setVisible(activeCompositionUi().flockPreview === true);
   }
 
   function useCompositionFromConsole(id) {
@@ -467,6 +470,8 @@ new window.p5(p => {
       isExporting: () => Boolean(exportController?.exporting),
       setNoisePreviewVisible: visible => noisePreviewPanel?.setVisible(visible),
       isNoisePreviewVisible: () => noisePreviewPanel?.isVisible() ?? false,
+      setFlockPreviewVisible: visible => flockPreviewPanel?.setVisible(visible),
+      isFlockPreviewVisible: () => flockPreviewPanel?.isVisible() ?? false,
       log: message => console.log(message),
     });
     noisePreviewPanel = createNoisePreviewPanel({
@@ -474,6 +479,13 @@ new window.p5(p => {
       isExporting: () => Boolean(exportController?.exporting),
       snapshot: options => director.inspect().compositionId === "noise-grid"
         ? director.generator("noiseGrid").noisePreviewSnapshot(options)
+        : null,
+    });
+    flockPreviewPanel = createFlockPreviewPanel({
+      document,
+      isExporting: () => Boolean(exportController?.exporting),
+      snapshot: () => director.inspect().compositionId.startsWith("flock")
+        ? director.generator("flockGrid").flockPreviewSnapshot()
         : null,
     });
     syncCompositionUi();
@@ -516,6 +528,7 @@ new window.p5(p => {
     director.update(frame);
     director.draw(frame);
     noisePreviewPanel?.update();
+    flockPreviewPanel?.update();
   };
 
   p.mouseMoved = () => {

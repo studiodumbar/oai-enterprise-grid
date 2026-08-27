@@ -29,6 +29,7 @@ function createHarness(overrides = {}) {
     exportedPreviews: [],
     exportOptions: [],
     panelVisible: overrides.panelVisible ?? true,
+    flockPreviewVisible: overrides.flockPreviewVisible ?? false,
     synced: 0,
     stateChanges: [],
     logged,
@@ -71,6 +72,10 @@ function createHarness(overrides = {}) {
       stub.panelVisible = visible;
     },
     isPanelVisible: () => stub.panelVisible,
+    setFlockPreviewVisible: visible => {
+      stub.flockPreviewVisible = visible;
+    },
+    isFlockPreviewVisible: () => stub.flockPreviewVisible,
     syncPanel: () => {
       stub.synced += 1;
     },
@@ -307,6 +312,20 @@ test("panel show, hide, and toggle drive the visibility callback", async () => {
   const bad = await cg("panel sideways");
   assert.equal(bad.ok, false);
   assert.match(bad.error, /Unknown panel action/);
+});
+
+test("flock preview show, hide, and toggle drive the offscreen panel", async () => {
+  const { cg, stub } = createHarness();
+
+  assert.deepEqual(await cg("flock-preview show"), {
+    ok: true,
+    flockPreviewVisible: true,
+  });
+  assert.equal(stub.flockPreviewVisible, true);
+  assert.deepEqual(await cg.flockPreview("toggle"), {
+    ok: true,
+    flockPreviewVisible: false,
+  });
 });
 
 test("list, status, use, and help report the current runtime", async () => {

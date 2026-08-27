@@ -7,9 +7,10 @@ import { debug } from "../debug/index.js";
  *
  * This lives beside the director rather than inside a generator on purpose: the
  * overlay has to appear exactly once per frame for any composition, including
- * the ones whose generators carry no transition wiring at all (REFACTOR_PLAN.md
- * §1.2, cause 6). Modes without overlay content produce no driver, so the whole
- * subsystem costs nothing unless something asks for it.
+ * the ones whose generators carry no transition wiring at all — otherwise a
+ * config author edits `intro` and sees nothing happen. Modes without overlay
+ * content produce no driver, so the whole subsystem costs nothing unless
+ * something asks for it.
  */
 export class PhaseOverlay {
   constructor({ intro, outro, longSideCells = null }) {
@@ -58,6 +59,40 @@ export class PhaseOverlay {
     return plan;
   }
 
+  phaseDescriptorAt(endpoint) {
+    const phase = endpoint?.phase === "start"
+      ? "intro"
+      : (endpoint?.phase === "end" ? "outro" : null);
+    if (phase === null) return null;
+    const entry = this[phase];
+    if (!entry) return null;
+    const progress = phase === "intro"
+      ? endpoint.progress
+      : 1 - endpoint.progress;
+    return { phase, entry, progress, durationSeconds: endpoint.durationSeconds };
+  }
+
+  phaseAt(endpoint) {
+    const descriptor = this.phaseDescriptorAt(endpoint);
+    if (!descriptor) return null;
+    const { phase, durationSeconds } = descriptor;
+    const plan = this.planFor(phase, durationSeconds);
+    return plan === null ? null : { ...descriptor, plan };
+  }
+
+  effects(endpoint) {
+    const descriptor = this.phaseDescriptorAt(endpoint);
+    if (!descriptor) return null;
+    if (typeof descriptor.entry.mode.phaseEffectsFor === "function") {
+      return descriptor.entry.mode.phaseEffectsFor(descriptor);
+    }
+    if (typeof descriptor.entry.mode.phaseEffectsAt !== "function") return null;
+    const plan = this.planFor(descriptor.phase, descriptor.durationSeconds);
+    return plan === null
+      ? null
+      : descriptor.entry.mode.phaseEffectsAt(plan, descriptor.progress);
+  }
+
   draw(endpoint, context) {
     const phase = endpoint?.phase === "start"
       ? "intro"
@@ -70,14 +105,14 @@ export class PhaseOverlay {
       );
       this.lastPhase = phase;
     }
-    if (phase === null) return false;
-    const entry = this[phase];
-    if (!entry) return false;
-    const progress = phase === "intro"
-      ? endpoint.progress
-      : 1 - endpoint.progress;
-    const plan = this.planFor(phase, endpoint.durationSeconds);
-    return drawArrangementOverlay(entry.mode, plan, progress, context);
+    const frame = this.phaseAt(endpoint);
+    if (!frame) return false;
+    return drawArrangementOverlay(
+      frame.entry.mode,
+      frame.plan,
+      frame.progress,
+      context,
+    );
   }
 
   inspect() {

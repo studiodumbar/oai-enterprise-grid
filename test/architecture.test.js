@@ -230,57 +230,23 @@ test("composition rules can return layered render plans", () => {
   ]);
 });
 
-test("text lockup masks only dots that overlap the typography", () => {
+test("flock draw exposes only the grid sampled from its offscreen field", () => {
   const calls = [];
-  const overlapQueries = [];
   const context = {};
-  let flockHidden;
-  let gridHidden;
   const generator = Object.create(FlockGridGenerator.prototype);
   generator.runtime = { context: () => context };
-  generator.typographyOptions = { textLockup: false };
-  generator.flock = {
-    draw(received, isHidden) {
-      calls.push(received === context ? "flock" : "wrong-context");
-      flockHidden = isHidden;
-    },
-    pulseStrength: () => 0.75,
-  };
+  generator.flicker = { enabled: false };
+  generator.circleEndpoint = { prepare: () => false };
   generator.grid = {
+    transitionItems: () => [],
     draw(received, isHidden) {
       calls.push(received === context ? "grid" : "wrong-context");
-      gridHidden = isHidden;
+      assert.equal(isHidden, undefined);
     },
-    textColor: () => "rgb(1 2 3)",
-  };
-  generator.typeField = {
-    overlapsText(x, y, radius, pulse) {
-      overlapQueries.push({ x, y, radius, pulse });
-      return x === 10;
-    },
-    draw: (received, color, pulse) => calls.push(
-      received === context ? `type:${color}:${pulse}` : "wrong-context",
-    ),
   };
 
   generator.draw();
-  assert.deepEqual(calls, ["flock", "grid", "type:rgb(1 2 3):0.75"]);
-  assert.equal(flockHidden, undefined);
-  assert.equal(gridHidden, undefined);
-
-  calls.length = 0;
-  generator.typographyOptions.textLockup = true;
-  generator.draw();
-  assert.deepEqual(calls, ["flock", "grid", "type:rgb(1 2 3):0.75"]);
-  assert.equal(typeof flockHidden, "function");
-  assert.equal(flockHidden, gridHidden);
-  assert.equal(flockHidden(10, 20, 3), true);
-  assert.equal(gridHidden(11, 20, 1), false);
-  assert.deepEqual(overlapQueries, [
-    { x: 10, y: 20, radius: 3, pulse: 0.75 },
-    { x: 11, y: 20, radius: 1, pulse: 0.75 },
-  ]);
-  assert.equal(SETTINGS.typography.textLockup, true);
+  assert.deepEqual(calls, ["grid"]);
 });
 
 test("none transition maps field energy onto circle subdivision levels", () => {
@@ -536,32 +502,16 @@ test("the configured flock composition runs through the complete adapter", () =>
     translate() {},
     rotate() {},
     scale() {},
-    fill() {},
     stroke() {},
-    fillText() {
-      this.lastTextAlpha = this.globalAlpha;
-    },
-  };
-  const fakeP5 = {
-    createGraphics(width, height) {
-      return {
-        width,
-        height,
-        pixels: new Uint8ClampedArray(width * height * 4),
-        drawingContext: { save() {}, restore() {}, fillText() {} },
-        background() {},
-        pixelDensity() {},
-        loadPixels() {},
-        remove() {},
-      };
+    fill() {
+      this.lastFillAlpha = this.globalAlpha;
     },
   };
   const settings = structuredClone(SETTINGS);
-  settings.flock.count = 32;
-  settings.flock.birthsPerPulse = 8;
+  settings.flock.simulation.count = 32;
+  settings.flock.simulation.birthsPerPulse = 8;
   const viewport = { width: 800, height: 600 };
   const runtime = {
-    p5: fakeP5,
     viewport: () => viewport,
     context: () => context,
   };
@@ -600,6 +550,12 @@ test("the configured flock composition runs through the complete adapter", () =>
   });
 
   director.use("flock");
+  assert.deepEqual(settings.flock.timing, {
+    bodyDurationSeconds: 10,
+    beatCount: 4,
+    beatSeconds: 2.5,
+  });
+  assert.deepEqual(director.endpointDurations, { start: 2.5, end: 2.5 });
   director.update({
     dt: 0,
     time: 0,
@@ -624,6 +580,12 @@ test("the configured flock composition runs through the complete adapter", () =>
   const state = flockGenerator.inspect();
   assert.ok(state.activeBoids > 0);
   assert.ok(state.grid.meanEnergy > 0);
+  assert.ok(state.field.pixels.some(value => value > 0));
+  assert.equal(state.flicker.enabled, SETTINGS.flock.flicker.enabled);
+  assert.equal(state.flicker.mode, SETTINGS.flock.flicker.mode);
+  assert.equal(state.timing.beatIndex, 0);
+  assert.equal(flockGenerator.animationDuration(), 10);
+  assert.equal(director.animationDuration(), 15);
   assert.equal(
     state.grid.energy.length,
     state.grid.columns * state.grid.rows,
@@ -633,7 +595,7 @@ test("the configured flock composition runs through the complete adapter", () =>
   director.use("faded");
   director.update({ ...frame, frameIndex: 2 });
   director.draw({ ...frame, frameIndex: 2 });
-  assert.ok(context.lastTextAlpha <= 0.2);
+  assert.ok(context.lastFillAlpha <= 0.2);
 
   viewport.width = 600;
   viewport.height = 800;
@@ -642,7 +604,7 @@ test("the configured flock composition runs through the complete adapter", () =>
   assert.equal(resized.energy.length, resized.columns * resized.rows);
   const configuredLongSide = Math.max(
     3,
-    Math.round(settings.grid.longSideCells),
+    Math.round(settings.flock.grid.longSideCells),
   );
   const expectedLongSide = configuredLongSide % 2 === 0
     ? configuredLongSide - 1

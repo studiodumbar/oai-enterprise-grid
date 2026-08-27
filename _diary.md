@@ -3,27 +3,32 @@
 
 
 [] fractal
-[] Too dense
 [] generative backdrops?
     connecting thread is an open ai logo
     30sec loops stitched together
     think of it as chapters happening one after another, from 1a to 1d and etc
-[] figure out diogos tool
 [] png sequence export
+
+
+[] export panel to be tweakpane
+    [] be able to dictate duration and beats
 
 [ === wip === ]
 
-[] debug diogo
+
+[] mold 
+[] More organic feel, less computer
+    [x] night sky
+    [] water ripples
+    [x] autora
 
 
 
 [ === arc === ]
 
-[] More organic feel, less computer
-    [] night sky
-    [] water ripples
-    [x] autora
-
+[x] monokai vim selection to be neon green with black type
+[x] figure out diogos tool
+[x] debug diogo
 [x] import diogo
 [x] sort selection aurorized
 [x] canvas not to be affected by console

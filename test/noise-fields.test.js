@@ -150,8 +150,8 @@ test("noise-grid lifecycle draws level-four glyphs and returns copied preview pl
   director.update({ dt: 0, compositionDt: 0, time: 0, frameIndex: 0, viewport: { width: 900, height: 600 } });
   director.draw({ time: 0, frameIndex: 0 });
   const generator = director.generator("noiseGrid");
-  assert.equal(generator.noiseSettings.layers.color.holdSeconds, 0.2);
-  assert.equal(generator.settingsSnapshot().noiseFields.layers.color.holdSeconds, 0.2);
+  assert.equal(generator.noiseSettings.layers.color.holdSeconds, 0.25);
+  assert.equal(generator.settingsSnapshot().noiseFields.layers.color.holdSeconds, 0.25);
   const first = generator.noisePreviewSnapshot();
   const dense = generator.noisePreviewSnapshot({ previewWidth: 160, previewHeight: 90 });
   assert.equal(dense.size.length, 160 * 90);
@@ -172,6 +172,109 @@ test("noise-grid lifecycle draws level-four glyphs and returns copied preview pl
   assert.equal(generator.restoreProjectState(generator.snapshotProjectState()), true);
   director.dispose();
   assert.doesNotThrow(() => generator.dispose());
+});
+
+test("noise-grid defaults retain the remapped Diogo geometry and field setup", () => {
+  const { director } = createHeadlessDirector({ composition: "noise-grid" });
+  const generator = director.generator("noiseGrid");
+  const configured = generator.settingsSnapshot();
+  assert.equal(configured.longSideCells, 9);
+  assert.equal(configured.frameMargin, 0);
+  assert.equal(configured.dotMargin, 0);
+  assert.equal(configured.backgroundColor, "#000000");
+  assert.deepEqual(configured.paletteColors, [
+    "#003415", "#00692a", "#00a240", "#04b84c", "#40c977", "#8cdfad",
+  ]);
+  assert.deepEqual(configured.noiseFields.layers, {
+    size: {
+      mode: "simplex", cyclesPerLoop: 0, speed: 0.02, scale: 1.17,
+      contrast: 1.48, seed: 63, gamma: 1, invert: false, emptyBelow: 0,
+    },
+    color: {
+      mode: "simplex", cyclesPerLoop: 0, speed: 0.15, holdSeconds: 0.25,
+      scale: 0.45, contrast: 1.1, seed: 69,
+    },
+    contrast: {
+      mode: "simplex", cyclesPerLoop: 0, speed: 0.05, scale: 0.69,
+      contrast: 1, seed: 26, influence: 1,
+    },
+    visibility: {
+      mode: "simplex", cyclesPerLoop: 0, speed: 0.05, holdSeconds: "auto",
+      scale: 0.69, contrast: 1.2, seed: 26, threshold: 0.36, softness: 0.1,
+    },
+  });
+  assert.deepEqual(configured.levelTransition, {
+    enabled: false,
+    durationSeconds: 0.23,
+    cascade: true,
+    smoothing: 0.5,
+    hysteresis: 0.03,
+  });
+  assert.equal(generator.animationDuration(), 30);
+  director.dispose();
+});
+
+test("text phases keep noise time moving while visibility ramps and restores", () => {
+  const { director } = createHeadlessDirector({ composition: "noise-grid" });
+  const generator = director.generator("noiseGrid");
+  const authored = generator.settingsSnapshot().noiseFields.layers.visibility;
+  const introDuration = director.endpointDurations.start;
+  const update = (dt, frameIndex) => director.update({
+    dt,
+    compositionDt: dt,
+    time: 0,
+    frameIndex,
+    viewport: { width: 900, height: 600 },
+  });
+
+  update(introDuration * 0.1, 0);
+  assert.equal(director.lastFrame.time, 0);
+  assert.ok(Math.abs(generator.inspect().fieldTime - introDuration * 0.1) < 1e-12);
+  assert.deepEqual(generator.inspect().visibilitySettings, {
+    threshold: authored.threshold,
+    contrast: authored.contrast,
+    softness: authored.softness,
+  });
+
+  update(introDuration * 0.1, 1);
+  assert.equal(director.lastFrame.time, 0);
+  assert.ok(Math.abs(generator.inspect().fieldTime - introDuration * 0.2) < 1e-12);
+  assert.deepEqual(generator.inspect().visibilitySettings, {
+    threshold: 1,
+    contrast: 0.01,
+    softness: 0,
+  });
+  assert.ok(
+    generator.outputState.visibility.every(level => level.values.every(value => value === 0)),
+    "the text envelope must not wait for the authored visibility hold",
+  );
+
+  update(introDuration * 0.7, 2);
+  assert.ok(Math.abs(generator.inspect().fieldTime - introDuration * 0.9) < 1e-12);
+  assert.deepEqual(generator.inspect().visibilitySettings, {
+    threshold: authored.threshold,
+    contrast: authored.contrast,
+    softness: authored.softness,
+  });
+  assert.ok(
+    generator.outputState.visibility.some(level => level.values.some(value => value === 1)),
+    "restored visibility must be observable before the text disappears",
+  );
+  assert.deepEqual(
+    generator.settingsSnapshot().noiseFields.layers.visibility,
+    authored,
+    "the phase effect must never mutate authored config",
+  );
+
+  update(introDuration * 0.1 + 1e-9, 3);
+  assert.equal(director.inspect().timeline.phase, "core");
+  assert.ok(Math.abs(generator.inspect().fieldTime - (introDuration + 1e-9)) < 1e-12);
+  assert.deepEqual(generator.inspect().visibilitySettings, {
+    threshold: authored.threshold,
+    contrast: authored.contrast,
+    softness: authored.softness,
+  });
+  director.dispose();
 });
 
 test("noise-grid size uses legacy dark-to-fine bands and invert direction", () => {

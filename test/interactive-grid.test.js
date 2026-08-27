@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import { createCatalog } from "../src/catalog.js";
 import { routeCanvasPointerInput } from "../src/core/canvas-pointer-input.js";
+import { captureDebug } from "../src/debug/index.js";
 import {
   EMPTY_CELL_STATE,
   INTERACTIVE_GRID_SESSION_STORAGE_KEY,
@@ -1176,6 +1177,56 @@ test("empty cells emit no glyphs while active cells still draw", () => {
   assert.equal(strokeRects.length, 1);
 });
 
+test("a toggled cell draws its glyphs through the shared flicker palette", () => {
+  const fills = [];
+  const generator = Object.create(InteractiveGridGenerator.prototype);
+  generator.layout = {
+    columns: 1,
+    rows: 1,
+    cellSize: 100,
+    patternWidth: 100,
+    patternHeight: 100,
+    offsetX: 0,
+    offsetY: 0,
+  };
+  generator.options = { colorCycleSeconds: 4, dotMargin: 0 };
+  generator.colorTransition = { mode: "slide", durationSeconds: 0 };
+  generator.paletteColors = ["#base-0", "#base-1", "#flicker"];
+  generator.baseStates = Int8Array.from([1]);
+  generator.subdivisionTrees = [new Set()];
+  generator.leafCaches = [null];
+  generator.colorTransitionPlans = [{ pattern: "snake", direction: null }];
+  generator.flickeringCellKeys = new Set(["0:0"]);
+  generator.flicker = {
+    enabled: true,
+    scope: "cell",
+    amount: 1,
+    cellStaggerSeconds: 0,
+    paletteColors: generator.paletteColors,
+    distribution: "level",
+    sampleAt: () => 1,
+    spreadsRankAcrossCell: () => false,
+    paletteIndexFromSample: () => 2,
+    paletteIndexFromNoise: () => 2,
+  };
+  generator.shapeRenderer = { addPath() {} };
+  const context = {
+    fillStyle: "",
+    beginPath() {},
+    fill() {
+      fills.push(this.fillStyle);
+    },
+  };
+
+  generator.drawSubdivideCell(context, 0, 1, 100, 0);
+  assert.deepEqual(fills, Array(4).fill("#flicker"));
+
+  fills.length = 0;
+  generator.flickeringCellKeys.clear();
+  generator.drawSubdivideCell(context, 0, 1, 100, 0);
+  assert.deepEqual(fills, Array(4).fill("#base-1"));
+});
+
 test("interactive Dijkstra freezes every active parent and falls back to center when empty", () => {
   const generator = interactiveGeneratorWithSession(memorySessionStorage());
   generator.clear();
@@ -1341,4 +1392,83 @@ test("keyboard focus moves by cell and Enter cycles the announced state", () => 
   assert.equal(generator.subdivisionTrees[5].size, 0);
   assert.equal(generator.input("keydown", { key: "Enter", repeat: true }), false);
   assert.equal(generator.input("pointerdown", { x: 250, y: 150 }), false);
+});
+
+test("F toggles flicker only for the currently hovered parent cell", () => {
+  const announcement = { textContent: "" };
+  const generator = Object.create(InteractiveGridGenerator.prototype);
+  generator.active = true;
+  generator.layout = {
+    columns: 3,
+    rows: 1,
+    cellSize: 100,
+    patternWidth: 300,
+    patternHeight: 100,
+    offsetX: 0,
+    offsetY: 0,
+  };
+  generator.baseStates = Int8Array.from([0, 1, 2]);
+  generator.subdivisionTrees = Array.from({ length: 3 }, () => new Set());
+  generator.sessionCellStates = new Map();
+  generator.flickeringCellKeys = new Set();
+  generator.hoveredCell = 2;
+  generator.focusedCell = 0;
+  generator.runtime = { announcer: () => announcement };
+
+  const lines = captureDebug(["transition"], () => {
+    assert.deepEqual(
+      generator.input("keydown", { key: "F", repeat: false }),
+      { index: 2, enabled: true },
+    );
+  });
+  assert.deepEqual(
+    [0, 1, 2].map(index => generator.isCellFlickering(index)),
+    [false, false, true],
+  );
+  assert.equal(generator.focusedCell, 2);
+  assert.match(announcement.textContent, /Row 1, column 3: flicker on/);
+  assert.deepEqual(lines, [
+    "[cg:transition] f=0000 interactive-cell-flicker index=2 enabled=true row=0 column=2",
+  ]);
+
+  assert.deepEqual(
+    generator.input("keydown", { key: "f", repeat: false }),
+    { index: 2, enabled: false },
+  );
+  assert.deepEqual(
+    [0, 1, 2].map(index => generator.isCellFlickering(index)),
+    [false, false, false],
+  );
+  assert.equal(generator.input("keydown", { key: "f", repeat: true }), false);
+  generator.hoveredCell = -1;
+  assert.equal(generator.input("keydown", { key: "f", repeat: false }), false);
+});
+
+test("cell flicker survives tab storage, project snapshots, and resize", () => {
+  const storage = memorySessionStorage();
+  const source = interactiveGeneratorWithSession(storage);
+  source.enter();
+  const index = source.centerCellIndex() + 1;
+  source.hoveredCell = index;
+  assert.deepEqual(
+    source.input("keydown", { key: "f", repeat: false }),
+    { index, enabled: true },
+  );
+  const centeredKey = source.centeredKeyForCell(index);
+  const persisted = JSON.parse(storage.getItem(INTERACTIVE_GRID_SESSION_STORAGE_KEY));
+  assert.equal(persisted.cells.find(cell => (
+    `${cell.column}:${cell.row}` === centeredKey
+  )).flicker, true);
+
+  const restored = interactiveGeneratorWithSession(storage);
+  assert.equal(restored.isCellFlickering(index), true);
+  const snapshot = source.snapshotProjectState();
+  restored.clear();
+  assert.equal(restored.restoreProjectState(snapshot), true);
+  assert.equal(restored.isCellFlickering(index), true);
+
+  restored.resize({ width: 300, height: 500 });
+  assert.equal(restored.flickeringCellKeys.has(centeredKey), true);
+  source.dispose();
+  restored.dispose();
 });

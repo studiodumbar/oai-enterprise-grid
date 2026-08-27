@@ -264,9 +264,17 @@ export class CompositionDirector {
 
   isLegacyFlockComposition(definition) {
     const ids = compositionGeneratorIds(definition);
-    return ids.length > 0 && ids.every(
+    const flockOnly = ids.length > 0 && ids.every(
       id => this.generatorDefinitions.get(id)?.type === "flock-grid",
     );
+    if (!flockOnly) return false;
+    return !ids.some(id => {
+      const generatorDefinition = this.generatorDefinitions.get(id);
+      const key = generatorDefinition
+        ? this.settingsKeyForDefinition(id, generatorDefinition)
+        : null;
+      return key !== null && this.settings[key]?.timing !== undefined;
+    });
   }
 
   buildPhaseOverlay(name = this.currentCompositionName) {
@@ -277,7 +285,7 @@ export class CompositionDirector {
         intro: group.intro,
         outro: group.outro,
         modeRegistry: this.sceneTransitionTypes,
-        longSideCells: group.longSideCells ?? null,
+        longSideCells: group.longSideCells ?? group.grid?.longSideCells ?? null,
         palette: group.palette ?? null,
         palettes: this.palettes,
         background: this.settings.canvas?.background ?? null,
@@ -410,13 +418,16 @@ export class CompositionDirector {
     const endpoint = endpointState.phase === "start" || endpointState.phase === "end"
       ? { ...endpointState }
       : null;
+    const overlayEndpoint = this.phaseOverlayEndpoint(endpoint);
     return {
       ...frame,
       dt: Math.min(coreDt, Number.isFinite(frame?.dt) ? frame.dt : coreDt),
       compositionDt: coreDt,
       endpointDt: frame?.compositionDt ?? frame?.dt ?? 0,
       time: endpointState.coreTime,
+      timelineTime: this.endpointElapsed,
       compositionEndpoint: endpoint,
+      phaseEffects: this.phaseOverlay?.effects?.(overlayEndpoint) ?? null,
     };
   }
 

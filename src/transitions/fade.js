@@ -70,9 +70,9 @@ export class FadeArrangementMode {
     const targetOrderById = new Map(
       targets.map((target, order) => [target.id, order]),
     );
-    // Plan totality (REFACTOR_PLAN.md §2.3): every source is carried by some
-    // target and every target fades in, so neither side can be silently
-    // dropped when the two sets differ in size. There is no offscreen
+    // Plan totality: every source is carried by some target and every target
+    // fades in, so neither side can be silently dropped when the two sets
+    // differ in size. There is no offscreen
     // fallback — a fade never needs one.
     const sourcesByOrder = targets.map(() => []);
     if (targets.length > 0) {

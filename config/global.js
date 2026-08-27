@@ -11,6 +11,7 @@ export const GLOBAL_CONFIG = {
   ui: {
     showExportPanel: false,
     noisePreview: false,
+    flockPreview: false,
   },
 
   // Machine-readable tracing. Channels: timeline, transition, plan, cells,
@@ -26,12 +27,13 @@ export const GLOBAL_CONFIG = {
     // interactive-grid
     // inference-loop
     // l-tree
+    // mold
     // tool-loop
     // context-window
     // game-of-life
     // voronoi,
     // noise-grid
-    active: "noise-grid",
+    active: "mold",
     // Legacy phase defaults stay flat while compositions are migrated one by
     // one. A migrated composition overrides them through circleEndpoints.
     startWithCircle: true,
@@ -42,8 +44,8 @@ export const GLOBAL_CONFIG = {
     endWithCircleDurationSeconds: 0.5,
     circleSubdivision: 1, // 1, 2, 4, 8, or 16.
     circleEndpoints: {
-      // Every finite non-flock composition uses the shared path-to-centre outro.
-      // Flock remains on its exempt native endpoint path.
+      // Every finite composition uses the shared path-to-centre outro unless
+      // its local settings select another supported endpoint mode.
       end: {
         enabled: true,
         mode: "dijkstra",
@@ -70,7 +72,7 @@ export const GLOBAL_CONFIG = {
   },
 
   // app-wide palette, composition overrides it
-  palette: "green",
+  palette: "flocker",
 
   noiseFields: {
     enabled: true,
@@ -124,7 +126,7 @@ export const GLOBAL_CONFIG = {
         timingCurve: [0.42, 0, 0.58, 1], // CSS cubic-bezier control points: [x1, y1, x2, y2].
       },
       text: {
-        text: "Open AI",
+        text: "OpenAI",
         fontFamily: "'OpenAI Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif",
         fontWeight: 900,
         sizeInCells: 0.35,
@@ -145,6 +147,13 @@ export const GLOBAL_CONFIG = {
         colorBy: "dot",
         // null takes the palette's last color.
         textColor: null,
+        // Noise-grid visibility clears while the text uncovers, then restores
+        // the composition-authored values while the text is covered again.
+        noiseVisibility: {
+          threshold: 1,
+          contrast: 0.01,
+          softness: 0,
+        },
       },
     },
   },
@@ -240,7 +249,16 @@ export const GLOBAL_CONFIG = {
     lightBlue: ["#d4ebf7", "#a8ddf0", "#6db9e7", "#2e7ec6", "#0066b3"],
     justBlue: ["#2e7ec6", "#3a89ce", "#5aa0d9", "#7ab7e3", "#9aceee"],
     green: ["#003415", "#00692a", "#00a240", "#04b84c", "#8cdfad"],
-    thinking: ["#dce8e3", "#a7d1c2", "#10a37f", "#08745a", "#123b31"],
+    
+      flocker: [
+          "#00692a", 
+          "#8cdfad", 
+          "#00a240", 
+          "#04b84c", 
+          "#003415"
+      ],
+    
+      thinking: ["#dce8e3", "#a7d1c2", "#10a37f", "#08745a", "#123b31"],
     orange: ["#762b0a", "#c73f13", "#ff6b00", "#ffb389"],
     mono: ["#303030", "#666666", "#aaaaaa", "#ffffff"],
   },

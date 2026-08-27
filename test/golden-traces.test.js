@@ -2,9 +2,9 @@
 //
 // Each composition is run headlessly and its debug log plus draw volume is
 // compared against a committed baseline. These files are the regression net for
-// the structural stages of REFACTOR_PLAN.md: a stage that claims to preserve
-// behavior must leave every trace byte-identical, and a stage that changes
-// behavior on purpose must show exactly what changed in the diff.
+// structural work: a change that claims to preserve behavior must leave every
+// trace byte-identical, and a change that alters behavior on purpose must show
+// exactly what changed in the diff.
 //
 // Regenerate after an intended change:
 //   UPDATE_GOLDEN=1 node --test test/golden-traces.test.js
@@ -32,6 +32,16 @@ const COMPOSITIONS = Object.entries(COMPOSITION_DEFINITIONS)
   .map(([id]) => id)
   .sort();
 
+// Captured before any test runs, because the comparison test may write a
+// baseline itself.
+const UNCOVERED_AT_START = COMPOSITIONS.filter(
+  composition => !existsSync(join(GOLDEN_DIR, `${composition}.trace.txt`)),
+);
+// A fresh checkout with no baselines at all writes them and passes. Once any
+// baseline exists, a missing one is a composition nobody generated a baseline
+// for: writing it silently would mark it covered on the next run forever.
+const FRESH_CHECKOUT = UNCOVERED_AT_START.length === COMPOSITIONS.length;
+
 function renderTrace(composition, run) {
   const drawn = run.drawCounts.filter(entry => entry.fill > 0 || entry.text > 0);
   const blank = run.drawCounts.length - drawn.length;
@@ -55,24 +65,31 @@ test("every composition has a stable headless trace", async () => {
   const update = process.env.UPDATE_GOLDEN === "1";
   const written = [];
 
+  // Every composition is compared before anything is reported. Failing on the
+  // first mismatch left every later composition untested, which is how a stale
+  // baseline for one composition hid the others for several commits.
+  const changed = [];
   for (const composition of COMPOSITIONS) {
     const run = await runFrames({ composition, frames: FRAMES, channels: CHANNELS });
     const trace = renderTrace(composition, run);
     const path = join(GOLDEN_DIR, `${composition}.trace.txt`);
 
-    if (update || !existsSync(path)) {
+    if (update || (FRESH_CHECKOUT && !existsSync(path))) {
       writeFileSync(path, trace);
       written.push(composition);
       continue;
     }
+    if (!existsSync(path)) continue;
 
-    assert.equal(
-      trace,
-      readFileSync(path, "utf8"),
-      `Headless trace for "${composition}" changed. If the change is intended, `
-      + "review the diff and regenerate with UPDATE_GOLDEN=1.",
-    );
+    if (trace !== readFileSync(path, "utf8")) changed.push(composition);
   }
+
+  assert.deepEqual(
+    changed,
+    [],
+    `Headless traces changed for: ${changed.join(", ")}. If the change is `
+    + "intended, review the diff and regenerate with UPDATE_GOLDEN=1.",
+  );
 
   if (written.length > 0 && !update) {
     // First run on a fresh checkout writes the missing baselines rather than
@@ -85,7 +102,16 @@ test("traces cover every non-alias composition", () => {
   assert.ok(COMPOSITIONS.length >= 8, "expected the full composition catalog");
   assert.ok(COMPOSITIONS.includes("base"));
   assert.ok(COMPOSITIONS.includes("voronoi"));
-  // flock is exempt from the refactor but still traced, so an accidental
-  // change to shared code shows up here instead of silently.
+  // Flock uses the shared timing and endpoint path, so it stays in the same
+  // regression net as the discrete compositions.
   assert.ok(COMPOSITIONS.includes("flock"));
+  // A composition in the catalog with no committed baseline is not covered:
+  // the run above writes the missing file and passes, so only this check makes
+  // the gap visible.
+  assert.deepEqual(
+    UNCOVERED_AT_START,
+    [],
+    `No committed golden trace for: ${UNCOVERED_AT_START.join(", ")}. `
+    + "Generate one with UPDATE_GOLDEN=1 and commit it.",
+  );
 });

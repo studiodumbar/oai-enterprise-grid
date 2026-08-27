@@ -3,8 +3,8 @@
 // Every arrangement mode — intro, outro, or between-state — receives the same
 // event: either explicit `items` carrying world-space centers, or grid
 // `indices` plus a `layout`. Normalizing that here keeps a new mode from
-// inventing a fourth reading of the event, which is how the three competing
-// transition drivers described in REFACTOR_PLAN.md §1.1 diverged.
+// inventing a fourth reading of the event, which is how the competing
+// transition drivers diverged in the first place.
 
 function centerForIndex(layout, index) {
   const column = index % layout.columns;

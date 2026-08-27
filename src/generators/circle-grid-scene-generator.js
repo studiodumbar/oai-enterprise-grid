@@ -670,19 +670,38 @@ export class CircleGridSceneGenerator {
 
   applyScene(nextScene, faceDt, transition = null, sourceItems = null) {
     const sceneChanged = nextScene.key !== this.scene?.key;
+    const debugTransitionKey = nextScene.debugTransitionKey ?? nextScene.key;
+    const previousDebugTransitionKey = this.scene?.debugTransitionKey ?? this.scene?.key;
     // The circle endpoint is an arrangement too, applied at draw time instead of
     // through a SceneTransition. While its intro runs the core clock is paused,
     // so a native flip hinge started here would freeze half-open and draw
-    // nothing for the whole phase — REFACTOR_PLAN.md §1.3, finding 1.
+    // nothing for the whole phase — the measured blank-intro defect.
     const withArrangement = transition !== null
       || this.compositionEndpoint?.phase === "start";
     const withCut = nextScene.transitionStyle === "cut";
     if (sceneChanged && withCut) {
       this.cellTransition.reset();
+      if (debugTransitionKey !== previousDebugTransitionKey) {
+        debug.transition(
+          "scene=cut strategy=%s key=%s",
+          this.options.strategy,
+          debugTransitionKey,
+        );
+      }
+    }
+    if (
+      sceneChanged
+      && debugTransitionKey !== previousDebugTransitionKey
+      && !withCut
+      && transition === null
+      && nextScene.debugTransition === true
+    ) {
       debug.transition(
-        "scene=cut strategy=%s key=%s",
+        "scene=state strategy=%s phase=%s step=%d key=%s",
         this.options.strategy,
-        nextScene.key,
+        nextScene.phase ?? "-",
+        nextScene.stepIndex ?? 0,
+        debugTransitionKey,
       );
     }
     for (let index = 0; index < this.currentFaces.length; index += 1) {
@@ -1123,6 +1142,12 @@ export class CircleGridSceneGenerator {
     const left = this.layout.offsetX + parentColumn * this.layout.cellSize;
     const top = this.layout.offsetY + parentRow * this.layout.cellSize;
     const glyphCount = subdivisions * subdivisions;
+    const authoredVisibleGlyphIndices = face.detail?.visibleGlyphIndices;
+    const visibleGlyphIndices = Array.isArray(authoredVisibleGlyphIndices)
+      ? authoredVisibleGlyphIndices
+      : null;
+    const visibleGlyphCount = visibleGlyphIndices?.length ?? glyphCount;
+    const visibleGlyphAt = rank => visibleGlyphIndices?.[rank] ?? rank;
     const paletteByGlyph = this.paletteIndexScratch;
     const noiseByGlyph = this.noiseSampleScratch;
     const noiseOrder = this.noiseOrderScratch;
@@ -1131,7 +1156,9 @@ export class CircleGridSceneGenerator {
     usedPaletteIndices.fill(0);
     const flickerTime = this.flickerTimeFor(index);
 
-    for (let glyphIndex = 0; glyphIndex < glyphCount; glyphIndex += 1) {
+    noiseOrder.length = visibleGlyphCount;
+    for (let rank = 0; rank < visibleGlyphCount; rank += 1) {
+      const glyphIndex = visibleGlyphAt(rank);
       const glyphColumn = glyphIndex % subdivisions;
       const glyphRow = Math.floor(glyphIndex / subdivisions);
       noiseByGlyph[glyphIndex] = this.flicker.sampleAt(
@@ -1139,7 +1166,7 @@ export class CircleGridSceneGenerator {
         noiseBaseY + glyphRow * coordinateStep,
         flickerTime,
       );
-      noiseOrder[glyphIndex] = glyphIndex;
+      noiseOrder[rank] = glyphIndex;
     }
 
     const paletteCount = this.flicker.paletteColors.length;
@@ -1148,19 +1175,21 @@ export class CircleGridSceneGenerator {
     // the whole palette. Canvas scope never does — see
     // FlickerController.spreadsRankAcrossCell — so a board-wide pattern keeps
     // showing each cell only its own slice.
-    const useRankSpread = this.flicker.spreadsRankAcrossCell(glyphCount);
+    const useRankSpread = this.flicker.spreadsRankAcrossCell(visibleGlyphCount);
     if (useRankSpread) {
-      noiseOrder.length = glyphCount;
       noiseOrder.sort((first, second) => (
         noiseByGlyph[first] - noiseByGlyph[second] || first - second
       ));
     }
-    for (let rank = 0; rank < glyphCount; rank += 1) {
-      const glyphIndex = useRankSpread ? noiseOrder[rank] : rank;
+    for (let rank = 0; rank < visibleGlyphCount; rank += 1) {
+      const glyphIndex = useRankSpread ? noiseOrder[rank] : visibleGlyphAt(rank);
       const swatchIndex = useRankSpread
         ? this.flicker.paletteIndexFromSample(
           basePosition,
-          Math.min(paletteCount - 1, Math.floor(rank * paletteCount / glyphCount))
+          Math.min(
+            paletteCount - 1,
+            Math.floor(rank * paletteCount / Math.max(1, visibleGlyphCount)),
+          )
             / Math.max(1, paletteCount - 1),
           amount,
         )
@@ -1176,7 +1205,8 @@ export class CircleGridSceneGenerator {
     ) {
       if (usedPaletteIndices[swatchIndex] === 0) continue;
       context.fillStyle = this.flicker.paletteColors[swatchIndex];
-      for (let glyphIndex = 0; glyphIndex < glyphCount; glyphIndex += 1) {
+      for (let rank = 0; rank < visibleGlyphCount; rank += 1) {
+        const glyphIndex = visibleGlyphAt(rank);
         if (paletteByGlyph[glyphIndex] !== swatchIndex) continue;
         const glyphColumn = glyphIndex % subdivisions;
         const glyphRow = Math.floor(glyphIndex / subdivisions);
@@ -1404,12 +1434,7 @@ export class CircleGridSceneGenerator {
         column: this.layout.readoutIndex % this.layout.columns,
       },
       layout: { ...this.layout },
-      flicker: {
-        enabled: this.flicker.enabled,
-        mode: this.flicker.modeName,
-        scope: this.flicker.scope,
-        amount: this.flicker.amount,
-      },
+      flicker: this.flicker.inspect(),
       intro: this.intro.inspect(),
       outro: this.outro.inspect(),
       cellTransition: this.cellTransition.inspect(),

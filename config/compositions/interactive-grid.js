@@ -76,6 +76,12 @@ export const INTERACTIVE_GRID_CONFIG = {
         // CSS cubic-bezier control points: [x1, y1, x2, y2].
         timingCurve: [1.0, 0.0, 0.0, 1],
       },
+
+      // Press F while hovering a parent cell to opt only that cell into the
+      // app-wide flicker mode. All cells start with flicker switched off.
+      flicker: {
+        enabled: true,
+      },
     },
   },
 

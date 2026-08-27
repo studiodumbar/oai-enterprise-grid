@@ -54,6 +54,13 @@ export const DEFAULT_TEXT_REVEAL_SETTINGS = Object.freeze({
   colorBy: "level",
   // null takes the palette's last color.
   textColor: null,
+  // Generators that expose the noise-visibility effect ramp toward this pose
+  // while the string is uncovered. Other generators ignore the effect.
+  noiseVisibility: Object.freeze({
+    threshold: 1,
+    contrast: 0.01,
+    softness: 0,
+  }),
   fontFamily: "'OpenAI Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif",
   fontWeight: 700,
 });
@@ -67,6 +74,23 @@ function requireFinite(value, label) {
     throw new TypeError(`text ${label} must be a finite number.`);
   }
   return value;
+}
+
+function requireNoiseVisibility(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new TypeError("text noiseVisibility must be an object.");
+  }
+  const { threshold, contrast, softness } = value;
+  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1) {
+    throw new RangeError("text noiseVisibility.threshold must be between 0 and 1.");
+  }
+  if (!Number.isFinite(contrast) || contrast <= 0) {
+    throw new RangeError("text noiseVisibility.contrast must be a finite positive number.");
+  }
+  if (!Number.isFinite(softness) || softness < 0 || softness > 0.5) {
+    throw new RangeError("text noiseVisibility.softness must be between 0 and 0.5.");
+  }
+  return Object.freeze({ threshold, contrast, softness });
 }
 
 function requireColorList(value, label) {
@@ -178,6 +202,9 @@ export class TextRevealArrangementMode {
     this.colorDrift = colorDrift;
     this.backgroundColor = backgroundColor;
     this.textColor = textColor;
+    this.noiseVisibility = requireNoiseVisibility(
+      options.noiseVisibility ?? defaults.noiseVisibility,
+    );
     this.fontFamily = fontFamily;
     this.fontWeight = options.fontWeight ?? defaults.fontWeight;
     // Resolved by whoever owns the palette table — the overlay driver. The
@@ -220,7 +247,7 @@ export class TextRevealArrangementMode {
    * split what is left evenly. Automatic timing takes the largest supported
    * hold. Only the first half is described here; the second reads it backward.
    */
-  windowsFor(durationSeconds) {
+  windowsFor(durationSeconds, { logClamp = true } = {}) {
     const maximumHoldSeconds = durationSeconds * MAXIMUM_TEXT_HOLD_SHARE;
     const requestedHoldSeconds = isAutomaticDurationSetting(this.visibleSeconds)
       ? resolveAutomaticDuration(this.visibleSeconds, {
@@ -232,7 +259,7 @@ export class TextRevealArrangementMode {
       requestedHoldSeconds,
       maximumHoldSeconds,
     );
-    if (holdSeconds < requestedHoldSeconds) {
+    if (logClamp && holdSeconds < requestedHoldSeconds) {
       debug.transition(
         "text hold clamped authored=%s requested=%.3f applied=%.3f phase=%.3f",
         this.visibleSeconds,
@@ -323,6 +350,43 @@ export class TextRevealArrangementMode {
    */
   textVisibleAt(plan, amount) {
     return this.foldedAmountAt(plan, amount) >= plan.expandEnd;
+  }
+
+  /**
+   * Clear the composition while the ladder uncovers the string, then restore
+   * it during the mirrored cover so the authored field is back before the
+   * string disappears.
+   */
+  noiseVisibilityAmountAt(plan, amount) {
+    const progress = clamp01(amount);
+    if (progress <= plan.expandEnd) return 0;
+    if (progress < plan.holdStart) {
+      const ramp = (progress - plan.expandEnd) / (plan.holdStart - plan.expandEnd);
+      return ramp >= 1 - 1e-12 ? 1 : ramp;
+    }
+    if (progress <= plan.holdEnd) return 1;
+    const coverEnd = plan.holdEnd + plan.cascadeShare;
+    if (progress < coverEnd) {
+      const ramp = 1 - (progress - plan.holdEnd) / plan.cascadeShare;
+      return ramp <= 1e-12 ? 0 : ramp;
+    }
+    return 0;
+  }
+
+  phaseEffectsAt(plan, progress) {
+    return {
+      noiseVisibility: {
+        amount: this.noiseVisibilityAmountAt(plan, progress),
+        ...this.noiseVisibility,
+      },
+    };
+  }
+
+  phaseEffectsFor({ progress, durationSeconds }) {
+    return this.phaseEffectsAt(
+      this.windowsFor(durationSeconds, { logClamp: false }),
+      progress,
+    );
   }
 
   /**

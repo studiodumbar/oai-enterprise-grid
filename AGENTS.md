@@ -8,7 +8,7 @@ before reading source. `CLAUDE.md` points here; this is the single source.
 ## 1. What this project is
 
 A p5.js generative-art composer. It renders **discrete grids of dots** that
-animate through named **compositions** (voronoi, l-tree, game-of-life,
+animate through named **compositions** (voronoi, l-tree, mold, game-of-life,
 inference-loop, tool-loop, context-window, interactive-grid, base, flock) and
 exports them as PNG, MP4, SVG, or PNG sequences with deterministic,
 seam-perfect loops.
@@ -46,9 +46,9 @@ let the test runner reach it.
 
 **Every subsystem must be observable through `console.log` without a browser.**
 
-This is a standing rule, not a suggestion. `src/debug/` lands in Stage 1 of
-`REFACTOR_PLAN.md`; until then, build it before you instrument — do not add bare
-`console.log` calls in the meantime and do not defer the instrumentation.
+This is a standing rule, not a suggestion. `src/debug/` exists — channels, a
+replaceable sink, and a headless frame driver. Instrument as you build; never
+add a bare `console.log` and never defer the instrumentation to a later pass.
 
 When you add or change behavior:
 
@@ -160,8 +160,8 @@ src/composition-endpoints/  Resolves global endpoint defaults with local
                       on the parent-cell grid.
 src/timeline/
   timeline-settings.js     Resolves recipe roots and config-level auto timings.
-                           This is the settings half of Stage 3; the single
-                           timeline clock has not landed yet.
+                           Settings only. There is still no single timeline
+                           clock — see §8.
 src/transitions/      The shared arrangement pool. index.js is the registry:
                       every mode declares which phases (intro | outro | state)
                       it supports, plus its defaults. fade.js and
@@ -169,25 +169,27 @@ src/transitions/      The shared arrangement pool. index.js is the registry:
                       normalizes an event; presentations.js and overlay.js are
                       the two ports; phase-overlay.js is the director-side
                       driver for modes that draw content of their own.
-                      Landed early out of Stage 2; the rest of that stage still
-                      has to fold in the two settings resolvers and the four
-                      applyPresentation copies.
+                      This pool is the intended home for all arrangement work,
+                      but two older settings resolvers and four
+                      applyPresentation copies still live outside it — see §8.
 src/export/           PNG / MP4 / SVG / ZIP export, project-state snapshot and
                       restore, the `cg` console CLI. Deterministic by design.
 
-Not yet created — see REFACTOR_PLAN.md for which stage lands each:
-src/debug/            Debug channels, sink, headless frame driver.  (Stage 1)
-src/cell-state/       The per-cell buffer writer, split out of the
-                      transition registry.                          (Stage 2)
-src/timeline/timeline.js  The single clock: intro | body | outro.    (Stage 3)
+src/debug/            Debug channels, sink, headless frame driver.
+src/scene-transitions/  The generator-side intro/outro driver (SceneTransition)
+                      and its settings resolver. Only the base and circle-grid
+                      scene generators construct one, and a composition
+                      endpoint suppresses it — see §8.
+src/cell-transitions/   The between-state driver, its settings resolver, and
+                      cell-state-buffer.js, the per-cell buffer writer.
+src/compositions/circle-endpoints.js  NativeCircleEndpointTransition plus the
+                      endpoint timeline function every composition runs on. It
+                      implements the `native` endpoint mode and is used by all
+                      four generator families, not only flock.
 
-Until those land, the equivalent code lives in src/scene-transitions/,
-src/cell-transitions/, src/compositions/circle-endpoints.js, and the new
-src/composition-endpoints/ registry — overlapping subsystems that Stages 2-3
-collapse into the above.
-
-test/                 node:test. 19 files. architecture.test.js encodes the
-                      architectural invariants — read it before changing shape.
+test/                 node:test. 28 files plus test/golden/ traces.
+                      architecture.test.js encodes the architectural
+                      invariants — read it before changing shape.
 ```
 
 ---
@@ -242,7 +244,7 @@ default.
 
 ### Timing resolution
 
-Every canonical non-flock composition recipe must declare timing beside its
+Every canonical composition recipe must declare timing beside its
 rule and steps:
 
 ```js
@@ -278,23 +280,24 @@ values except text `visibleSeconds`, which also accepts zero and caps any reques
 at its 60% phase window. `"calc(auto * n)"` scales only that field's anchor by a
 positive `n`; the text cap applies afterward, and no resolver searches a
 fallback chain. A missing anchor throws at startup, naming the composition and
-field. Non-flock endpoint resolution never queries live generators; flock
-retains its one-time legacy path under §8. Interactive-grid keeps `beatCount`
+field. Shipped endpoint resolution never queries live generators; an
+unreachable untimed-flock compatibility branch remains under §8. Interactive-grid keeps `beatCount`
 aligned with the palette size. The composition-level graph resolves at startup;
 text `visibleSeconds` resolves when its phase plan is created from that plan's
 numeric duration. Resolved phase and endpoint durations stay fixed, but the
 director's core/export duration still comes from the active generator's legacy
-`animationDuration()` until Stage 3. Other nested micro timings such as
+`animationDuration()`; see §8. Other nested micro timings such as
 `flipSeconds`, `staggerSeconds`, and `blendSeconds` stay explicit unless that
 exact field documents automatic syntax. Alias recipes inherit their canonical
 recipe's timing instead of declaring another root.
 
 ## 7. House rules
 
-1. **Read `REFACTOR_PLAN.md` before structural work.** It says what is
-   deliberately mid-migration.
+1. **Read §8 before structural work.** It says what is deliberately
+   mid-migration and what is doubled on purpose. `refactor.md` carries the
+   open note on composition timing ownership.
 2. **One concept, one implementation.** Before adding a helper, grep for it.
-   `clamp01` currently exists in 12 files; do not make it 13.
+   `clamp01` currently exists in 18 files; do not make it 19.
 3. **No compatibility aliases without a caller.** An alias whose only consumer
    is a test asserting the alias exists is dead code with a bodyguard.
 4. **No barrel files unless something imports them.** `src/export/index.js`
@@ -305,8 +308,8 @@ recipe's timing instead of declaring another root.
    combination of composition + effect must throw during setup with a message
    naming both sides and listing valid alternatives.
 7. **Never hand-edit `dist/`.** Run `npm run build`.
-8. **Do not touch `src/generators/flock*.js` or `config/compositions/flock-grid.js`.**
-   See §8.
+8. **Keep flock on the shared composition machinery.** Its field simulation is
+   specialized; its timing, overlays, and endpoints are not.
 9. Comment *why*, not *what*. Match the surrounding density — this codebase
    uses short prose comments above non-obvious blocks, not line-by-line noise.
 
@@ -314,15 +317,17 @@ recipe's timing instead of declaring another root.
 
 ## 8. Known exemptions and mid-migration state
 
-**flock is out of scope and must not be modified.** It stays on the legacy
-`NativeCircleEndpointTransition` path and constructs no `SceneTransition`.
-Consequences:
+**flock uses the shared composition lifecycle.** It runs resolved composition
+timing (`flockLegacy=no` on the `config` channel), a native start endpoint, a
+Dijkstra end endpoint, and the shared `text` intro. It differs only in that
+`FlockGridGenerator` constructs no
+`SceneTransition` of its own, so an authored `intro`/`outro` block reaches it
+only through the composition endpoint and the overlay.
 
-- Architecture tests exempt flock from the stage/transition contract.
-- `NativeCircleEndpointTransition` stays alive solely for flock until its owner
-  decides otherwise.
-- When developing transition work, switch `GLOBAL_CONFIG.composition.active`
-  to a migrated composition — flock will not show the new behavior.
+`resolveEndpointDurations()` still carries a legacy branch that asks the live
+generator for a flock endpoint duration. It fires only for a flock composition
+whose settings key declares no `timing`, which no shipped recipe does — it is
+currently unreachable.
 
 **Intro/outro status.** Two modes are authorable at the cycle boundaries.
 `fade` reveals the centered parent cell over `revealFraction` of the phase, then
@@ -340,7 +345,8 @@ which remains Stage 3 clock work. An enabled composition endpoint suppresses the
 matching generator lifecycle timing instead of running beside it.
 
 Composition endpoints are configured separately in `circleEndpoints`. The
-global non-flock end mode is `dijkstra`; flock remains on its exempt native path.
+global end mode is `dijkstra`, including flock. Flock publishes its final visible
+parent cells when the outro begins, then the shared endpoint freezes that set.
 Every visible final parent cell searches concurrently across cardinal neighbors
 toward the centre. Route cells shared by several paths are rendered once and
 cleaned once. Most compositions freeze that source set on the first outro frame.
@@ -356,12 +362,48 @@ and the matching generator outro is suppressed. Shared mode defaults live under
 `GLOBAL_CONFIG.composition.circleEndpoints`; composition values override them by
 key.
 
-**Half-finished features.** The remaining `intro`/`outro` defects are the
-clock-ownership ones — two layers still decide the cycle restarts. The startup
-timing resolver has landed, but the single Stage 3 clock has not. Do not patch
-these defects case by case; see `REFACTOR_PLAN.md`. Specifically, do not "fix" a
-composition by adding a guard that special-cases it — that is how the current
-three-competing-drivers situation arose.
+**Who owns a cycle boundary.** One owner, decided at construction, not by a
+runtime guard. When `circleEndpoints.<start|end>.enabled` is true,
+`compositionEndpointOwnsLifecycle()` makes the generator's own `beginIntro` /
+`beginOutro` return `false` and `transitionEventsPerCycle()` return 0, so the
+suppressed transition is also excluded from `animationDuration()`. Headless
+traces confirm it: no composition emits a single `scene=intro` or `scene=outro`
+line. Keep it that way — express a phase restriction as a mode's `phases`
+declaration, never as a per-composition guard.
+
+**The one-frame core advance at a cycle wrap is deliberate.** The core clock is
+paused during an endpoint by zeroing `coreDt`, and
+`circleEndpointTimelineAt()` freezes `coreTime` at
+`coreDuration - ENDPOINT_SAMPLE_HOLD_SECONDS` (1/60 s) for the whole `end`
+phase so the last core sample holds still under the outro. That withheld frame
+is delivered at the wrap, which is why every trace shows exactly one
+`phase=start … paused=no` line per cycle, followed by `paused=yes`:
+
+```
+[cg:timeline] f=0240 phase=end   cycle=0 duration=0.500 paused=yes
+[cg:timeline] f=0270 phase=start cycle=1 duration=2.000 paused=no
+[cg:timeline] f=0271 phase=start cycle=1 duration=2.000 paused=yes
+```
+
+More than one such frame per wrap, or one outside a wrap, is a real defect.
+
+**Latent: the loop length still comes from the active generator.** Phase and
+endpoint durations resolve from config at startup, but
+`CompositionDirector.coreAnimationDuration()` takes `max()` over the
+`animationDuration()` of whichever generators are *active*, and the endpoint
+timeline is re-derived from `elapsed` every frame. Every shipped composition has
+exactly one untimed `SequenceRule` step, so that value is constant and the
+current behavior is correct. It stops being correct the moment a sequence has
+more than one timed step or a generator's duration varies at runtime — the
+active set would then retroactively relocate the current phase. Add the
+integration test in `refactor.md` before changing that shape. There is no
+`src/timeline/timeline.js` and today nothing needs one.
+
+**Cosmetic duplication.** `src/scene-transitions/transition-settings.js` and
+`src/cell-transitions/transition-settings.js` are near-identical resolvers
+(`requireSettingsObject`, `mergeModeSettings` copied verbatim). Both take their
+mode defaults from the single `ARRANGEMENT_MODE_DEFAULTS` table, so there is one
+source of truth — only the merge code is doubled.
 
 ---
 
@@ -408,8 +450,9 @@ possible; a new generator type is a much larger commitment.
 
 **Change timing** → use `src/timeline/timeline-settings.js` for recipe roots and
 config-level automatic fields. A deliberately supported mode-local field reuses
-`src/core/automatic-duration.js`; never add another clock or fallback chain. The
-Stage 3 clock consolidation is still pending.
+`src/core/automatic-duration.js`; never add another clock or fallback chain.
+§8 explains why the loop length still comes from the active generator, and what
+would break that.
 
 **Debug a visual glitch** → enable the relevant channels, run the headless
 driver for the composition, diff the log across frames. Do not read pixels.

@@ -61,8 +61,8 @@ const ARRANGEMENT_MODES = Object.freeze([
     name: "sort-selection",
     // Selection-sort swaps are a reshuffle of an existing arrangement. Driven
     // from a single centered circle there is nothing to reshuffle, so every
-    // target degenerates into an offscreen slide-in — the defect measured in
-    // REFACTOR_PLAN.md §1.3. The mode is therefore state-only.
+    // target degenerates into an offscreen slide-in. The mode is therefore
+    // state-only.
     phases: Object.freeze(["state"]),
     defaults: DEFAULT_SORT_SELECTION_SETTINGS,
     create: options => new SortSelectionTransitionMode(options),

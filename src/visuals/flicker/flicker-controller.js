@@ -69,6 +69,20 @@ export class FlickerController {
     return this.modeRegistry.list();
   }
 
+  inspect() {
+    return {
+      enabled: this.enabled,
+      mode: this.modeName,
+      scope: this.scope,
+      amount: this.amount,
+      cellStaggerSeconds: this.cellStaggerSeconds,
+      distribution: this.distribution,
+      autoCycleSeconds: this.autoCycleSeconds,
+      modeSettings: { ...this.settings.modes[this.modeName] },
+      envelope: { ...this.envelope },
+    };
+  }
+
   /**
    * Swap the active field. Settings for every registered mode were resolved up
    * front, so this cannot fail on authored values mid-composition.

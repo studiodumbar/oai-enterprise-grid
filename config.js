@@ -11,6 +11,7 @@ import { CONTEXT_WINDOW_CONFIG } from "./config/compositions/context-window.js";
 import { TOOL_LOOP_CONFIG } from "./config/compositions/tool-loop.js";
 import { VORONOI_CONFIG } from "./config/compositions/voronoi.js";
 import { L_TREE_CONFIG } from "./config/compositions/l-tree.js";
+import { MOLD_CONFIG } from "./config/compositions/mold.js";
 import { GAME_OF_LIFE_CONFIG } from "./config/compositions/game-of-life.js";
 import { BASE_CONFIG } from "./config/compositions/base.js";
 import { NOISE_GRID_CONFIG } from "./config/compositions/noise-grid.js";
@@ -35,6 +36,7 @@ export { CONTEXT_WINDOW_CONFIG } from "./config/compositions/context-window.js";
 export { TOOL_LOOP_CONFIG } from "./config/compositions/tool-loop.js";
 export { VORONOI_CONFIG } from "./config/compositions/voronoi.js";
 export { L_TREE_CONFIG } from "./config/compositions/l-tree.js";
+export { MOLD_CONFIG } from "./config/compositions/mold.js";
 export { GAME_OF_LIFE_CONFIG } from "./config/compositions/game-of-life.js";
 export { BASE_CONFIG } from "./config/compositions/base.js";
 export { NOISE_GRID_CONFIG } from "./config/compositions/noise-grid.js";
@@ -47,6 +49,7 @@ export const COMPOSITION_BUNDLES = Object.freeze({
   "tool-loop": TOOL_LOOP_CONFIG,
   voronoi: VORONOI_CONFIG,
   "l-tree": L_TREE_CONFIG,
+  mold: MOLD_CONFIG,
   "game-of-life": GAME_OF_LIFE_CONFIG,
   "interactive-grid": INTERACTIVE_GRID_CONFIG,
   "flock-grid": FLOCK_GRID_CONFIG,
@@ -226,6 +229,19 @@ function withResolvedCompositionTiming(settingsGroups, timingByKey) {
           },
         ).seconds,
       };
+    const simulation = group.simulation?.pulseEverySeconds === undefined
+      ? group.simulation
+      : {
+        ...group.simulation,
+        pulseEverySeconds: resolveTimelineDuration(
+          group.simulation.pulseEverySeconds,
+          {
+            automaticSeconds: timing.beatSeconds,
+            label: `SETTINGS.${name}.simulation.pulseEverySeconds`,
+            source: "composition-beat",
+          },
+        ).seconds,
+      };
     resolved[name] = {
       ...group,
       timing,
@@ -238,6 +254,7 @@ function withResolvedCompositionTiming(settingsGroups, timingByKey) {
         modes: endpoints.modes,
       },
       ...(colorTransition === undefined ? {} : { colorTransition }),
+      ...(simulation === undefined ? {} : { simulation }),
     };
   }
   return resolved;

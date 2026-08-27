@@ -17,6 +17,12 @@ import {
   resolveTimelineSettings,
 } from "../timeline/timeline-settings.js";
 import { createSceneTransitionModeRegistry } from "../scene-transitions/index.js";
+import { debug } from "../debug/index.js";
+import {
+  FLICKER_DOTS_PER_CELL_AXIS,
+  createFlicker,
+  flickerPaletteIndicesAtCoordinates,
+} from "../visuals/flicker/index.js";
 
 export const EMPTY_CELL_STATE = -1;
 export const INTERACTIVE_GRID_SESSION_STORAGE_KEY =
@@ -131,6 +137,10 @@ function centeredCellKey(column, row) {
   return `${column}:${row}`;
 }
 
+function isOptionalBoolean(value) {
+  return value === undefined || typeof value === "boolean";
+}
+
 function normalizedTransitionPlan(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   if (!INTERACTIVE_CELL_COLOR_TRANSITIONS.includes(value.pattern)) return null;
@@ -194,6 +204,7 @@ function parseSessionCellStates(serialized, longSideCells) {
 
   const halfLongSide = Math.floor(longSideCells * 0.5);
   const states = new Map();
+  const flickeringCells = new Set();
   for (const cell of snapshot.cells) {
     if (
       !cell
@@ -203,6 +214,7 @@ function parseSessionCellStates(serialized, longSideCells) {
       || !Number.isInteger(cell.row)
       || Math.abs(cell.column) > halfLongSide
       || Math.abs(cell.row) > halfLongSide
+      || !isOptionalBoolean(cell.flicker)
       || (
         cell.state !== EMPTY_CELL_STATE
         && !INTERACTIVE_SIZE_LEVELS.includes(cell.state)
@@ -211,8 +223,9 @@ function parseSessionCellStates(serialized, longSideCells) {
     const key = centeredCellKey(cell.column, cell.row);
     if (states.has(key)) return null;
     states.set(key, cell.state);
+    if (cell.flicker === true) flickeringCells.add(key);
   }
-  return states;
+  return { states, flickeringCells };
 }
 
 function coordinateKey(value) {
@@ -886,6 +899,15 @@ export class InteractiveGridGenerator {
       this.colorTransition.durationSeconds,
       this.paletteColors.length,
     );
+    this.noiseFunction = typeof runtime?.p5?.noise === "function"
+      ? runtime.p5.noise.bind(runtime.p5)
+      : undefined;
+    this.flicker = createFlicker({
+      palette,
+      settings: this.options.flicker,
+      noiseFunction: this.noiseFunction,
+      autoCycleSeconds: this.options.timing?.beatSeconds ?? null,
+    });
     this.backgroundColor = settings?.canvas?.background ?? "#fff";
     this.compositionEndpoints = resolveCompositionEndpointSettings(
       settings?.composition ?? {},
@@ -913,6 +935,7 @@ export class InteractiveGridGenerator {
     this.focusedCell = -1;
     this.sessionStorage = sessionStorageFromRuntime(runtime);
     this.sessionCellStates = new Map();
+    this.flickeringCellKeys = new Set();
     this.resize(runtime.viewport());
   }
 
@@ -960,7 +983,65 @@ export class InteractiveGridGenerator {
         || this.cycleCell(this.focusedCell),
       );
     }
+    if (payload.key?.toLowerCase() === "f" && !payload.repeat) {
+      return this.toggleHoveredCellFlicker();
+    }
     return false;
+  }
+
+  centeredKeyForCell(index) {
+    if (
+      !this.layout
+      || !Number.isInteger(index)
+      || index < 0
+      || index >= this.baseStates.length
+    ) return null;
+    const row = Math.floor(index / this.layout.columns);
+    const column = index % this.layout.columns;
+    return centeredCellKey(
+      column - Math.floor(this.layout.columns * 0.5),
+      row - Math.floor(this.layout.rows * 0.5),
+    );
+  }
+
+  isCellFlickering(index) {
+    const key = this.centeredKeyForCell(index);
+    return key !== null && this.flickeringCellKeys?.has(key) === true;
+  }
+
+  toggleHoveredCellFlicker() {
+    const index = this.hoveredCell;
+    const key = this.centeredKeyForCell(index);
+    if (key === null) return false;
+    if (!(this.flickeringCellKeys instanceof Set)) this.flickeringCellKeys = new Set();
+    const enabled = !this.flickeringCellKeys.has(key);
+    if (enabled) this.flickeringCellKeys.add(key);
+    else this.flickeringCellKeys.delete(key);
+    this.focusedCell = index;
+    this.rememberSessionCellState(index);
+    this.persistSessionCellStates();
+    this.announceCellFlicker(index, enabled);
+    const row = Math.floor(index / this.layout.columns);
+    const column = index % this.layout.columns;
+    debug.transition(
+      "interactive-cell-flicker index=%d enabled=%s row=%d column=%d",
+      index,
+      enabled,
+      row,
+      column,
+    );
+    return { index, enabled };
+  }
+
+  announceCellFlicker(index, enabled) {
+    const documentRef = this.runtime?.document?.()
+      ?? (typeof document !== "undefined" ? document : null);
+    const announcer = this.runtime?.announcer?.()
+      ?? documentRef?.getElementById?.("grid-announcer");
+    if (!announcer) return;
+    const row = Math.floor(index / this.layout.columns);
+    const column = index % this.layout.columns;
+    announcer.textContent = `Row ${row + 1}, column ${column + 1}: flicker ${enabled ? "on" : "off"}.`;
   }
 
   activateAt(x, y) {
@@ -1181,6 +1262,8 @@ export class InteractiveGridGenerator {
     if (!this.layout) return;
     if (!(this.sessionCellStates instanceof Map)) this.sessionCellStates = new Map();
     this.sessionCellStates.clear();
+    if (!(this.flickeringCellKeys instanceof Set)) this.flickeringCellKeys = new Set();
+    this.flickeringCellKeys.clear();
     const sequence = [...INTERACTIVE_SIZE_LEVELS, EMPTY_CELL_STATE];
     for (let row = 0; row < this.layout.rows; row += 1) {
       for (let column = 0; column < this.layout.columns; column += 1) {
@@ -1198,6 +1281,8 @@ export class InteractiveGridGenerator {
   clear() {
     if (!(this.sessionCellStates instanceof Map)) this.sessionCellStates = new Map();
     this.sessionCellStates.clear();
+    if (!(this.flickeringCellKeys instanceof Set)) this.flickeringCellKeys = new Set();
+    this.flickeringCellKeys.clear();
     this.baseStates.fill(EMPTY_CELL_STATE);
     for (const tree of this.subdivisionTrees) tree.clear();
     this.leafCaches = Array.from({ length: this.baseStates.length }, () => null);
@@ -1267,11 +1352,11 @@ export class InteractiveGridGenerator {
       return false;
     }
     if (serialized === null) return false;
-    const states = parseSessionCellStates(
+    const restored = parseSessionCellStates(
       serialized,
       Math.max(this.layout.columns, this.layout.rows),
     );
-    if (!states) {
+    if (!restored) {
       try {
         this.sessionStorage.removeItem?.(INTERACTIVE_GRID_SESSION_STORAGE_KEY);
       } catch {
@@ -1279,7 +1364,8 @@ export class InteractiveGridGenerator {
       }
       return false;
     }
-    this.sessionCellStates = states;
+    this.sessionCellStates = restored.states;
+    this.flickeringCellKeys = restored.flickeringCells;
     this.projectSessionCellStates();
     return true;
   }
@@ -1297,6 +1383,7 @@ export class InteractiveGridGenerator {
           column,
           row,
           state: this.sessionCellStates.get(key),
+          ...(this.flickeringCellKeys?.has(key) ? { flicker: true } : {}),
         });
       }
     }
@@ -1326,6 +1413,14 @@ export class InteractiveGridGenerator {
         frame.pointer.y,
       )
       : null;
+    const time = Number.isFinite(frame.time) ? frame.time : 0;
+    const duration = this.animationDuration();
+    const cyclePosition = duration > 0 ? time / duration : 0;
+    this.flicker?.beginFrame({
+      time,
+      progress: cyclePosition - Math.floor(cyclePosition),
+      cycleIndex: Math.floor(cyclePosition),
+    });
   }
 
   ensureColorTransitionPlans(step) {
@@ -1365,6 +1460,62 @@ export class InteractiveGridGenerator {
       callIndex += 1;
       return hashUnit(base ^ Math.imul(callIndex, 0xc2b2ae35));
     };
+  }
+
+  flickerGrid() {
+    if (this.flicker.scope === "cell") {
+      return {
+        columns: 1,
+        rows: 1,
+        cellSize: this.layout.cellSize,
+        dotsPerCellAxis: FLICKER_DOTS_PER_CELL_AXIS,
+      };
+    }
+    return {
+      columns: this.layout.columns,
+      rows: this.layout.rows,
+      cellSize: this.layout.cellSize,
+      dotsPerCellAxis: FLICKER_DOTS_PER_CELL_AXIS,
+    };
+  }
+
+  flickerTimeFor(index, time) {
+    if (this.flicker.scope !== "cell" || this.flicker.cellStaggerSeconds === 0) {
+      return time;
+    }
+    const row = Math.floor(index / this.layout.columns);
+    const column = index % this.layout.columns;
+    const centeredRow = row - Math.floor(this.layout.rows * 0.5);
+    const centeredColumn = column - Math.floor(this.layout.columns * 0.5);
+    const seed = Math.imul(centeredColumn + 257, 0x9e3779b1)
+      ^ Math.imul(centeredRow + 257, 0x85ebca6b);
+    return time + hashUnit(seed) * this.flicker.cellStaggerSeconds;
+  }
+
+  flickerPaletteIndicesForLeaves(index, level, leaves, time) {
+    const parentColumn = index % this.layout.columns;
+    const parentRow = Math.floor(index / this.layout.columns);
+    const originX = this.flicker.scope === "cell"
+      ? 0
+      : parentColumn * FLICKER_DOTS_PER_CELL_AXIS;
+    const originY = this.flicker.scope === "cell"
+      ? 0
+      : parentRow * FLICKER_DOTS_PER_CELL_AXIS;
+    const baseIndex = sharpPaletteIndexAt(
+      time,
+      this.options.colorCycleSeconds,
+      this.paletteColors.length,
+      level,
+    );
+    return flickerPaletteIndicesAtCoordinates({
+      flicker: this.flicker,
+      coordinates: leaves.map(leaf => ({
+        x: originX + (leaf.x + 0.5) * FLICKER_DOTS_PER_CELL_AXIS,
+        y: originY + (leaf.y + 0.5) * FLICKER_DOTS_PER_CELL_AXIS,
+      })),
+      time: this.flickerTimeFor(index, time),
+      basePosition: baseIndex / Math.max(1, this.paletteColors.length - 1),
+    });
   }
 
   leavesForCell(index, level) {
@@ -1507,6 +1658,33 @@ export class InteractiveGridGenerator {
     const noiseSeed = this.colorTransition.noise
       ? transitionNoiseSeed(this.colorTransitionStep, index)
       : undefined;
+
+    if (this.flicker?.enabled && this.isCellFlickering(index)) {
+      const paletteIndices = this.flickerPaletteIndicesForLeaves(
+        index,
+        level,
+        sequence.leaves,
+        time,
+      );
+      sequence.leaves.forEach((leaf, leafIndex) => {
+        const x = leaf.x * cellSize;
+        const y = leaf.y * cellSize;
+        this.drawWithEndpointPresentation(
+          context,
+          x,
+          y,
+          this.endpointPresentationFor(index, leaf),
+          () => this.drawSolidColorGlyph(
+            context,
+            x,
+            y,
+            leaf.halfSize * cellSize * marginScale,
+            paletteIndices[leafIndex],
+          ),
+        );
+      });
+      return;
+    }
 
     if (transition.pattern === "waterfall" && transitionState.transitioning) {
       this.drawConnectFourColorTrace(
@@ -1885,6 +2063,7 @@ export class InteractiveGridGenerator {
     this.focusedCell = -1;
     this.hoveredCell = -1;
     this.hoveredSubdivisionLeaf = null;
+    this.flicker.resize(this.flickerGrid());
     if (!previousLayout) {
       if (!this.restoreSessionCellStates()) this.seedPattern();
     } else {
@@ -1917,6 +2096,7 @@ export class InteractiveGridGenerator {
         column: Number(match[1]),
         row: Number(match[2]),
         state,
+        ...(this.flickeringCellKeys?.has(key) ? { flicker: true } : {}),
       });
     }
     const cells = [];
@@ -1931,6 +2111,7 @@ export class InteractiveGridGenerator {
           transitionPlan: this.colorTransitionPlans[index]
             ? { ...this.colorTransitionPlans[index] }
             : null,
+          ...(this.isCellFlickering(index) ? { flicker: true } : {}),
         });
       }
     }
@@ -1960,15 +2141,18 @@ export class InteractiveGridGenerator {
       )
     ) return false;
     const nextSessionStates = new Map();
+    const nextFlickeringCellKeys = new Set();
     for (const cell of snapshot.sessionCells ?? snapshot.cells) {
       if (
         !Number.isSafeInteger(cell?.column)
         || !Number.isSafeInteger(cell?.row)
+        || !isOptionalBoolean(cell.flicker)
         || (cell.state !== EMPTY_CELL_STATE && !INTERACTIVE_SIZE_LEVELS.includes(cell.state))
       ) return false;
       const key = centeredCellKey(cell.column, cell.row);
       if (nextSessionStates.has(key)) return false;
       nextSessionStates.set(key, cell.state);
+      if (cell.flicker === true) nextFlickeringCellKeys.add(key);
     }
     const byCoordinate = new Map();
     for (const cell of snapshot.cells) {
@@ -1976,6 +2160,7 @@ export class InteractiveGridGenerator {
         !Number.isSafeInteger(cell?.column)
         || !Number.isSafeInteger(cell?.row)
         || !Number.isInteger(cell?.state)
+        || !isOptionalBoolean(cell.flicker)
         || (cell.state !== EMPTY_CELL_STATE && !INTERACTIVE_SIZE_LEVELS.includes(cell.state))
       ) return false;
       const key = centeredCellKey(cell.column, cell.row);
@@ -1995,6 +2180,7 @@ export class InteractiveGridGenerator {
       });
     }
     this.sessionCellStates = nextSessionStates;
+    this.flickeringCellKeys = nextFlickeringCellKeys;
     this.baseStates.fill(EMPTY_CELL_STATE);
     for (const tree of this.subdivisionTrees) tree.clear();
     this.colorTransitionPlans.fill(null);
@@ -2040,6 +2226,11 @@ export class InteractiveGridGenerator {
       hoveredCell: this.hoveredCell,
       hoveredSubdivisionLeaf: this.hoveredSubdivisionLeaf,
       focusedCell: this.focusedCell,
+      flicker: this.flicker.inspect(),
+      flickeringCells: Array.from(
+        { length: this.baseStates.length },
+        (_, index) => this.isCellFlickering(index),
+      ),
       subdivisionSplitCounts: this.subdivisionTrees.map(tree => tree.size),
       compositionEndpoint: this.endCompositionEndpoint?.inspect?.() ?? null,
     };
@@ -2052,6 +2243,7 @@ export class InteractiveGridGenerator {
     this.subdivisionTrees = [];
     this.leafCaches = [];
     this.colorTransitionPlans = [];
+    this.flickeringCellKeys.clear();
   }
 }
 

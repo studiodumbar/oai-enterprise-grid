@@ -52,7 +52,16 @@ export class CircleGrid {
   }
 
   buildPaletteLookup() {
+    if (
+      this.options.paletteMode !== undefined
+      && !["interpolate", "step"].includes(this.options.paletteMode)
+    ) {
+      throw new Error(
+        `Unknown palette mode "${this.options.paletteMode}". Available modes: interpolate, step.`,
+      );
+    }
     const palette = paletteByName(this.palettes, this.options.palette);
+    this.paletteColors = [...palette];
     const channels = palette.map(hex => {
       const value = Number.parseInt(hex.slice(1), 16);
       return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
@@ -114,7 +123,7 @@ export class CircleGrid {
     this.meanEnergy = 0;
   }
 
-  update(fieldSources, dt, frame) {
+  update(fieldSources, dt, frame, { immediate = false } = {}) {
     this.field.reset();
     for (const source of fieldSources) source.write(this.field, frame);
 
@@ -128,7 +137,7 @@ export class CircleGrid {
         const response = wanted > before
           ? this.options.riseSeconds
           : this.options.fallSeconds;
-        const blend = response <= 0 ? 1 : 1 - Math.exp(-dt / response);
+        const blend = immediate || response <= 0 ? 1 : 1 - Math.exp(-dt / response);
         const energy = before + (wanted - before) * blend;
 
         this.previousEnergy[index] = before;
@@ -146,14 +155,21 @@ export class CircleGrid {
     this.meanEnergy = this.energy.length > 0 ? total / this.energy.length : 0;
   }
 
-  draw(context, isGlyphHidden, { guides = true, glyphPresentation } = {}) {
+  draw(
+    context,
+    isGlyphHidden,
+    { guides = true, glyphPresentation, cellColor, glyphColor } = {},
+  ) {
     const { columns, rows, cellSize, offsetX, offsetY } = this.layout;
     const marginScale = 1 - Math.max(0, Math.min(0.95, this.options.dotMargin));
     const shouldCheckVisibility = typeof isGlyphHidden === "function";
+    const hasCellColors = typeof cellColor === "function";
+    const hasGlyphColors = typeof glyphColor === "function";
 
     for (let row = 0; row < rows; row += 1) {
       for (let column = 0; column < columns; column += 1) {
         const index = row * columns + column;
+        if (!this.cellVisible(index)) continue;
         const subdivisions = 1 << this.cellState.level[index];
         const slot = cellSize / subdivisions;
         const halfSize = slot * 0.5 * marginScale;
@@ -177,9 +193,20 @@ export class CircleGrid {
         const rotationSine = Math.sin(parentRotation);
 
         context.save();
-        context.fillStyle = this.paletteColor(
+        const paletteColor = this.paletteColor(
           paletteValue >= 0 ? paletteValue : this.energy[index],
         );
+        const defaultColor = hasCellColors
+          ? (cellColor({
+            index,
+            row,
+            column,
+            x: parentCenterX,
+            y: parentCenterY,
+            size: cellSize,
+          }, paletteColor) ?? paletteColor)
+          : paletteColor;
+        context.fillStyle = defaultColor;
         context.globalAlpha *= clamp01(this.cellState.opacity[index]);
         context.translate(parentCenterX, parentCenterY);
         context.rotate(parentRotation);
@@ -195,6 +222,14 @@ export class CircleGrid {
             const glyphX = (subColumn + 0.5) * slot - cellSize * 0.5;
             const glyphY = (subRow + 0.5) * slot - cellSize * 0.5;
             const glyphIndex = subRow * subdivisions + subColumn;
+            const item = {
+              id: `${index}:${glyphIndex}`,
+              index,
+              glyphIndex,
+              x: offsetX + (column + 0.5) * cellSize + glyphX,
+              y: offsetY + (row + 0.5) * cellSize + glyphY,
+              size: slot,
+            };
             if (shouldCheckVisibility) {
               const localX = (glyphX + glyphTransform.offsetX) * parentScaleX;
               const localY = (glyphY + glyphTransform.offsetY) * parentScaleY;
@@ -220,20 +255,17 @@ export class CircleGrid {
               if (isGlyphHidden(worldX, worldY, worldRadius)) continue;
             }
             if (typeof glyphPresentation === "function") {
-              const resolvedPresentations = glyphPresentation({
-                id: `${index}:${glyphIndex}`,
-                index,
-                glyphIndex,
-                x: offsetX + (column + 0.5) * cellSize + glyphX,
-                y: offsetY + (row + 0.5) * cellSize + glyphY,
-                size: slot,
-              });
+              const resolvedPresentations = glyphPresentation(item);
               const presentations = Array.isArray(resolvedPresentations)
                 ? resolvedPresentations
                 : [resolvedPresentations];
+              const color = hasGlyphColors
+                ? (glyphColor(item, defaultColor) ?? defaultColor)
+                : defaultColor;
               for (const presentation of presentations) {
                 if (presentation.opacity <= 0 || presentation.scale <= 0) continue;
                 context.save();
+                context.fillStyle = color;
                 context.globalAlpha *= presentation.opacity;
                 context.translate(presentation.offsetX, presentation.offsetY);
                 if (presentation.scale !== 1) {
@@ -256,6 +288,21 @@ export class CircleGrid {
               context.beginPath();
               continue;
             }
+            if (hasGlyphColors) {
+              context.beginPath();
+              context.fillStyle = glyphColor(item, defaultColor) ?? defaultColor;
+              this.shapeRenderer.addPath(
+                context,
+                glyphX,
+                glyphY,
+                halfSize,
+                this.cellState.roundness[index],
+                glyphTransform,
+              );
+              context.fill();
+              context.beginPath();
+              continue;
+            }
             this.shapeRenderer.addPath(
               context,
               glyphX,
@@ -266,7 +313,7 @@ export class CircleGrid {
             );
           }
         }
-        context.fill();
+        if (!hasGlyphColors) context.fill();
         context.restore();
       }
     }
@@ -275,8 +322,22 @@ export class CircleGrid {
   }
 
   paletteColor(value) {
+    if (this.options.paletteMode === "step") {
+      const index = Math.min(
+        this.paletteColors.length - 1,
+        Math.floor(clamp01(value) * this.paletteColors.length),
+      );
+      return this.paletteColors[index];
+    }
     const index = Math.round(clamp01(value) * 255);
     return this.paletteLookup[index];
+  }
+
+  cellVisible(index) {
+    const threshold = Number.isFinite(this.options.emptyBelow)
+      ? Math.max(0, this.options.emptyBelow)
+      : 0;
+    return threshold <= 0 || this.energy[index] >= threshold;
   }
 
   transitionItems() {
@@ -285,6 +346,7 @@ export class CircleGrid {
     for (let row = 0; row < rows; row += 1) {
       for (let column = 0; column < columns; column += 1) {
         const index = row * columns + column;
+        if (!this.cellVisible(index)) continue;
         const subdivisions = 1 << this.cellState.level[index];
         const slot = cellSize / subdivisions;
         for (let subRow = 0; subRow < subdivisions; subRow += 1) {

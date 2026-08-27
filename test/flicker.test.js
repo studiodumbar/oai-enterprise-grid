@@ -724,6 +724,80 @@ test("every ported mode holds 0..1, follows a resize, and stays deterministic", 
   }
 });
 
+const MODE_SETTING_VARIANTS = Object.freeze({
+  noise: Object.freeze({ speed: 0.91, spatialScale: 0.91 }),
+  "echo-ring": Object.freeze({
+    cycleSeconds: 0.73,
+    ringDelayFraction: 0.31,
+    echoDelayFraction: 0.19,
+    ringCount: 3,
+  }),
+  "strobe-stack": Object.freeze({
+    cycleSeconds: 0.73,
+    columns: 3,
+    rows: 4,
+    baseIntensity: 0.22,
+  }),
+  "block-drop": Object.freeze({ cycleSeconds: 0.73, baseIntensity: 0.22 }),
+  "prism-bloom": Object.freeze({
+    cycleSeconds: 0.73,
+    blendSeconds: 0,
+    baseIntensity: 0.22,
+  }),
+  "crt-glide": Object.freeze({
+    cycleSeconds: 0.83,
+    rows: 7,
+    decay: 0.31,
+    columnWarp: 0.25,
+    baseIntensity: 0.22,
+    peakIntensity: 0.81,
+  }),
+  "radar-arc": Object.freeze({
+    cycleSeconds: 0.83,
+    gridSteps: 7,
+    beamWidth: 0.3,
+    wakeWidth: 0.8,
+    ringInnerRadius: 1.1,
+    ringOuterRadius: 2.8,
+    baseIntensity: 0.22,
+  }),
+});
+
+function modeSampleSignature(mode, authored = {}) {
+  const grid = { columns: 9, rows: 7, cellSize: 10, dotsPerCellAxis: 1 };
+  const field = mode.createField({ settings: mode.normalize(authored), grid });
+  const samples = [];
+  for (let timeIndex = 0; timeIndex <= 60; timeIndex += 1) {
+    const time = timeIndex * 0.037;
+    for (let y = 0.5; y < grid.rows; y += 0.5) {
+      for (let x = 0.5; x < grid.columns; x += 0.5) {
+        samples.push(field.sampleAt(x, y, time));
+      }
+    }
+  }
+  return samples;
+}
+
+test("every authored mode setting changes the shared flicker field", () => {
+  assert.deepEqual(Object.keys(MODE_SETTING_VARIANTS), flickerModes.list());
+  for (const [modeName, variants] of Object.entries(MODE_SETTING_VARIANTS)) {
+    const mode = flickerModes.get(modeName);
+    const baseline = modeSampleSignature(mode);
+    assert.deepEqual(
+      Object.keys(variants).sort(),
+      Object.keys(mode.normalize({})).sort(),
+      `${modeName} needs one sensitivity fixture per setting`,
+    );
+    for (const [setting, value] of Object.entries(variants)) {
+      assert.notDeepEqual(
+        modeSampleSignature(mode, { [setting]: value }),
+        baseline,
+        `${modeName}.${setting} is accepted but does not affect output`,
+      );
+    }
+  }
+});
+
 test("the shipped catalog registers every mode and each composition selects one", () => {
   assert.deepEqual(flickerModes.list(), [
     "noise",
@@ -741,9 +815,12 @@ test("the shipped catalog registers every mode and each composition selects one"
   assert.deepEqual(flickering.map(([name]) => name).sort(), [
     "base",
     "contextWindow",
+    "flock",
     "gameOfLife",
     "inferenceLoop",
+    "interactiveGrid",
     "lTree",
+    "mold",
     "toolLoop",
     "voronoi",
   ]);
@@ -752,7 +829,8 @@ test("the shipped catalog registers every mode and each composition selects one"
     const flicker = createFlicker({
       palette: GREEN,
       settings: group.flicker,
-      autoCycleSeconds: group.timing.beatSeconds,
+      autoCycleSeconds: group.timing?.beatSeconds
+        ?? group.simulation?.pulseEverySeconds,
       grid: { columns: 8, rows: 6, cellSize: 100, dotsPerCellAxis: 8 },
     });
     assert.equal(flicker.enabled, true, `${name} should flicker.`);
@@ -765,6 +843,11 @@ test("the shipped catalog registers every mode and each composition selects one"
       `${name} selects unknown scope "${flicker.scope}".`,
     );
     assert.ok(flicker.amount > 0, `${name} should agitate its dots.`);
+    assert.deepEqual(
+      flicker.inspect().modeSettings,
+      flicker.settings.modes[flicker.modeName],
+      `${name} must pass its selected mode settings into the active field`,
+    );
     const sample = flicker.sampleAt(1, 2, 0.5);
     assert.ok(sample >= 0 && sample <= 1, `${name} sampled ${sample}.`);
   }

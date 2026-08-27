@@ -6,12 +6,12 @@ per-cell transitions can evolve independently.
 
 ## Discrete circle-grid compositions
 
-The project contains six distinct operational schematics. The inference scenes
+The project contains seven distinct operational schematics. The inference scenes
 do not claim to show private chain-of-thought, exact internal telemetry, or
 literal model layer, head, or token counts. Voronoi, L-tree, and Game of Life
 are separate procedural systems rather than inference representations.
 
-All six share the same strict circle-face renderer and blank-hinge grammar. A
+All seven share the same strict circle-face renderer and blank-hinge grammar. A
 parent cell can show nothing, 1, 4, 16, or 64 circles. Count, color, and
 whitespace change as a single face:
 the old face switches off, the cell passes through a blank hinge, and the new
@@ -85,6 +85,16 @@ route, which then resolves to a single terminal circle. The tree represents
 hypothetical expansion and selection; it is not hidden chain-of-thought or a
 literal tree built internally by ChatGPT.
 
+### Mold Growth — `mold`
+
+Project-seeded food points begin as one smallest-level glyph inside their parent
+cells. Multiple scouts leave the centre in random cardinal directions; failed
+trails use the same one-smallest-glyph-per-cell grammar, linger briefly, and
+disappear. A scout that finds food preserves the route it actually explored.
+Each dot on that route grows through subdivision levels 3 → 2 → 1 → 0 as
+swelling propagates backward, with a permanent strength falloff toward the
+centre. The discovered food points seed the shared Dijkstra outro.
+
 ### Conway Life — `game-of-life`
 
 This direction uses editable Conway-style neighbor rules. `birthNeighbors` and
@@ -155,7 +165,7 @@ Edit `GLOBAL_CONFIG.composition.active` in `config/global.js`:
 ```js
 composition: {
   active: "voronoi", // or one of the compositions below
-  // Legacy native fallbacks; flock still reads this path.
+  // Legacy native fallbacks for compositions without structured overrides.
   startWithCircle: true,
   startWithCircleDurationSeconds: 2,
   endWithCircle: true,
@@ -174,7 +184,7 @@ composition: {
 },
 ```
 
-The global end endpoint is `dijkstra` for every finite non-flock composition.
+The global end endpoint is `dijkstra` for every finite composition.
 Every visible parent cell in the final scene starts a concurrent route toward
 the centre. When routes merge, each shared parent cell is rendered once and
 cleaned once rather than stacking duplicate circles or cleanup work. A
@@ -182,9 +192,9 @@ composition may still override the shared path, blink, cleanup, and hold
 settings beside its other options. The resolver in `src/composition-endpoints/`
 layers those values without mutating either config.
 
-`endWithCircle` is not dead code: it remains the native enablement fallback and
-still controls flock. The structured `circleEndpoints.end.enabled` value is the
-authoritative switch for migrated finite compositions.
+`endWithCircle` is not dead code: it remains the native enablement fallback.
+The structured `circleEndpoints.end.enabled` value is the authoritative switch
+for finite compositions.
 
 The route plan freezes when an endpoint first prepares and stays fixed through
 the outro. Most compositions prepare it on their first outro frame. Voronoi has
@@ -195,8 +205,8 @@ blink, cleanup, and centre hold.
 
 A custom endpoint owns its outro phase exclusively. While Dijkstra runs, the
 text phase overlay receives no outro frame and the matching generator-owned
-outro is suppressed, so neither can overlap the route. Flock remains the native
-endpoint exemption and does not use the global Dijkstra selection.
+outro is suppressed, so neither can overlap the route. Flock hands its final
+visible parent cells to this same Dijkstra path at the start of its outro.
 
 `trailLength` is normalized over `0..1` and controls overlap in the subdivision
 cleanup. `0` changes one path cell at a time, with no changing-cell trail; `1`
@@ -209,16 +219,15 @@ Endpoint durations wrap the unchanged intermediate timeline. A positive number
 is an explicit duration in seconds. `"auto"` takes the already-resolved duration
 of the matching phase: the start endpoint takes `intro.durationSeconds`, and the
 end endpoint takes `outro.durationSeconds`. Endpoint timing never consults a
-live generator or flicker mode for a non-flock composition. The legacy flat
+live generator or flicker mode for any shipped composition. The legacy flat
 `startWithCircleDurationSeconds` and `endWithCircleDurationSeconds` fallbacks use
 the same matching anchors. Native `circleSubdivision` values `1`, `2`, `4`, `8`,
-and `16` produce 1, 4, 16, 64, and 256 child cells. Continuous flock simulations
-stay on their native endpoint path and have no finite final frame for a Dijkstra
-end state.
+and `16` produce 1, 4, 16, 64, and 256 child cells. Flock's finite composition
+body freezes the final visible parent-cell set for its Dijkstra end state.
 
 ### Timing and `"auto"` durations
 
-Every canonical non-flock composition recipe owns one explicit timing root:
+Every canonical composition recipe owns one explicit timing root:
 
 ```js
 compositionDefinitions: {
@@ -275,8 +284,8 @@ child durations are not recalculated when a sequence step or active generator
 changes. The resolved phase and endpoint durations stay fixed, but the director
 still asks the active generator for the core `animationDuration()`; that legacy
 value can include generator-owned intro/outro events and still determines total
-export duration. Consolidating that second clock remains Stage 3 work in
-`REFACTOR_PLAN.md`. Other nested mode timings such as `flipSeconds`,
+export duration. With one untimed sequence step per composition that value is
+constant, so the two agree today; AGENTS.md §8 records when they would not. Other nested mode timings such as `flipSeconds`,
 `staggerSeconds`, and `blendSeconds` remain explicit numbers unless that exact
 field is documented as supporting automatic duration syntax. A public alias
 recipe inherits the timing of its canonical recipe instead of declaring a
@@ -291,6 +300,7 @@ http://localhost:8000/?composition=context-window
 http://localhost:8000/?composition=tool-loop
 http://localhost:8000/?composition=voronoi
 http://localhost:8000/?composition=l-tree
+http://localhost:8000/?composition=mold
 http://localhost:8000/?composition=game-of-life
 http://localhost:8000/?composition=base
 ```
@@ -479,10 +489,10 @@ p5js/
     └── interactive-grid.test.js
 ```
 
-`timeline-settings.js` is the settings half of the timeline refactor. It
-resolves recipe roots and config-level automatic durations at startup, but the
-Stage 3 consolidation of the existing phase and generator clocks has not landed
-yet.
+`timeline-settings.js` is the settings half of the timeline work. It resolves
+recipe roots and config-level automatic durations at startup, but the phase
+clock and the generator clock have not been consolidated yet — AGENTS.md §8
+lists that overlap.
 
 ### The five configuration layers
 
@@ -509,6 +519,7 @@ The discrete public compositions map through those layers as follows:
 | `tool-loop` | `toolLoopGrid` | `inference-grid` | `toolLoop` | `tool-loop` |
 | `voronoi` | `voronoiGrid` | `procedural-topology` | `voronoi` | `voronoi` |
 | `l-tree` | `lTreeGrid` | `procedural-topology` | `lTree` | `l-tree` |
+| `mold` | `moldGrid` | `procedural-topology` | `mold` | `mold` |
 | `game-of-life` | `gameOfLifeAutomaton` | `cellular-automata` | `gameOfLife` | `life-like` |
 
 `interactive-grid` and the three flock recipes keep their existing dedicated
@@ -539,7 +550,7 @@ compatibility exports; new code should use `COMPOSITION_BUNDLES` and
 
 - `inference-grid` owns the inference-specific `inference-loop`,
   `context-window`, and `tool-loop` strategies.
-- `procedural-topology` owns the deterministic `voronoi` and `l-tree`
+- `procedural-topology` owns the deterministic `voronoi`, `l-tree`, and `mold`
   strategies. They share a discrete grid-scene lifecycle and renderer while
   retaining separate algorithms and settings files.
 - `cellular-automata` owns `life-like` and is the extension point for future
