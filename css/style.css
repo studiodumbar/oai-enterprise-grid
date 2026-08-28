@@ -6,6 +6,16 @@
     font-display: swap;
 }
 
+:root {
+    --flight-void: #050806;
+    --flight-carbon: #101713;
+    --flight-moss: #26382e;
+    --flight-signal: #8cdfad;
+    --flight-chalk: #edf5f0;
+    --flight-muted: #9aaba1;
+    --flight-mono: "SFMono-Regular", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+}
+
 @font-face {
     font-family: "OpenAI Sans";
     src: url("../assets/OpenAI Sans/OpenAI Sans Complete TTF/OpenAISans-Semibold.ttf") format("truetype");
@@ -49,8 +59,8 @@ body.restoring-project #export-ui {
 
 body {
     overflow: hidden;
-    background: #f7f8fa;
-    color: #061426;
+    background: var(--flight-void);
+    color: var(--flight-chalk);
     font-family: "OpenAI Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 
@@ -64,10 +74,220 @@ body {
 
 canvas {
     display: block;
+    touch-action: none;
 }
 
 canvas.fixed-spec-canvas {
     flex: none;
+}
+
+.panel-workspace {
+    position: fixed;
+    z-index: 30;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.panel-window {
+    position: fixed;
+    box-sizing: border-box;
+    max-width: calc(100vw - 24px);
+    overflow: hidden;
+    border: 1px solid var(--flight-moss);
+    border-radius: 5px;
+    background: rgba(16, 23, 19, 0.96);
+    background: color-mix(in srgb, var(--flight-carbon) 96%, transparent);
+    box-shadow:
+        0 1px 0 rgba(237, 245, 240, 0.06) inset,
+        0 14px 36px rgba(5, 8, 6, 0.28);
+    color: var(--flight-chalk);
+    font-family: "OpenAI Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 12px;
+    pointer-events: auto;
+    transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.panel-window::before {
+    position: absolute;
+    z-index: 1;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 2px;
+    background: var(--flight-signal);
+    content: "";
+    opacity: 0.28;
+    pointer-events: none;
+}
+
+.panel-window:focus-within,
+.panel-window:has(.panel-window-header.is-dragging) {
+    border-color: color-mix(in srgb, var(--flight-signal) 62%, var(--flight-moss));
+    box-shadow:
+        0 1px 0 rgba(237, 245, 240, 0.08) inset,
+        0 18px 48px rgba(5, 8, 6, 0.38);
+}
+
+.panel-window-header {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr) auto;
+    align-items: center;
+    box-sizing: border-box;
+    min-height: 40px;
+    padding: 0 6px 0 12px;
+    background: var(--flight-carbon);
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+}
+
+.panel-window-header.is-dragging {
+    cursor: grabbing;
+}
+
+.panel-window-header:focus-visible {
+    outline: 1px solid var(--flight-signal);
+    outline-offset: -2px;
+}
+
+.panel-window-code {
+    color: var(--flight-signal);
+    font-family: var(--flight-mono);
+    font-size: 9px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    letter-spacing: 0.13em;
+}
+
+.panel-window-title {
+    overflow: hidden;
+    margin: 0;
+    color: var(--flight-chalk);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.015em;
+    line-height: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.panel-window-controls {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.panel-window-action {
+    display: grid;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    place-items: center;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--flight-muted);
+    cursor: pointer;
+    font: 15px/1 var(--flight-mono);
+}
+
+.panel-window-action:hover {
+    border-color: var(--flight-moss);
+    background: rgba(140, 223, 173, 0.07);
+    color: var(--flight-chalk);
+}
+
+.panel-window-action:focus-visible {
+    border-color: var(--flight-signal);
+    outline: 0;
+    color: var(--flight-signal);
+}
+
+.panel-window-reset {
+    font-size: 14px;
+}
+
+.panel-window-body {
+    box-sizing: border-box;
+    max-height: min(68vh, 620px);
+    overflow: auto;
+    overscroll-behavior: contain;
+    border-top: 1px solid var(--flight-moss);
+    background: var(--flight-void);
+    scrollbar-color: var(--flight-moss) transparent;
+}
+
+.panel-window.is-collapsed::before {
+    opacity: 0.65;
+}
+
+.panel-window-body > .tp-dfwv {
+    position: static;
+    width: 100%;
+    max-height: none;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+.panel-window-body,
+.panel-window-body .tp-dfwv {
+    --tp-base-background-color: transparent;
+    --tp-base-border-radius: 3px;
+    --tp-base-font-family: "OpenAI Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --tp-base-shadow-color: transparent;
+    --tp-blade-border-radius: 3px;
+    --tp-blade-horizontal-padding: 8px;
+    --tp-blade-value-width: 46%;
+    --tp-button-background-color: #26382e;
+    --tp-button-background-color-active: #8cdfad;
+    --tp-button-background-color-focus: #395343;
+    --tp-button-background-color-hover: #304838;
+    --tp-button-foreground-color: #edf5f0;
+    --tp-container-background-color: rgba(38, 56, 46, 0.42);
+    --tp-container-background-color-active: rgba(140, 223, 173, 0.15);
+    --tp-container-background-color-focus: rgba(140, 223, 173, 0.11);
+    --tp-container-background-color-hover: rgba(140, 223, 173, 0.08);
+    --tp-container-foreground-color: #edf5f0;
+    --tp-groove-foreground-color: #8cdfad;
+    --tp-input-background-color: #18231d;
+    --tp-input-background-color-active: #26382e;
+    --tp-input-background-color-focus: #26382e;
+    --tp-input-background-color-hover: #202f27;
+    --tp-input-foreground-color: #edf5f0;
+    --tp-label-foreground-color: #9aaba1;
+    --tp-monitor-background-color: #050806;
+    --tp-monitor-foreground-color: #8cdfad;
+}
+
+/* Existing panels can move into a workspace host before their internals are rebuilt. */
+.panel-window-body > #export-panel {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+}
+
+.panel-window-body > #export-panel > .export-heading {
+    display: none;
+}
+
+.panel-window-body > #export-panel > .export-panel-body {
+    border-top: 0;
+}
+
+.panel-window-body > .flock-preview-panel,
+.panel-window-body > .noise-preview-panel {
+    position: static !important;
+    box-sizing: border-box;
+    width: 100% !important;
+    max-height: none !important;
+    margin: 0;
+    border: 0;
+    background: transparent !important;
+    color: var(--flight-chalk) !important;
+    font-family: "OpenAI Sans", "Helvetica Neue", Helvetica, Arial, sans-serif !important;
 }
 
 #export-ui {
@@ -149,6 +369,12 @@ canvas.fixed-spec-canvas {
     font: inherit;
 }
 
+.export-preset-button {
+    margin-top: 0;
+    border-color: rgba(109, 185, 231, 0.5);
+    background: rgba(109, 185, 231, 0.16);
+}
+
 .export-row input:not([type="checkbox"]),
 .export-row select {
     padding: 0 7px;
@@ -209,11 +435,411 @@ canvas.fixed-spec-canvas {
     pointer-events: none;
 }
 
+.interactive-flock-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+    color: var(--flight-chalk);
+}
+
+.interactive-flock-panel__telemetry,
+.interactive-flock-panel__take-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    font-family: var(--flight-mono);
+    font-variant-numeric: tabular-nums;
+}
+
+.interactive-flock-panel__telemetry {
+    box-sizing: border-box;
+    min-width: 0;
+    min-height: 34px;
+    padding: 0 10px;
+    border-bottom: 1px solid var(--flight-moss);
+    background: var(--flight-carbon);
+    font-size: 10px;
+    letter-spacing: 0.035em;
+}
+
+.interactive-flock-panel__status {
+    overflow: hidden;
+    color: var(--flight-signal);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.interactive-flock-panel__time,
+.interactive-flock-panel__take-count {
+    color: var(--flight-muted);
+    white-space: nowrap;
+}
+
+.interactive-flock-panel__take {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    padding: 9px 10px 10px;
+    border-bottom: 1px solid var(--flight-moss);
+}
+
+.interactive-flock-panel__take-header {
+    margin-bottom: 7px;
+    color: var(--flight-muted);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+}
+
+.interactive-flock-panel__take-label {
+    color: var(--flight-signal);
+}
+
+.interactive-flock-panel__take-strip {
+    display: flex;
+    align-items: flex-end;
+    min-height: 76px;
+    margin: 0;
+    padding: 0 0 3px;
+    overflow-x: auto;
+    gap: 8px;
+    list-style: none;
+    scroll-snap-type: x proximity;
+    scrollbar-color: var(--flight-moss) transparent;
+}
+
+.interactive-flock-panel__step-item {
+    flex: 0 0 auto;
+    scroll-snap-align: start;
+}
+
+.interactive-flock-panel__step {
+    display: grid;
+    justify-items: center;
+    gap: 5px;
+    box-sizing: border-box;
+    min-width: max(24px, var(--take-screen-width));
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--flight-muted);
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(140, 223, 173, 0.16);
+}
+
+.interactive-flock-panel__step-screen {
+    position: relative;
+    display: block;
+    box-sizing: border-box;
+    width: var(--take-screen-width);
+    height: var(--take-screen-height);
+    overflow: hidden;
+    aspect-ratio: var(--take-screen-aspect);
+    border: 1px solid var(--flight-moss);
+    border-radius: 2px;
+    background-color: #0b100d;
+    background-image:
+        linear-gradient(rgba(140, 223, 173, 0.07), rgba(140, 223, 173, 0.07)),
+        linear-gradient(90deg, rgba(140, 223, 173, 0.07), rgba(140, 223, 173, 0.07));
+    background-position: 50% 50%, 50% 50%;
+    background-repeat: no-repeat;
+    background-size: 100% 1px, 1px 100%;
+}
+
+.interactive-flock-panel__step:hover:not(:disabled) .interactive-flock-panel__step-screen {
+    border-color: #537663;
+}
+
+.interactive-flock-panel__step:focus-visible {
+    outline: 0;
+    color: var(--flight-chalk);
+}
+
+.interactive-flock-panel__step:focus-visible .interactive-flock-panel__step-screen {
+    border-color: var(--flight-signal);
+    outline: 1px solid var(--flight-signal);
+    outline-offset: 2px;
+}
+
+.interactive-flock-panel__step:disabled {
+    cursor: default;
+    opacity: 0.7;
+}
+
+.interactive-flock-panel__step.is-selected .interactive-flock-panel__step-screen {
+    border-color: var(--flight-signal);
+    background-color: #122019;
+    box-shadow: 0 0 0 1px rgba(140, 223, 173, 0.18) inset;
+}
+
+.interactive-flock-panel__step.is-selected .interactive-flock-panel__step-index {
+    color: var(--flight-chalk);
+}
+
+.interactive-flock-panel__step.is-preview .interactive-flock-panel__step-screen::after {
+    position: absolute;
+    z-index: 3;
+    right: 4px;
+    bottom: 4px;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--flight-signal);
+    content: "";
+}
+
+.interactive-flock-panel__step-index {
+    display: block;
+    font: 8px/1 var(--flight-mono);
+    letter-spacing: 0.08em;
+}
+
+.interactive-flock-panel__step-gesture {
+    position: absolute;
+    z-index: 2;
+    left: var(--take-origin-x);
+    top: var(--take-origin-y);
+    width: 0;
+    height: 0;
+}
+
+.interactive-flock-panel__step-origin {
+    position: absolute;
+    z-index: 2;
+    left: 0;
+    top: 0;
+    width: 4px;
+    height: 4px;
+    border: 1px solid var(--flight-signal);
+    border-radius: 50%;
+    background: var(--flight-void);
+    transform: translate(-50%, -50%);
+}
+
+.interactive-flock-panel__step-arrow {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: max(5px, calc(var(--take-arrow-length) * var(--take-strength, 1)));
+    height: 1px;
+    background: var(--flight-signal);
+    transform: rotate(var(--take-direction-angle));
+    transform-origin: 0 50%;
+}
+
+.interactive-flock-panel__step-arrow::after {
+    position: absolute;
+    right: -1px;
+    top: -2px;
+    width: 4px;
+    height: 4px;
+    border-top: 1px solid var(--flight-signal);
+    border-right: 1px solid var(--flight-signal);
+    content: "";
+    transform: rotate(45deg);
+}
+
+.interactive-flock-panel__step-boom {
+    position: absolute;
+    z-index: 2;
+    left: var(--take-boom-x);
+    top: var(--take-boom-y);
+    box-sizing: border-box;
+    width: calc(var(--take-boom-radius) * 2);
+    height: calc(var(--take-boom-radius) * 2);
+    border: 1px solid var(--flight-signal);
+    border-radius: 50%;
+    box-shadow: 0 0 7px rgba(140, 223, 173, 0.35) inset;
+    transform: translate(-50%, -50%);
+}
+
+.interactive-flock-panel__step-flow {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: var(--flight-muted);
+    font: 7px/1 var(--flight-mono);
+    letter-spacing: 0.12em;
+}
+
+.interactive-flock-panel__add-step .interactive-flock-panel__step-screen {
+    display: grid;
+    place-items: center;
+    border-style: dashed;
+    background: transparent;
+}
+
+.interactive-flock-panel__add-icon {
+    color: var(--flight-muted);
+    font: 22px/1 var(--flight-mono);
+}
+
+.interactive-flock-panel__add-step:hover:not(:disabled) .interactive-flock-panel__add-icon,
+.interactive-flock-panel__add-step:focus-visible .interactive-flock-panel__add-icon,
+.interactive-flock-panel__add-step.is-selected .interactive-flock-panel__add-icon {
+    color: var(--flight-signal);
+}
+
+.interactive-flock-panel__step-boom::after {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--flight-chalk);
+    content: "";
+    transform: translate(-50%, -50%);
+}
+
+.interactive-flock-panel__step-path-map {
+    position: absolute;
+    z-index: 2;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+.interactive-flock-panel__step-path-base,
+.interactive-flock-panel__step-path-signal,
+.interactive-flock-panel__step-path-end {
+    fill: none;
+    vector-effect: non-scaling-stroke;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.interactive-flock-panel__step-path-base {
+    stroke: #537663;
+    stroke-width: 1px;
+}
+
+.interactive-flock-panel__step-path-signal {
+    animation: take-path-signal 900ms linear infinite;
+    stroke: var(--flight-signal);
+    stroke-dasharray: 4 5;
+    stroke-width: 1.25px;
+}
+
+.interactive-flock-panel__step-path-end {
+    stroke: var(--flight-chalk);
+    stroke-width: 1.25px;
+}
+
+@keyframes take-path-signal {
+    to {
+        stroke-dashoffset: -9;
+    }
+}
+
+.interactive-flock-panel__pane {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+}
+
+.interactive-flock-panel__tweakpane {
+    width: 100%;
+    max-width: 100%;
+}
+
+.interactive-flock-panel.is-unavailable {
+    opacity: 0.62;
+}
+
+.flock-preview-panel > summary,
+.noise-preview-panel > summary {
+    padding: 10px;
+    color: var(--flight-signal);
+    cursor: pointer;
+    font: 600 10px/1 var(--flight-mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.flock-preview-panel > canvas,
+.noise-preview-grid {
+    box-sizing: border-box;
+    padding: 0 10px 10px;
+}
+
+.noise-preview-grid figcaption {
+    margin-top: 4px;
+    color: var(--flight-muted);
+    font: 9px/1.2 var(--flight-mono);
+    text-transform: uppercase;
+}
+
+.panel-window-body > #export-panel .export-row > span {
+    color: var(--flight-muted);
+}
+
+.panel-window-body > #export-panel .export-row input:not([type="checkbox"]),
+.panel-window-body > #export-panel .export-row select,
+.panel-window-body > #export-panel .export-button {
+    border-color: var(--flight-moss);
+    border-radius: 3px;
+    background: #18231d;
+    color: var(--flight-chalk);
+}
+
+.panel-window-body > #export-panel .export-row input[type="checkbox"] {
+    accent-color: var(--flight-signal);
+}
+
+.panel-window-body > #export-panel .export-button {
+    border-color: #537663;
+    background: var(--flight-moss);
+}
+
+.panel-window-body > #export-panel .export-button:hover:not(:disabled) {
+    border-color: var(--flight-signal);
+    background: #304838;
+}
+
+.panel-window-body > #export-panel .export-preset-button {
+    border-color: #537071;
+    background: #1a2926;
+}
+
+.panel-window-body > #export-panel .export-progress-bar {
+    background: var(--flight-signal);
+}
+
 @media (max-width: 560px) {
     #export-ui {
         top: 8px;
         right: 8px;
         width: min(250px, calc(100vw - 16px));
+    }
+}
+
+@media (max-width: 719px) {
+    .panel-window {
+        max-width: calc(100vw - 24px);
+    }
+
+    .panel-window-body {
+        max-height: min(58svh, 520px);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .panel-window,
+    .export-progress-bar {
+        transition: none;
+    }
+
+    .interactive-flock-panel__step-path-signal {
+        animation: none;
     }
 }
 

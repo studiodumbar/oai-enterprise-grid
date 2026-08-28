@@ -10,6 +10,7 @@ import {
   SHARED_CONFIG,
   COMPOSITION_BUNDLES,
   COMPOSITION_CONFIGS,
+  createRuntimeConfig,
 } from "../config.js";
 import { createCatalog } from "../src/catalog.js";
 import { resolveCompositionEndpointSettings } from "../src/composition-endpoints/index.js";
@@ -22,6 +23,11 @@ import {
 } from "../src/timeline/timeline-settings.js";
 
 const EXPECTED_BUNDLE_OWNERSHIP = Object.freeze({
+  "countdown-framed": {
+    settings: ["countdownFramed"],
+    generators: ["countdownFramedGrid"],
+    compositions: ["countdown-framed"],
+  },
   base: {
     settings: ["base"],
     generators: ["baseGrid"],
@@ -72,6 +78,11 @@ const EXPECTED_BUNDLE_OWNERSHIP = Object.freeze({
     generators: ["interactiveGrid"],
     compositions: ["interactive-grid"],
   },
+  "interactive-flock": {
+    settings: ["interactiveFlock"],
+    generators: ["interactiveFlockGrid"],
+    compositions: ["interactive-flock"],
+  },
   "flock-grid": {
     settings: ["flock"],
     generators: ["flockGrid"],
@@ -80,6 +91,13 @@ const EXPECTED_BUNDLE_OWNERSHIP = Object.freeze({
 });
 
 const EXPECTED_GRID_HIERARCHY = Object.freeze([
+  {
+    compositionId: "countdown-framed",
+    generatorInstanceId: "countdownFramedGrid",
+    generatorType: "countdown-framed",
+    settingsKey: "countdownFramed",
+    strategy: undefined,
+  },
   {
     compositionId: "base",
     generatorInstanceId: "baseGrid",
@@ -142,6 +160,13 @@ const EXPECTED_GRID_HIERARCHY = Object.freeze([
     generatorType: "cellular-automata",
     settingsKey: "gameOfLife",
     strategy: "life-like",
+  },
+  {
+    compositionId: "interactive-flock",
+    generatorInstanceId: "interactiveFlockGrid",
+    generatorType: "flock-grid",
+    settingsKey: "interactiveFlock",
+    strategy: undefined,
   },
 ]);
 
@@ -820,6 +845,40 @@ test("every canonical recipe owns a timing root and aliases inherit it", () => {
   }
 });
 
+test("runtime core-duration overrides rebuild timing without mutating authored config", () => {
+  const runtime = createRuntimeConfig({
+    compositionTimingOverrides: new Map([
+      ["voronoi", 12],
+      ["flock", 20],
+    ]),
+  });
+
+  assert.deepEqual(runtime.settings.voronoi.timing, {
+    bodyDurationSeconds: 12,
+    beatCount: 4,
+    beatSeconds: 3,
+  });
+  assert.equal(runtime.settings.voronoi.intro.durationSeconds, 3);
+  assert.equal(runtime.compositionDefinitions.flock.timing.bodyDurationSeconds, 20);
+  assert.equal(
+    runtime.compositionDefinitions["flock-circles"].timing.bodyDurationSeconds,
+    20,
+  );
+  assert.equal(runtime.settings.flock.timing.bodyDurationSeconds, 20);
+  assert.equal(SETTINGS.voronoi.timing.bodyDurationSeconds, 8);
+  assert.equal(COMPOSITION_DEFINITIONS.flock.timing.bodyDurationSeconds, 30);
+  assert.throws(
+    () => createRuntimeConfig({
+      compositionTimingOverrides: { "interactive-flock": 12 },
+    }),
+    /fixed-beat timing.*recorded beats/,
+  );
+  assert.throws(
+    () => createRuntimeConfig({ compositionTimingOverrides: { missing: 12 } }),
+    /Unknown composition timing override/,
+  );
+});
+
 test("inference-loop runs as four one-second composition beats", () => {
   assert.deepEqual(SETTINGS.inferenceLoop.timing, {
     bodyDurationSeconds: 4,
@@ -830,16 +889,40 @@ test("inference-loop runs as four one-second composition beats", () => {
 
 test("flock derives pulses and phase durations from its composition beat", () => {
   assert.deepEqual(SETTINGS.flock.timing, {
-    bodyDurationSeconds: 10,
-    beatCount: 4,
-    beatSeconds: 2.5,
+    bodyDurationSeconds: 30,
+    beatCount: 10,
+    beatSeconds: 3,
   });
-  assert.equal(SETTINGS.flock.simulation.pulseEverySeconds, 2.5);
-  assert.equal(SETTINGS.flock.intro.durationSeconds, 2.5);
-  assert.equal(SETTINGS.flock.outro.durationSeconds, 2.5);
-  assert.equal(SETTINGS.flock.circleEndpoints.start.durationSeconds, 2.5);
-  assert.equal(SETTINGS.flock.circleEndpoints.end.durationSeconds, 2.5);
+  assert.equal(SETTINGS.flock.simulation.pulseEverySeconds, 3);
+  assert.equal(SETTINGS.flock.intro.durationSeconds, 3);
+  assert.equal(SETTINGS.flock.outro.durationSeconds, 3);
+  assert.equal(SETTINGS.flock.circleEndpoints.start.durationSeconds, 3);
+  assert.equal(SETTINGS.flock.circleEndpoints.end.durationSeconds, 3);
   assert.equal(SETTINGS.flock.circleEndpoints.modes.dijkstra.pathFraction, 0.4);
+});
+
+test("interactive flock owns a dynamic fixed-beat timing root", () => {
+  assert.deepEqual(SETTINGS.interactiveFlock.timing, {
+    mode: "fixed-beat",
+    beatSeconds: 3,
+  });
+  assert.equal(SETTINGS.interactiveFlock.simulation.pulseEverySeconds, 3);
+  assert.equal(SETTINGS.interactiveFlock.intro.durationSeconds, 3);
+  assert.equal(SETTINGS.interactiveFlock.outro.durationSeconds, 3);
+  assert.equal(SETTINGS.interactiveFlock.circleEndpoints.start.durationSeconds, 3);
+  assert.equal(SETTINGS.interactiveFlock.circleEndpoints.end.durationSeconds, 3);
+  assert.equal(
+    COMPOSITION_DEFINITIONS["interactive-flock"].settingsKey,
+    "interactiveFlock",
+  );
+  assert.equal(SETTINGS.interactiveFlock.interaction.mode, "launcher");
+  assert.equal(SETTINGS.interactiveFlock.interaction.boom.intensity, 4);
+  assert.equal(SETTINGS.interactiveFlock.interaction.picasso.showPath, true);
+  assert.ok(SETTINGS.interactiveFlock.interaction.picasso.dashCyclesPerBeat > 0);
+  assert.notStrictEqual(
+    COMPOSITION_BUNDLES["interactive-flock"].settings.interactiveFlock,
+    COMPOSITION_BUNDLES["flock-grid"].settings.flock,
+  );
 });
 
 test("all configured settings and implementation references resolve", () => {

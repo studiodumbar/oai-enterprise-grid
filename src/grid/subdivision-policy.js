@@ -12,9 +12,43 @@ export function fourLevelAt(brightness) {
   return Math.min(MAX_SUBDIVISION_LEVEL, level);
 }
 
+export function validateSubdivisionLevels(levels) {
+  if (!Array.isArray(levels) || levels.length === 0) {
+    throw new TypeError("subdivisionLevels must be a non-empty array.");
+  }
+  const unique = new Set(levels);
+  if (
+    unique.size !== levels.length
+    || levels.some(level => (
+      !Number.isSafeInteger(level)
+      || level < 0
+      || level > MAX_SUBDIVISION_LEVEL
+    ))
+  ) {
+    throw new RangeError(
+      "subdivisionLevels must contain unique integers from zero to three.",
+    );
+  }
+  return [...levels].sort((first, second) => first - second);
+}
+
 export class FourLevelSubdivisionPolicy {
   levelAt(brightness) {
     return fourLevelAt(brightness);
+  }
+}
+
+export class SelectedSubdivisionPolicy {
+  constructor(levels) {
+    this.levels = validateSubdivisionLevels(levels);
+  }
+
+  levelAt(brightness) {
+    const index = Math.min(
+      this.levels.length - 1,
+      Math.floor(clampBrightness(brightness) * this.levels.length),
+    );
+    return this.levels[index];
   }
 }
 

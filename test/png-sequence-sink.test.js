@@ -47,6 +47,34 @@ test("directory sequence sink streams each file and closes it", async () => {
   ]);
 });
 
+test("a prepared directory bypasses the gesture-gated picker", async () => {
+  const names = [];
+  const directory = {
+    async getFileHandle(name) {
+      names.push(name);
+      return {
+        async createWritable() {
+          return { async write() {}, async close() {} };
+        },
+      };
+    },
+  };
+  const sink = await createPngSequenceSink({
+    prefix: "OAI_voronoi",
+    frameCount: 1,
+    directory,
+    windowRef: {
+      showDirectoryPicker() {
+        throw new Error("picker must not be called after preparation");
+      },
+    },
+  });
+
+  await sink.write(0, new Uint8Array([1]));
+  assert.equal(sink.kind, "directory");
+  assert.deepEqual(names, ["OAI_voronoi_0000.png"]);
+});
+
 test("fallback sequence sink returns and downloads one ZIP", async () => {
   let download = null;
   const sink = await createPngSequenceSink({
@@ -61,4 +89,3 @@ test("fallback sequence sink returns and downloads one ZIP", async () => {
   assert.equal(download.blob, zip);
   assert.equal(zip.type, "application/zip");
 });
-

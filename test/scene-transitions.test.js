@@ -1,7 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { COMPOSITION_DEFINITIONS, GLOBAL_CONFIG, SETTINGS } from "../config.js";
+import {
+  COMPOSITION_DEFINITIONS,
+  GLOBAL_CONFIG,
+  PALETTES,
+  SETTINGS,
+} from "../config.js";
 import { InferenceGridGenerator } from "../src/generators/inference-grid-generator.js";
 import { INFERENCE_LOOP_PHASES } from "../src/generators/grid-scene-strategies.js";
 import {
@@ -856,9 +861,7 @@ function inferenceGenerator({
       },
     },
     runtime: { viewport: () => ({ width: 900, height: 600 }) },
-    palettes: {
-      green: ["#005122", "#008a3a", "#00b63c", "#7fd3a5"],
-    },
+    palettes: PALETTES,
   });
 }
 

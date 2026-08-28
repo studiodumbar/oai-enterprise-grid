@@ -25,9 +25,11 @@ test("resolution and aspect presets produce authoritative output dimensions", ()
   assert.deepEqual(RESOLUTION_PRESETS["1920x1080"], [1920, 1080]);
   assert.equal(LONG_EDGE_PRESETS["4K"], 3840);
   assert.ok(ASPECT_RATIO_PRESETS.includes("9:16"));
+  assert.ok(ASPECT_RATIO_PRESETS.includes("2:1"));
   assert.deepEqual(parseSize(" 1920 × 1080 "), { width: 1920, height: 1080 });
   assert.deepEqual(parseAspectRatio("4:5"), { width: 4, height: 5, ratio: 0.8 });
   assert.deepEqual(sizeFromAspect("16:9", 1920), { width: 1920, height: 1080 });
+  assert.deepEqual(sizeFromAspect("2:1", 3840), { width: 3840, height: 1920 });
   assert.deepEqual(sizeFromAspect("9:16", 1920), { width: 1080, height: 1920 });
   assert.deepEqual(sizeFromPresets("4K", "4:3"), { width: 3840, height: 2880 });
 });
@@ -49,6 +51,10 @@ test("Export filenames use the exact local MMDD-HHMMSS convention", () => {
   assert.equal(exportStamp(date), "0812-143005");
   assert.equal(stamp(date), "0812-143005");
   assert.equal(exportBaseName(date), "OAI_0812-143005");
+  assert.equal(
+    exportBaseName(date, { composition: "flock", variant: "preview-4k-2x1" }),
+    "OAI_flock_preview-4k-2x1_0812-143005",
+  );
   assert.equal(exportFilename("png", { date }), "OAI_0812-143005.png");
   assert.equal(
     exportFilename(".PNG", { date, alpha: true }),

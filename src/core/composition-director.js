@@ -9,6 +9,7 @@ import {
   isAutomaticDurationSetting,
   resolveAutomaticDuration,
 } from "./automatic-duration.js";
+import { TIMELINE_EFFECTS, requireTimelineEffect } from "./timeline-effects.js";
 
 const GENERATOR_LIFECYCLE = [
   "enter",
@@ -17,6 +18,18 @@ const GENERATOR_LIFECYCLE = [
   "draw",
   "resize",
   "input",
+  "dispose",
+];
+
+const RULE_OPTIONAL_METHODS = [
+  "input",
+  "animationDuration",
+  "seek",
+  "snapshotProjectState",
+  "restoreProjectState",
+  "initialTimelineEffect",
+  "timelineSettings",
+  "inspect",
   "dispose",
 ];
 
@@ -72,6 +85,49 @@ function requireName(value, label) {
 
 function availableMessage(values) {
   return values.length > 0 ? values.join(", ") : "<none>";
+}
+
+function normalizeRuleInputResult(result) {
+  if (result === undefined || result === false) {
+    return { handled: false, timelineEffect: null };
+  }
+  if (result === true) return { handled: true, timelineEffect: null };
+  if (!result || typeof result !== "object" || Array.isArray(result)) {
+    throw new TypeError(
+      "Composition rule input() must return a boolean or a result object.",
+    );
+  }
+  const timelineEffect = result.timelineEffect === undefined
+    ? null
+    : requireTimelineEffect(result.timelineEffect, "Composition rule timelineEffect");
+  if (result.handled !== undefined && typeof result.handled !== "boolean") {
+    throw new TypeError("Composition rule input result handled must be a boolean.");
+  }
+  return {
+    handled: result.handled ?? (timelineEffect !== null),
+    timelineEffect,
+  };
+}
+
+function mergeRulePhaseSettings(base, overrides, beatSeconds, baseBeatSeconds, label) {
+  requireObject(base, `Base ${label} settings`);
+  requireObject(overrides, `Rule ${label} settings`);
+  const authoredDuration = overrides.durationSeconds;
+  const durationSeconds = authoredDuration === undefined
+    ? base.durationSeconds * beatSeconds / baseBeatSeconds
+    : authoredDuration;
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+    throw new RangeError(`Rule ${label} durationSeconds must be a finite positive number.`);
+  }
+  return {
+    ...base,
+    ...overrides,
+    durationSeconds,
+    modes: {
+      ...(base.modes ?? {}),
+      ...(overrides.modes ?? {}),
+    },
+  };
 }
 
 /**
@@ -130,6 +186,7 @@ export class CompositionDirector {
     this.currentCompositionName = null;
     this.currentRule = null;
     this.phaseOverlay = null;
+    this.ruleTimelineSignature = null;
     this.renderPlan = [];
     this.viewport = null;
     this.lastFrame = undefined;
@@ -165,6 +222,19 @@ export class CompositionDirector {
     if (!nextRule || typeof nextRule.update !== "function") {
       throw new TypeError(`Composition rule "${ruleType}" must return an object with update().`);
     }
+    for (const method of RULE_OPTIONAL_METHODS) {
+      if (nextRule[method] !== undefined && typeof nextRule[method] !== "function") {
+        throw new TypeError(
+          `Composition rule "${ruleType}" ${method} must be a function when provided.`,
+        );
+      }
+    }
+    const nextInitialTimelineEffect = typeof nextRule.initialTimelineEffect === "function"
+      ? requireTimelineEffect(
+        nextRule.initialTimelineEffect(),
+        `Composition rule "${ruleType}" initial timeline effect`,
+      )
+      : null;
     const nextPhaseSettings = this.phaseSettingsGroup(name);
     const authoredEndpoints = nextPhaseSettings?.circleEndpoints ?? {};
     const legacyCompositionSettings = this.settings.composition ?? {};
@@ -208,6 +278,7 @@ export class CompositionDirector {
 
     this.currentCompositionName = name;
     this.currentRule = nextRule;
+    this.ruleTimelineSignature = null;
     this.compositionEndpoints = nextCompositionEndpoints;
     this.circleEndpoints = nextCompositionEndpoints.timeline;
     this.endpointDurations = nextEndpointDurations;
@@ -228,19 +299,33 @@ export class CompositionDirector {
     );
     const timing = nextPhaseSettings?.timing;
     if (timing) {
-      debug.config(
-        "timing composition=%s body=%.3f beats=%d beat=%.3f intro=%.3f outro=%.3f start=%.3f end=%.3f",
-        name,
-        timing.bodyDurationSeconds,
-        timing.beatCount,
-        timing.beatSeconds,
-        nextPhaseSettings.intro.durationSeconds,
-        nextPhaseSettings.outro.durationSeconds,
-        this.endpointDurations.start,
-        this.endpointDurations.end,
-      );
+      if (timing.mode === "fixed-beat") {
+        debug.config(
+          "timing composition=%s mode=fixed-beat beat=%.3f intro=%.3f outro=%.3f start=%.3f end=%.3f",
+          name,
+          timing.beatSeconds,
+          nextPhaseSettings.intro.durationSeconds,
+          nextPhaseSettings.outro.durationSeconds,
+          this.endpointDurations.start,
+          this.endpointDurations.end,
+        );
+      } else {
+        debug.config(
+          "timing composition=%s body=%.3f beats=%d beat=%.3f intro=%.3f outro=%.3f start=%.3f end=%.3f",
+          name,
+          timing.bodyDurationSeconds,
+          timing.beatCount,
+          timing.beatSeconds,
+          nextPhaseSettings.intro.durationSeconds,
+          nextPhaseSettings.outro.durationSeconds,
+          this.endpointDurations.start,
+          this.endpointDurations.end,
+        );
+      }
     }
     this.buildPhaseOverlay();
+    this.syncRuleTimelineSettings();
+    if (nextInitialTimelineEffect !== null) this.applyTimelineEffect(nextInitialTimelineEffect);
     return this;
   }
 
@@ -277,8 +362,8 @@ export class CompositionDirector {
     });
   }
 
-  buildPhaseOverlay(name = this.currentCompositionName) {
-    const group = this.phaseSettingsGroup(name);
+  buildPhaseOverlay(name = this.currentCompositionName, phaseSettings = null) {
+    const group = phaseSettings ?? this.phaseSettingsGroup(name);
     this.phaseOverlay = group === undefined
       ? null
       : createPhaseOverlay({
@@ -291,6 +376,101 @@ export class CompositionDirector {
         background: this.settings.canvas?.background ?? null,
       });
     if (this.phaseOverlay && this.viewport) this.phaseOverlay.resize(this.viewport);
+  }
+
+  syncRuleTimelineSettings() {
+    if (typeof this.currentRule?.timelineSettings !== "function") return false;
+    const dynamic = this.currentRule.timelineSettings();
+    requireObject(dynamic, "Composition rule timeline settings");
+    const beatSeconds = Number(dynamic.beatSeconds);
+    if (!Number.isFinite(beatSeconds) || beatSeconds <= 0) {
+      throw new RangeError(
+        "Composition rule timeline settings beatSeconds must be a finite positive number.",
+      );
+    }
+    const base = this.phaseSettingsGroup(this.currentCompositionName);
+    if (!base?.intro || !base?.outro) return false;
+    const baseBeatSeconds = Number(base.timing?.beatSeconds ?? beatSeconds);
+    if (!Number.isFinite(baseBeatSeconds) || baseBeatSeconds <= 0) {
+      throw new RangeError(
+        `Composition "${this.currentCompositionName}" needs a positive configured beat.`,
+      );
+    }
+    const intro = mergeRulePhaseSettings(
+      base.intro,
+      dynamic.intro ?? {},
+      beatSeconds,
+      baseBeatSeconds,
+      "intro",
+    );
+    const outro = mergeRulePhaseSettings(
+      base.outro,
+      dynamic.outro ?? {},
+      beatSeconds,
+      baseBeatSeconds,
+      "outro",
+    );
+    const circleEndpointOverrides = requireObject(
+      dynamic.circleEndpoints ?? {},
+      "Composition rule circleEndpoints settings",
+    );
+    const authoredEndpoints = base.circleEndpoints ?? {};
+    const endpointOverrides = {
+      ...authoredEndpoints,
+      ...circleEndpointOverrides,
+      start: {
+        ...(authoredEndpoints.start ?? {}),
+        ...(circleEndpointOverrides.start ?? {}),
+        durationSeconds: intro.durationSeconds,
+      },
+      end: {
+        ...(authoredEndpoints.end ?? {}),
+        ...(circleEndpointOverrides.end ?? {}),
+        durationSeconds: outro.durationSeconds,
+      },
+      modes: {
+        ...(authoredEndpoints.modes ?? {}),
+        ...(circleEndpointOverrides.modes ?? {}),
+      },
+    };
+    const signature = JSON.stringify({
+      beatSeconds,
+      intro: dynamic.intro ?? {},
+      outro: dynamic.outro ?? {},
+      circleEndpoints: circleEndpointOverrides,
+    });
+    if (signature === this.ruleTimelineSignature) return false;
+
+    this.ruleTimelineSignature = signature;
+    this.compositionEndpoints = resolveCompositionEndpointSettings(
+      this.settings.composition ?? {},
+      endpointOverrides,
+    );
+    this.circleEndpoints = this.compositionEndpoints.timeline;
+    this.endpointDurations = Object.freeze({
+      start: intro.durationSeconds,
+      end: outro.durationSeconds,
+    });
+    this.buildPhaseOverlay(this.currentCompositionName, {
+      ...base,
+      intro,
+      outro,
+    });
+    this.endpointState = circleEndpointTimelineAt(
+      this.endpointElapsed,
+      this.coreAnimationDuration(),
+      this.circleEndpoints,
+      this.endpointDurations,
+    );
+    this.endpointCoreElapsed = this.endpointState.coreTime;
+    debug.config(
+      "rule-timing composition=%s beat=%.3f intro=%.3f outro=%.3f",
+      this.currentCompositionName,
+      beatSeconds,
+      intro.durationSeconds,
+      outro.durationSeconds,
+    );
+    return true;
   }
 
   phaseOverlayEndpoint(endpoint) {
@@ -452,6 +632,16 @@ export class CompositionDirector {
   input(type, payload = {}) {
     this.assertUsable();
     requireName(type, "Input type");
+    if (typeof this.currentRule?.input === "function") {
+      const result = normalizeRuleInputResult(this.currentRule.input(type, payload));
+      const timelineChanged = result.handled && this.syncRuleTimelineSettings();
+      if (result.timelineEffect !== null) {
+        this.applyTimelineEffect(result.timelineEffect);
+      } else if (timelineChanged && this.coreAnimationDuration() === null) {
+        this.applyTimelineEffect(TIMELINE_EFFECTS.RETURN_TO_AUTHORING_CORE);
+      }
+      if (result.handled) return true;
+    }
     let handled = false;
     for (const id of this.activeGeneratorIds) {
       const generator = this.generator(id);
@@ -460,6 +650,33 @@ export class CompositionDirector {
       }
     }
     return handled;
+  }
+
+  applyTimelineEffect(effect) {
+    const resolved = requireTimelineEffect(effect, "Composition timeline effect");
+    const coreDuration = this.coreAnimationDuration();
+    if (resolved === TIMELINE_EFFECTS.RESTART_AT_INTRO) {
+      this.endpointElapsed = 0;
+    } else {
+      this.endpointElapsed = this.circleEndpoints.startWithCircle
+        ? this.endpointDurations.start
+        : 0;
+    }
+    this.endpointState = circleEndpointTimelineAt(
+      this.endpointElapsed,
+      coreDuration,
+      this.circleEndpoints,
+      this.endpointDurations,
+    );
+    this.endpointCoreElapsed = this.endpointState.coreTime;
+    debug.timeline(
+      "effect=%s composition=%s phase=%s core=%.3f",
+      resolved,
+      this.currentCompositionName,
+      this.endpointState.phase,
+      this.endpointState.coreTime,
+    );
+    return this.endpointState;
   }
 
   resize(viewport) {
@@ -620,6 +837,20 @@ export class CompositionDirector {
 
   coreAnimationDuration() {
     this.assertUsable();
+    if (typeof this.currentRule?.animationDuration === "function") {
+      const duration = this.currentRule.animationDuration();
+      // undefined explicitly defers to the legacy active-generator contract;
+      // null is an authoritative continuous/draft timeline.
+      if (duration !== undefined) {
+        if (duration === null) return null;
+        if (!Number.isFinite(duration) || duration <= 0) {
+          throw new RangeError(
+            "Composition rule animationDuration() must return a finite positive number, null, or undefined.",
+          );
+        }
+        return duration;
+      }
+    }
     const durations = [];
     for (const id of this.activeGeneratorIds) {
       const generator = this.generator(id);
@@ -636,12 +867,32 @@ export class CompositionDirector {
     if (!Number.isFinite(time) || time < 0) {
       throw new RangeError("Composition seek time must be finite and non-negative.");
     }
-    const endpointState = circleEndpointTimelineAt(
+    let endpointState = circleEndpointTimelineAt(
       time,
       this.coreAnimationDuration(),
       this.circleEndpoints,
       this.endpointDurations,
     );
+    let ruleTimelineEffect = null;
+    if (typeof this.currentRule?.seek === "function") {
+      const result = this.currentRule.seek(endpointState.coreTime);
+      if (result === false) {
+        throw new Error(
+          `Composition rule for "${this.currentCompositionName}" could not seek to the restored time.`,
+        );
+      }
+      if (result && typeof result === "object" && !Array.isArray(result)) {
+        ruleTimelineEffect = result.timelineEffect === undefined
+          ? null
+          : requireTimelineEffect(
+            result.timelineEffect,
+            "Composition rule seek timelineEffect",
+          );
+      }
+      if (ruleTimelineEffect !== null) {
+        endpointState = this.applyTimelineEffect(ruleTimelineEffect);
+      }
+    }
     for (const id of this.activeGeneratorIds) {
       const generator = this.generator(id);
       if (
@@ -651,9 +902,11 @@ export class CompositionDirector {
         throw new Error(`Generator "${id}" could not seek to the restored time.`);
       }
     }
-    this.endpointElapsed = time;
-    this.endpointCoreElapsed = endpointState.coreTime;
-    this.endpointState = endpointState;
+    if (ruleTimelineEffect === null) {
+      this.endpointElapsed = time;
+      this.endpointCoreElapsed = endpointState.coreTime;
+      this.endpointState = endpointState;
+    }
     return this;
   }
 
@@ -664,10 +917,13 @@ export class CompositionDirector {
       const state = generator.snapshotProjectState?.();
       if (state !== undefined) generators[id] = state;
     }
-    return {
+    const snapshot = {
       compositionId: this.currentCompositionName,
       generators,
     };
+    const rule = this.currentRule?.snapshotProjectState?.();
+    if (rule !== undefined) snapshot.rule = rule;
+    return snapshot;
   }
 
   restoreProjectState(snapshot) {
@@ -680,12 +936,36 @@ export class CompositionDirector {
       || !this.compositionDefinitions.has(snapshot.compositionId)
     ) throw new Error("Project state refers to an unknown composition.");
     this.use(snapshot.compositionId);
+    if (snapshot.rule !== undefined) {
+      const restoreRule = this.currentRule?.restoreProjectState;
+      if (typeof restoreRule !== "function") {
+        throw new Error(
+          `Project state contains rule state for composition "${snapshot.compositionId}", `
+          + "but its rule cannot restore state.",
+        );
+      }
+      if (restoreRule.call(this.currentRule, snapshot.rule) === false) {
+        throw new Error(
+          `Project state for composition rule "${snapshot.compositionId}" is invalid.`,
+        );
+      }
+      this.syncRuleTimelineSettings();
+      if (typeof this.currentRule.initialTimelineEffect === "function") {
+        this.applyTimelineEffect(this.currentRule.initialTimelineEffect());
+      }
+    }
     const savedGenerators = snapshot.generators;
     if (!savedGenerators || typeof savedGenerators !== "object") return this;
     for (const [id, state] of Object.entries(savedGenerators)) {
       if (!this.generatorDefinitions.has(id)) continue;
       const restore = this.generator(id).restoreProjectState;
-      if (typeof restore === "function" && restore.call(this.generator(id), state) === false) {
+      if (
+        typeof restore === "function"
+        && restore.call(this.generator(id), state, {
+          compositionId: snapshot.compositionId,
+          ruleState: snapshot.rule,
+        }) === false
+      ) {
         throw new Error(`Project state for generator "${id}" is invalid.`);
       }
     }

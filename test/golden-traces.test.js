@@ -60,6 +60,97 @@ function renderTrace(composition, run) {
   ].join("\n");
 }
 
+function authorFrame(viewport, time, dt, frameIndex) {
+  return {
+    dt,
+    compositionDt: dt,
+    time,
+    frameIndex,
+    viewport,
+    pointer: { active: false, x: 0, y: 0 },
+  };
+}
+
+async function setupInteractiveFlockTrace({ director, viewport, dt }) {
+  let time = 0;
+  let frameIndex = 0;
+  director.update(authorFrame(viewport, time, 0, frameIndex));
+
+  const authorGesture = ({ originX, originY, targetX, targetY }) => {
+    const point = (normalizedX, normalizedY) => ({
+      normalizedX,
+      normalizedY,
+      x: normalizedX * viewport.width,
+      y: normalizedY * viewport.height,
+      cssX: normalizedX * viewport.width,
+      cssY: normalizedY * viewport.height,
+    });
+    assert.equal(director.input("pointerdown", {
+      ...point(originX, originY),
+      button: 0,
+    }), true);
+    assert.equal(director.input("pointermove", point(targetX, targetY)), true);
+    assert.equal(director.input("pointerup", point(targetX, targetY)), true);
+  };
+  const playBeat = () => {
+    assert.equal(director.input("take", { action: "play" }), true);
+    for (let previewFrame = 0; previewFrame < 180; previewFrame += 1) {
+      time += dt;
+      frameIndex += 1;
+      director.update(authorFrame(viewport, time, dt, frameIndex));
+    }
+    assert.equal(director.inspect().timeline.rule.mode, "frozen");
+  };
+
+  authorGesture({ originX: 0.25, originY: 0.35, targetX: 0.75, targetY: 0.45 });
+  authorGesture({ originX: 0.78, originY: 0.3, targetX: 0.4, targetY: 0.7 });
+  playBeat();
+  assert.equal(director.input("take", { action: "select", stepId: null }), true);
+  assert.equal(director.input("take", {
+    action: "set-interaction",
+    mode: "picasso",
+  }), true);
+  const pathPoints = [
+    [0.72, 0.72],
+    [0.68, 0.48],
+    [0.52, 0.25],
+    [0.32, 0.25],
+  ];
+  const pathPoint = ([normalizedX, normalizedY]) => ({
+    normalizedX,
+    normalizedY,
+    x: normalizedX * viewport.width,
+    y: normalizedY * viewport.height,
+    cssX: normalizedX * viewport.width,
+    cssY: normalizedY * viewport.height,
+  });
+  assert.equal(director.input("pointerdown", {
+    ...pathPoint(pathPoints[0]),
+    button: 0,
+  }), true);
+  for (const point of pathPoints.slice(1)) {
+    assert.equal(director.input("pointermove", pathPoint(point)), true);
+  }
+  assert.equal(director.input("pointerup", pathPoint(pathPoints.at(-1))), true);
+  playBeat();
+  assert.equal(director.input("take", { action: "enough" }), true);
+
+  const take = director.inspect().timeline.rule;
+  assert.equal(take.mode, "sealed");
+  assert.equal(take.steps.length, 2);
+  assert.deepEqual(take.steps.map(step => step.interaction), ["launcher", "picasso"]);
+  assert.equal(take.steps[0].gestures.length, 2);
+  assert.ok(take.steps[0].gestures.every(gesture => Math.hypot(
+    gesture.directionX,
+    gesture.directionY,
+  ) > 0.999));
+  assert.deepEqual(take.steps[1].path.points, pathPoints.map(([x, y]) => ({ x, y })));
+}
+
+const TRACE_SETUPS = Object.freeze({
+  "interactive-flock": setupInteractiveFlockTrace,
+});
+
 test("every composition has a stable headless trace", async () => {
   if (!existsSync(GOLDEN_DIR)) mkdirSync(GOLDEN_DIR, { recursive: true });
   const update = process.env.UPDATE_GOLDEN === "1";
@@ -70,7 +161,12 @@ test("every composition has a stable headless trace", async () => {
   // baseline for one composition hid the others for several commits.
   const changed = [];
   for (const composition of COMPOSITIONS) {
-    const run = await runFrames({ composition, frames: FRAMES, channels: CHANNELS });
+    const run = await runFrames({
+      composition,
+      frames: FRAMES,
+      channels: CHANNELS,
+      setup: TRACE_SETUPS[composition],
+    });
     const trace = renderTrace(composition, run);
     const path = join(GOLDEN_DIR, `${composition}.trace.txt`);
 

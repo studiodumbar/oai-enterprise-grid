@@ -116,31 +116,125 @@ export class FlockFieldSurface {
 }
 
 export class FlockFieldSource {
-  constructor(flock, options, viewport) {
+  constructor(flock, options, viewport, appearance = {}) {
     this.flock = flock;
     this.surface = new FlockFieldSurface(options, viewport);
+    this.appearanceProbability = appearance.probability ?? 1;
+    this.appearanceUnit = appearance.unit ?? (() => 0);
+    if (
+      !Number.isFinite(this.appearanceProbability)
+      || this.appearanceProbability < 0
+      || this.appearanceProbability > 1
+    ) {
+      throw new RangeError(
+        "flock.grid.appearanceProbability must be between zero and one.",
+      );
+    }
+    if (typeof this.appearanceUnit !== "function") {
+      throw new TypeError("Flock cell appearance unit sampler must be a function.");
+    }
+    this.resetAppearanceState();
+    debug.config(
+      "flock-cell-appearance probability=%.3f",
+      this.appearanceProbability,
+    );
   }
 
   resize(viewport) {
     this.surface.resize(viewport);
+    this.resetAppearanceState();
+  }
+
+  resetAppearanceState(count = 0) {
+    this.appearingCells = new Uint8Array(count);
+    this.previouslyInfluencedCells = new Uint8Array(count);
+    this.influenceCounts = new Uint32Array(count);
+    this.appearanceEventIndex = 0;
+  }
+
+  ensureAppearanceState(count) {
+    if (this.appearingCells.length !== count) this.resetAppearanceState(count);
+  }
+
+  snapshotAppearanceState() {
+    return {
+      appearingCells: Array.from(this.appearingCells),
+      previouslyInfluencedCells: Array.from(this.previouslyInfluencedCells),
+      influenceCounts: Array.from(this.influenceCounts),
+      appearanceEventIndex: this.appearanceEventIndex,
+    };
+  }
+
+  restoreAppearanceState(snapshot) {
+    const length = this.appearingCells.length;
+    if (
+      !snapshot
+      || snapshot.appearingCells?.length !== length
+      || snapshot.previouslyInfluencedCells?.length !== length
+      || snapshot.influenceCounts?.length !== length
+    ) return false;
+    this.appearingCells.set(snapshot.appearingCells);
+    this.previouslyInfluencedCells.set(snapshot.previouslyInfluencedCells);
+    this.influenceCounts.set(snapshot.influenceCounts);
+    this.appearanceEventIndex = snapshot.appearanceEventIndex ?? 0;
+    return true;
   }
 
   write(field) {
     this.surface.draw(this.flock);
     const { columns, rows } = field.layout;
+    this.ensureAppearanceState(columns * rows);
     const { cellSize, offsetX, offsetY } = field.layout;
     const viewportWidth = this.surface.viewport.width;
     const viewportHeight = this.surface.viewport.height;
+    let started = 0;
+    let selected = 0;
+    let ended = 0;
+    let active = 0;
     for (let row = 0; row < rows; row += 1) {
       for (let column = 0; column < columns; column += 1) {
+        const index = row * columns + column;
         const energy = this.surface.maximumInRect(
           (offsetX + column * cellSize) / viewportWidth,
           (offsetY + row * cellSize) / viewportHeight,
           (offsetX + (column + 1) * cellSize) / viewportWidth,
           (offsetY + (row + 1) * cellSize) / viewportHeight,
         );
-        field.maxCell(row * columns + column, energy);
+        const isInfluenced = energy > 0;
+        const wasInfluenced = this.previouslyInfluencedCells[index] === 1;
+        if (isInfluenced && !wasInfluenced) {
+          const count = this.influenceCounts[index] + 1;
+          this.influenceCounts[index] = count;
+          this.appearingCells[index] = Number(
+            this.appearanceProbability === 1
+            || (
+              this.appearanceProbability > 0
+              && this.appearanceUnit(index, count) < this.appearanceProbability
+            ),
+          );
+          started += 1;
+          selected += this.appearingCells[index];
+        } else if (!isInfluenced && wasInfluenced) {
+          this.appearingCells[index] = 0;
+          ended += 1;
+        }
+        this.previouslyInfluencedCells[index] = Number(isInfluenced);
+        if (isInfluenced && this.appearingCells[index] === 1) {
+          field.maxCell(index, energy);
+          active += 1;
+        }
       }
+    }
+    if (started > 0 || ended > 0) {
+      this.appearanceEventIndex += started + ended;
+      debug.cells(
+        "flock-cell-appearance event=%d started=%d selected=%d ended=%d active=%d",
+        this.appearanceEventIndex,
+        started,
+        selected,
+        ended,
+        active,
+      );
     }
   }
 

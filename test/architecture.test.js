@@ -260,6 +260,18 @@ test("none transition maps field energy onto circle subdivision levels", () => {
   assert.equal(states.opacity[0], 1);
 });
 
+test("none transition limits energy mapping to declared subdivision levels", () => {
+  const states = new CellStateBuffer(4);
+  const none = new NoneTransition({ subdivisionLevels: [1, 2, 3] });
+  none.resize(4);
+
+  [0, 0.34, 0.67, 1].forEach((energy, index) => {
+    none.updateCell(index, { energy }, states);
+  });
+
+  assert.deepEqual([...states.level], [1, 2, 3, 3]);
+});
+
 test("grid fields mix accumulated points and direct sources without p5", () => {
   const layout = {
     columns: 1,
@@ -551,11 +563,11 @@ test("the configured flock composition runs through the complete adapter", () =>
 
   director.use("flock");
   assert.deepEqual(settings.flock.timing, {
-    bodyDurationSeconds: 10,
-    beatCount: 4,
-    beatSeconds: 2.5,
+    bodyDurationSeconds: 30,
+    beatCount: 10,
+    beatSeconds: 3,
   });
-  assert.deepEqual(director.endpointDurations, { start: 2.5, end: 2.5 });
+  assert.deepEqual(director.endpointDurations, { start: 3, end: 3 });
   director.update({
     dt: 0,
     time: 0,
@@ -584,8 +596,8 @@ test("the configured flock composition runs through the complete adapter", () =>
   assert.equal(state.flicker.enabled, SETTINGS.flock.flicker.enabled);
   assert.equal(state.flicker.mode, SETTINGS.flock.flicker.mode);
   assert.equal(state.timing.beatIndex, 0);
-  assert.equal(flockGenerator.animationDuration(), 10);
-  assert.equal(director.animationDuration(), 15);
+  assert.equal(flockGenerator.animationDuration(), 30);
+  assert.equal(director.animationDuration(), 36);
   assert.equal(
     state.grid.energy.length,
     state.grid.columns * state.grid.rows,

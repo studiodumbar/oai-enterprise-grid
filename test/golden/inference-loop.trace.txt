@@ -18,35 +18,43 @@
 [cg:transition] f=0321 scene=state mode=aurora targets=264 sources=327 duration=0.160 key=inference:0:commit:7x3 pass=5 sweep=bottom-up
 [cg:transition] f=0338 scene=state mode=aurora targets=264 sources=264 duration=0.160 key=inference:0:echo:7x3 pass=6 sweep=top-down
 [cg:transition] f=0350 scene=state mode=aurora targets=264 sources=264 duration=0.160 key=inference:0:settle:7x3 pass=7 sweep=bottom-up
-[cg:timeline] f=0360 phase=end cycle=0 duration=2.000 paused=yes
+[cg:timeline] f=0360 phase=end cycle=0 duration=0.500 paused=yes
 [cg:transition] f=0360 endpoint=end mode=dijkstra grid=parent cycle=0 starts=12 center=10 paths=12 cells=17 changing=16 trail=1.000 cost=27.000
 [cg:transition] f=0360 endpoint=end mode=dijkstra stage=path cycle=0
-[cg:transition] f=0364 endpoint=end mode=dijkstra stage=blink cycle=0
-[cg:transition] f=0388 endpoint=end mode=dijkstra stage=subdivide cycle=0
-[cg:transition] f=0468 endpoint=end mode=dijkstra stage=center cycle=0
-[cg:timeline] f=0480 phase=start cycle=1 duration=2.000 paused=no
-[cg:transition] f=0480 endpoint=start mode=text cycle=1 targets=305 sources=1 padded=0 subdivision=1 unpaired=304
-[cg:transition] f=0480 text hold clamped authored=3 requested=3.000 applied=1.200 phase=2.000
-[cg:transition] f=0480 overlay=intro mode=text
-[cg:timeline] f=0481 phase=start cycle=1 duration=2.000 paused=yes
-[cg:timeline] f=0599 phase=core cycle=1 duration=4.000 paused=no
-[cg:transition] f=0599 overlay=- mode=-
-[cg:transition] f=0638 scene=state mode=aurora targets=299 sources=305 duration=0.160 key=inference:1:parallel:1:7x3 pass=8 sweep=top-down
-[cg:transition] f=0676 scene=state mode=aurora targets=126 sources=299 duration=0.160 key=inference:1:parallel:2:7x3 pass=9 sweep=bottom-up
-[cg:transition] f=0715 scene=state mode=aurora targets=362 sources=126 duration=0.160 key=inference:1:parallel:3:7x3 pass=10 sweep=top-down
-[cg:transition] f=0753 scene=state mode=aurora targets=410 sources=362 duration=0.160 key=inference:1:candidates:7x3 pass=11 sweep=bottom-up
-[cg:transition] f=0787 scene=state mode=aurora targets=410 sources=410 duration=0.160 key=inference:1:selection:7x3 pass=12 sweep=top-down
-[cg:transition] f=0801 scene=state mode=aurora targets=347 sources=410 duration=0.160 key=inference:1:commit:7x3 pass=13 sweep=bottom-up
-[cg:transition] f=0818 scene=state mode=aurora targets=347 sources=347 duration=0.160 key=inference:1:echo:7x3 pass=14 sweep=top-down
-[cg:transition] f=0830 scene=state mode=aurora targets=347 sources=347 duration=0.160 key=inference:1:settle:7x3 pass=15 sweep=bottom-up
-[cg:timeline] f=0839 phase=end cycle=1 duration=2.000 paused=yes
-[cg:transition] f=0839 endpoint=end mode=dijkstra grid=parent cycle=1 starts=14 center=10 paths=14 cells=17 changing=16 trail=1.000 cost=33.000
-[cg:transition] f=0839 endpoint=end mode=dijkstra stage=loading cycle=1
-[cg:transition] f=0840 endpoint=end mode=dijkstra stage=path cycle=1
-[cg:transition] f=0844 endpoint=end mode=dijkstra stage=blink cycle=1
-[cg:transition] f=0868 endpoint=end mode=dijkstra stage=subdivide cycle=1
+[cg:transition] f=0361 endpoint=end mode=dijkstra stage=blink cycle=0
+[cg:transition] f=0367 endpoint=end mode=dijkstra stage=subdivide cycle=0
+[cg:transition] f=0387 endpoint=end mode=dijkstra stage=center cycle=0
+[cg:timeline] f=0390 phase=start cycle=1 duration=2.000 paused=no
+[cg:transition] f=0390 endpoint=start mode=text cycle=1 targets=305 sources=1 padded=0 subdivision=1 unpaired=304
+[cg:transition] f=0390 text hold clamped authored=3 requested=3.000 applied=1.200 phase=2.000
+[cg:transition] f=0390 overlay=intro mode=text
+[cg:timeline] f=0391 phase=start cycle=1 duration=2.000 paused=yes
+[cg:timeline] f=0509 phase=core cycle=1 duration=4.000 paused=no
+[cg:transition] f=0509 overlay=- mode=-
+[cg:transition] f=0548 scene=state mode=aurora targets=299 sources=305 duration=0.160 key=inference:1:parallel:1:7x3 pass=8 sweep=top-down
+[cg:transition] f=0586 scene=state mode=aurora targets=126 sources=299 duration=0.160 key=inference:1:parallel:2:7x3 pass=9 sweep=bottom-up
+[cg:transition] f=0625 scene=state mode=aurora targets=362 sources=126 duration=0.160 key=inference:1:parallel:3:7x3 pass=10 sweep=top-down
+[cg:transition] f=0663 scene=state mode=aurora targets=410 sources=362 duration=0.160 key=inference:1:candidates:7x3 pass=11 sweep=bottom-up
+[cg:transition] f=0697 scene=state mode=aurora targets=410 sources=410 duration=0.160 key=inference:1:selection:7x3 pass=12 sweep=top-down
+[cg:transition] f=0711 scene=state mode=aurora targets=347 sources=410 duration=0.160 key=inference:1:commit:7x3 pass=13 sweep=bottom-up
+[cg:transition] f=0728 scene=state mode=aurora targets=347 sources=347 duration=0.160 key=inference:1:echo:7x3 pass=14 sweep=top-down
+[cg:transition] f=0740 scene=state mode=aurora targets=347 sources=347 duration=0.160 key=inference:1:settle:7x3 pass=15 sweep=bottom-up
+[cg:timeline] f=0749 phase=end cycle=1 duration=0.500 paused=yes
+[cg:transition] f=0749 endpoint=end mode=dijkstra grid=parent cycle=1 starts=14 center=10 paths=14 cells=17 changing=16 trail=1.000 cost=33.000
+[cg:transition] f=0749 endpoint=end mode=dijkstra stage=loading cycle=1
+[cg:transition] f=0750 endpoint=end mode=dijkstra stage=path cycle=1
+[cg:transition] f=0751 endpoint=end mode=dijkstra stage=blink cycle=1
+[cg:transition] f=0757 endpoint=end mode=dijkstra stage=subdivide cycle=1
+[cg:transition] f=0776 endpoint=end mode=dijkstra stage=center cycle=1
+[cg:timeline] f=0779 phase=start cycle=2 duration=2.000 paused=no
+[cg:transition] f=0779 endpoint=start mode=text cycle=2 targets=329 sources=1 padded=0 subdivision=1 unpaired=328
+[cg:transition] f=0779 text hold clamped authored=3 requested=3.000 applied=1.200 phase=2.000
+[cg:transition] f=0779 overlay=intro mode=text
+[cg:timeline] f=0780 phase=start cycle=2 duration=2.000 paused=yes
+[cg:timeline] f=0899 phase=core cycle=2 duration=4.000 paused=no
+[cg:transition] f=0899 overlay=- mode=-
 
 # draw volume
-blankFrames=24
+blankFrames=12
 firstDrawnFrame=0
-totalFill=187162
+totalFill=198960

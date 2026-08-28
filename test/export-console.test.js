@@ -26,6 +26,7 @@ function createHarness(overrides = {}) {
     flickerMode: overrides.flickerMode ?? "block-drop",
     flickerScope: overrides.flickerScope ?? "canvas",
     previewRepeats: overrides.previewRepeats ?? 3,
+    coreDuration: overrides.coreDuration ?? 24,
     exportedPreviews: [],
     exportOptions: [],
     panelVisible: overrides.panelVisible ?? true,
@@ -37,6 +38,7 @@ function createHarness(overrides = {}) {
   };
   const cg = createExportConsole({
     state: stub.state,
+    prepareExport: overrides.prepareExport,
     runExport: async options => {
       stub.exportOptions.push(options);
       exported.push({ composition: stub.composition, format: stub.state.exportFormat });
@@ -53,6 +55,11 @@ function createHarness(overrides = {}) {
     activeComposition: () => stub.composition,
     useComposition: id => {
       stub.composition = id;
+    },
+    coreDuration: () => stub.coreDuration,
+    setCoreDuration: seconds => {
+      stub.coreDuration = seconds;
+      return stub.coreDuration;
     },
     previewComposition: "base",
     listFlickerModes: () => FLICKER_MODES,
@@ -200,6 +207,24 @@ test("export --all walks canonical compositions and returns to the starting one"
   assert.equal(result.ok, true);
 });
 
+test("PNG-sequence batches prepare one directory session and reuse it", async () => {
+  const session = { pngSequenceDirectory: Promise.resolve({}) };
+  let preparations = 0;
+  const { cg, stub } = createHarness({
+    prepareExport: () => {
+      preparations += 1;
+      return session;
+    },
+  });
+
+  const result = await cg("export --all --png-sequence");
+
+  assert.equal(result.ok, true);
+  assert.equal(preparations, 1);
+  assert.equal(stub.exportOptions.length, CANONICAL.length);
+  assert.ok(stub.exportOptions.every(options => options.session === session));
+});
+
 test("export reports per-composition failures without stopping the batch", async () => {
   const { cg, stub } = createHarness({ failures: { voronoi: "No finite cycle." } });
   const result = await cg("export --all --mp4");
@@ -343,6 +368,7 @@ test("list, status, use, and help report the current runtime", async () => {
   const status = await cg("status");
   assert.equal(status.composition, "voronoi");
   assert.equal(status.panelVisible, true);
+  assert.equal(status.coreDuration, 24);
   assert.equal(status.export.exportFormat, stub.state.exportFormat);
 
   const help = await cg("help");
@@ -351,6 +377,26 @@ test("list, status, use, and help report the current runtime", async () => {
   const unknown = await cg("frobnicate");
   assert.equal(unknown.ok, false);
   assert.match(unknown.error, /Unknown command "frobnicate"/);
+});
+
+test("duration reads and changes the active composition core loop", async () => {
+  const { cg, stub } = createHarness({ coreDuration: 24 });
+
+  assert.deepEqual(await cg("duration"), {
+    ok: true,
+    composition: "game-of-life",
+    coreDuration: 24,
+  });
+  assert.deepEqual(await cg`duration ${12.5}`, {
+    ok: true,
+    composition: "game-of-life",
+    coreDuration: 12.5,
+  });
+  assert.equal(stub.coreDuration, 12.5);
+  assert.equal((await cg.duration()).coreDuration, 12.5);
+  assert.match((await cg("duration 0")).error, /finite positive number/);
+  assert.match((await cg("duration twelve")).error, /finite positive number/);
+  assert.match((await cg("duration 12 14")).error, /exactly one value/);
 });
 
 test("the console accepts tagged-template calls and helper methods", async () => {

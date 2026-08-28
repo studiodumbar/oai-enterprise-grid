@@ -1,14 +1,114 @@
 # composition: flock
 # frames: 900
 
-[cg:timeline] f=0000 phase=start cycle=0 duration=2.000 paused=yes
+[cg:timeline] f=0000 phase=start cycle=0 duration=3.000 paused=yes
 [cg:plan] f=0000 enter=flockGrid
 [cg:plan] f=0000 render=[flockGrid@1.00]
-[cg:transition] f=0000 endpoint=start mode=text cycle=0 targets=77 sources=1 padded=0 subdivision=1 unpaired=76
-[cg:transition] f=0000 text hold clamped authored=3 requested=3.000 applied=1.200 phase=2.000
-[cg:timeline] f=0120 phase=core cycle=0 duration=- paused=no
+[cg:transition] f=0000 endpoint=start mode=text cycle=0 targets=64 sources=1 padded=0 subdivision=1 unpaired=63
+[cg:transition] f=0000 text hold clamped authored=3 requested=3.000 applied=1.800 phase=3.000
+[cg:transition] f=0000 overlay=intro mode=text
+[cg:transition] f=0000 text hold clamped authored=3 requested=3.000 applied=1.800 phase=3.000
+[cg:timeline] f=0180 phase=core cycle=0 duration=30.000 paused=no
+[cg:transition] f=0180 overlay=- mode=-
+[cg:transition] f=0189 flock-flicker cycle=0 event=1 trigger=disappearing-cell started=1 selected=0 ended=0 active=0
+[cg:transition] f=0190 flock-flicker cycle=0 event=2 trigger=disappearing-cell started=1 selected=0 ended=0 active=0
+[cg:transition] f=0193 flock-flicker cycle=0 event=4 trigger=disappearing-cell started=1 selected=0 ended=1 active=0
+[cg:transition] f=0195 flock-flicker cycle=0 event=6 trigger=disappearing-cell started=2 selected=0 ended=0 active=0
+[cg:transition] f=0200 flock-flicker cycle=0 event=7 trigger=disappearing-cell started=1 selected=0 ended=0 active=0
+[cg:transition] f=0201 flock-flicker cycle=0 event=9 trigger=disappearing-cell started=2 selected=0 ended=0 active=0
+[cg:transition] f=0208 flock-flicker cycle=0 event=10 trigger=disappearing-cell started=1 selected=0 ended=0 active=0
+[cg:transition] f=0209 flock-flicker cycle=0 event=11 trigger=disappearing-cell started=1 selected=0 ended=0 active=0
+[cg:transition] f=0217 flock-flicker cycle=0 event=12 trigger=disappearing-cell started=1 selected=0 ended=0 active=0
+[cg:transition] f=0219 flock-flicker cycle=0 event=13 trigger=disappearing-cell started=1 selected=0 ended=0 active=0
+[cg:transition] f=0225 flock-flicker cycle=0 event=14 trigger=disappearing-cell started=1 selected=0 ended=0 active=0
+[cg:transition] f=0227 flock-flicker cycle=0 event=16 trigger=disappearing-cell started=2 selected=0 ended=0 active=0
+[cg:transition] f=0229 flock-flicker cycle=0 event=17 trigger=disappearing-cell started=1 selected=0 ended=0 active=0
+[cg:transition] f=0243 flock-flicker cycle=0 event=18 trigger=disappearing-cell started=1 selected=1 ended=0 active=1
+[cg:transition] f=0245 flock-flicker cycle=0 event=19 trigger=disappearing-cell started=1 selected=0 ended=0 active=1
+[cg:transition] f=0246 flock-flicker cycle=0 event=20 trigger=disappearing-cell started=1 selected=1 ended=0 active=2
+[cg:transition] f=0254 flock-flicker cycle=0 event=21 trigger=disappearing-cell started=1 selected=1 ended=0 active=3
+[cg:transition] f=0256 flock-flicker cycle=0 event=22 trigger=disappearing-cell started=1 selected=0 ended=0 active=3
+[cg:transition] f=0261 flock-flicker cycle=0 event=23 trigger=disappearing-cell started=1 selected=0 ended=0 active=3
+[cg:transition] f=0269 flock-flicker cycle=0 event=24 trigger=disappearing-cell started=1 selected=0 ended=0 active=3
+[cg:transition] f=0271 flock-flicker cycle=0 event=25 trigger=disappearing-cell started=1 selected=1 ended=0 active=4
+[cg:transition] f=0274 flock-flicker cycle=0 event=27 trigger=disappearing-cell started=2 selected=1 ended=0 active=5
+[cg:transition] f=0288 flock-flicker cycle=0 event=28 trigger=disappearing-cell started=1 selected=1 ended=0 active=6
+[cg:transition] f=0289 flock-flicker cycle=0 event=29 trigger=disappearing-cell started=1 selected=0 ended=0 active=6
+[cg:transition] f=0290 flock-flicker cycle=0 event=31 trigger=disappearing-cell started=2 selected=1 ended=0 active=7
+[cg:transition] f=0294 flock-flicker cycle=0 event=32 trigger=disappearing-cell started=1 selected=0 ended=0 active=7
+[cg:transition] f=0298 flock-flicker cycle=0 event=33 trigger=disappearing-cell started=1 selected=0 ended=0 active=7
+[cg:transition] f=0313 flock-flicker cycle=0 event=34 trigger=disappearing-cell started=1 selected=0 ended=0 active=7
+[cg:transition] f=0365 flock-flicker cycle=0 event=35 trigger=disappearing-cell started=1 selected=0 ended=0 active=7
+[cg:transition] f=0366 flock-flicker cycle=0 event=36 trigger=disappearing-cell started=0 selected=0 ended=1 active=7
+[cg:transition] f=0371 flock-flicker cycle=0 event=37 trigger=disappearing-cell started=1 selected=0 ended=0 active=7
+[cg:transition] f=0372 flock-flicker cycle=0 event=38 trigger=disappearing-cell started=1 selected=1 ended=0 active=8
+[cg:transition] f=0375 flock-flicker cycle=0 event=39 trigger=disappearing-cell started=1 selected=0 ended=0 active=8
+[cg:transition] f=0382 flock-flicker cycle=0 event=40 trigger=disappearing-cell started=1 selected=1 ended=0 active=9
+[cg:transition] f=0385 flock-flicker cycle=0 event=41 trigger=disappearing-cell started=1 selected=0 ended=0 active=9
+[cg:transition] f=0393 flock-flicker cycle=0 event=42 trigger=disappearing-cell started=1 selected=0 ended=0 active=9
+[cg:transition] f=0394 flock-flicker cycle=0 event=44 trigger=disappearing-cell started=2 selected=1 ended=0 active=10
+[cg:transition] f=0396 flock-flicker cycle=0 event=45 trigger=disappearing-cell started=1 selected=1 ended=0 active=11
+[cg:transition] f=0406 flock-flicker cycle=0 event=46 trigger=disappearing-cell started=1 selected=1 ended=0 active=12
+[cg:transition] f=0410 flock-flicker cycle=0 event=48 trigger=disappearing-cell started=2 selected=1 ended=0 active=13
+[cg:transition] f=0411 flock-flicker cycle=0 event=49 trigger=disappearing-cell started=1 selected=1 ended=0 active=14
+[cg:transition] f=0413 flock-flicker cycle=0 event=51 trigger=disappearing-cell started=2 selected=0 ended=0 active=14
+[cg:transition] f=0425 flock-flicker cycle=0 event=52 trigger=disappearing-cell started=1 selected=1 ended=0 active=15
+[cg:transition] f=0427 flock-flicker cycle=0 event=53 trigger=disappearing-cell started=1 selected=1 ended=0 active=16
+[cg:transition] f=0434 flock-flicker cycle=0 event=54 trigger=disappearing-cell started=1 selected=0 ended=0 active=16
+[cg:transition] f=0436 flock-flicker cycle=0 event=55 trigger=disappearing-cell started=1 selected=0 ended=0 active=16
+[cg:transition] f=0437 flock-flicker cycle=0 event=56 trigger=disappearing-cell started=1 selected=1 ended=0 active=17
+[cg:transition] f=0445 flock-flicker cycle=0 event=57 trigger=disappearing-cell started=1 selected=0 ended=0 active=17
+[cg:transition] f=0449 flock-flicker cycle=0 event=58 trigger=disappearing-cell started=1 selected=0 ended=0 active=17
+[cg:transition] f=0452 flock-flicker cycle=0 event=59 trigger=disappearing-cell started=1 selected=1 ended=0 active=18
+[cg:transition] f=0455 flock-flicker cycle=0 event=60 trigger=disappearing-cell started=1 selected=0 ended=0 active=18
+[cg:transition] f=0474 flock-flicker cycle=0 event=61 trigger=disappearing-cell started=1 selected=0 ended=0 active=18
+[cg:transition] f=0476 flock-flicker cycle=0 event=62 trigger=disappearing-cell started=1 selected=0 ended=0 active=18
+[cg:transition] f=0506 flock-flicker cycle=0 event=63 trigger=disappearing-cell started=1 selected=0 ended=0 active=18
+[cg:transition] f=0509 flock-flicker cycle=0 event=64 trigger=disappearing-cell started=1 selected=0 ended=0 active=18
+[cg:transition] f=0556 flock-flicker cycle=0 event=65 trigger=disappearing-cell started=1 selected=1 ended=0 active=19
+[cg:transition] f=0558 flock-flicker cycle=0 event=66 trigger=disappearing-cell started=1 selected=1 ended=0 active=20
+[cg:transition] f=0560 flock-flicker cycle=0 event=67 trigger=disappearing-cell started=1 selected=0 ended=0 active=20
+[cg:transition] f=0565 flock-flicker cycle=0 event=68 trigger=disappearing-cell started=1 selected=0 ended=0 active=20
+[cg:transition] f=0567 flock-flicker cycle=0 event=69 trigger=disappearing-cell started=1 selected=0 ended=0 active=20
+[cg:transition] f=0572 flock-flicker cycle=0 event=70 trigger=disappearing-cell started=1 selected=0 ended=0 active=20
+[cg:transition] f=0577 flock-flicker cycle=0 event=71 trigger=disappearing-cell started=1 selected=0 ended=0 active=20
+[cg:transition] f=0584 flock-flicker cycle=0 event=72 trigger=disappearing-cell started=1 selected=0 ended=0 active=20
+[cg:transition] f=0587 flock-flicker cycle=0 event=73 trigger=disappearing-cell started=1 selected=0 ended=0 active=20
+[cg:transition] f=0588 flock-flicker cycle=0 event=74 trigger=disappearing-cell started=1 selected=0 ended=0 active=20
+[cg:transition] f=0591 flock-flicker cycle=0 event=75 trigger=disappearing-cell started=1 selected=0 ended=0 active=20
+[cg:transition] f=0600 flock-flicker cycle=0 event=77 trigger=disappearing-cell started=2 selected=1 ended=0 active=21
+[cg:transition] f=0607 flock-flicker cycle=0 event=78 trigger=disappearing-cell started=1 selected=0 ended=0 active=21
+[cg:transition] f=0610 flock-flicker cycle=0 event=79 trigger=disappearing-cell started=1 selected=0 ended=0 active=21
+[cg:transition] f=0619 flock-flicker cycle=0 event=80 trigger=disappearing-cell started=1 selected=0 ended=0 active=21
+[cg:transition] f=0658 flock-flicker cycle=0 event=81 trigger=disappearing-cell started=1 selected=1 ended=0 active=22
+[cg:transition] f=0659 flock-flicker cycle=0 event=83 trigger=disappearing-cell started=2 selected=1 ended=0 active=23
+[cg:transition] f=0719 flock-flicker cycle=0 event=84 trigger=disappearing-cell started=0 selected=0 ended=1 active=23
+[cg:transition] f=0721 flock-flicker cycle=0 event=85 trigger=disappearing-cell started=0 selected=0 ended=1 active=23
+[cg:transition] f=0730 flock-flicker cycle=0 event=87 trigger=disappearing-cell started=1 selected=1 ended=1 active=24
+[cg:transition] f=0737 flock-flicker cycle=0 event=88 trigger=disappearing-cell started=1 selected=0 ended=0 active=24
+[cg:transition] f=0740 flock-flicker cycle=0 event=89 trigger=disappearing-cell started=1 selected=0 ended=0 active=24
+[cg:transition] f=0744 flock-flicker cycle=0 event=90 trigger=disappearing-cell started=1 selected=0 ended=0 active=24
+[cg:transition] f=0746 flock-flicker cycle=0 event=91 trigger=disappearing-cell started=1 selected=0 ended=0 active=24
+[cg:transition] f=0750 flock-flicker cycle=0 event=92 trigger=disappearing-cell started=1 selected=0 ended=0 active=24
+[cg:transition] f=0755 flock-flicker cycle=0 event=93 trigger=disappearing-cell started=1 selected=0 ended=0 active=24
+[cg:transition] f=0757 flock-flicker cycle=0 event=94 trigger=disappearing-cell started=1 selected=0 ended=0 active=24
+[cg:transition] f=0760 flock-flicker cycle=0 event=95 trigger=disappearing-cell started=1 selected=0 ended=0 active=24
+[cg:transition] f=0761 flock-flicker cycle=0 event=96 trigger=disappearing-cell started=1 selected=0 ended=0 active=24
+[cg:transition] f=0766 flock-flicker cycle=0 event=97 trigger=disappearing-cell started=1 selected=1 ended=0 active=25
+[cg:transition] f=0768 flock-flicker cycle=0 event=98 trigger=disappearing-cell started=1 selected=0 ended=0 active=25
+[cg:transition] f=0779 flock-flicker cycle=0 event=100 trigger=disappearing-cell started=2 selected=0 ended=0 active=25
+[cg:transition] f=0782 flock-flicker cycle=0 event=101 trigger=disappearing-cell started=1 selected=0 ended=0 active=25
+[cg:transition] f=0786 flock-flicker cycle=0 event=102 trigger=disappearing-cell started=1 selected=0 ended=0 active=25
+[cg:transition] f=0790 flock-flicker cycle=0 event=103 trigger=disappearing-cell started=1 selected=0 ended=0 active=25
+[cg:transition] f=0791 flock-flicker cycle=0 event=104 trigger=disappearing-cell started=1 selected=0 ended=0 active=25
+[cg:transition] f=0801 flock-flicker cycle=0 event=105 trigger=disappearing-cell started=1 selected=0 ended=0 active=25
+[cg:transition] f=0807 flock-flicker cycle=0 event=106 trigger=disappearing-cell started=1 selected=1 ended=0 active=26
+[cg:transition] f=0821 flock-flicker cycle=0 event=107 trigger=disappearing-cell started=1 selected=0 ended=0 active=26
+[cg:transition] f=0826 flock-flicker cycle=0 event=108 trigger=disappearing-cell started=1 selected=0 ended=0 active=26
+[cg:transition] f=0839 flock-flicker cycle=0 event=111 trigger=disappearing-cell started=3 selected=1 ended=0 active=27
+[cg:transition] f=0842 flock-flicker cycle=0 event=113 trigger=disappearing-cell started=2 selected=0 ended=0 active=27
 
 # draw volume
 blankFrames=0
 firstDrawnFrame=0
-totalFill=69300
+totalFill=273455

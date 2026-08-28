@@ -9,7 +9,7 @@ export const GLOBAL_CONFIG = {
   },
 
   ui: {
-    showExportPanel: false,
+    showExportPanel: true,
     noisePreview: false,
     flockPreview: false,
   },
@@ -33,7 +33,7 @@ export const GLOBAL_CONFIG = {
     // game-of-life
     // voronoi,
     // noise-grid
-    active: "mold",
+    active: "interactive-flock",
     // Legacy phase defaults stay flat while compositions are migrated one by
     // one. A migrated composition overrides them through circleEndpoints.
     startWithCircle: true,
@@ -47,7 +47,7 @@ export const GLOBAL_CONFIG = {
       // Every finite composition uses the shared path-to-centre outro unless
       // its local settings select another supported endpoint mode.
       end: {
-        enabled: true,
+        enabled: false,
         mode: "dijkstra",
       },
       // Shared mode defaults. Per-composition values override these by key.

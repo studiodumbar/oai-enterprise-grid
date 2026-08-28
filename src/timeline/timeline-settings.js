@@ -20,6 +20,22 @@ function requireFinitePositive(value, label) {
  */
 export function resolveTimelineSettings(settings, label = "timing") {
   requireObject(settings, label);
+  const mode = settings.mode ?? "fixed-body";
+  if (mode !== "fixed-body" && mode !== "fixed-beat") {
+    throw new RangeError(`${label}.mode must be "fixed-body" or "fixed-beat".`);
+  }
+  if (mode === "fixed-beat") {
+    if (settings.bodyDurationSeconds !== undefined || settings.beatCount !== undefined) {
+      throw new Error(
+        `${label} fixed-beat timing cannot also declare bodyDurationSeconds or beatCount.`,
+      );
+    }
+    const beatSeconds = requireFinitePositive(
+      settings.beatSeconds,
+      `${label}.beatSeconds`,
+    );
+    return Object.freeze({ mode, beatSeconds });
+  }
   const bodyDurationSeconds = requireFinitePositive(
     settings.bodyDurationSeconds,
     `${label}.bodyDurationSeconds`,

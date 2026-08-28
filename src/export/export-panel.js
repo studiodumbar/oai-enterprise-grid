@@ -44,7 +44,7 @@ function numberInput(value, { min = 1, max = MAX_EXPORT_DIMENSION, step = 1 } = 
   return input;
 }
 
-export function createExportPanel({ state, onExport, onStateChange } = {}) {
+export function createExportPanel({ state, onExport, onExportPreset, onStateChange } = {}) {
   const root = document.createElement("aside");
   root.id = "export-panel";
   root.setAttribute("aria-label", "Export controls");
@@ -96,6 +96,12 @@ export function createExportPanel({ state, onExport, onStateChange } = {}) {
   button.className = "export-button";
   button.textContent = "Export";
 
+  const presetButton = document.createElement("button");
+  presetButton.type = "button";
+  presetButton.className = "export-button export-preset-button";
+  presetButton.textContent = "Export preview set";
+  presetButton.title = "4K PNG sequences in separate folders and 1080p MP4s in 16:9 and 2:1; 60 fps with embedded state";
+
   body.append(
     row("Workflow", mode, "mode"),
     row("Format", format, "format"),
@@ -108,6 +114,7 @@ export function createExportPanel({ state, onExport, onStateChange } = {}) {
     row("Embed state", metadata, "metadata"),
     progress,
     button,
+    presetButton,
   );
 
   const rows = Object.fromEntries(
@@ -179,6 +186,7 @@ export function createExportPanel({ state, onExport, onStateChange } = {}) {
   transparent.addEventListener("change", () => { state.transparentBg = transparent.checked; emit(); });
   metadata.addEventListener("change", () => { state.embedProjectState = metadata.checked; emit(); });
   button.addEventListener("click", () => onExport?.());
+  presetButton.addEventListener("click", () => onExportPreset?.("preview"));
 
   const collapse = root.querySelector(".export-collapse");
   collapse.addEventListener("click", () => {
@@ -203,5 +211,5 @@ export function createExportPanel({ state, onExport, onStateChange } = {}) {
   }
 
   sync();
-  return { root, sync, setLocked, setProgress, button };
+  return { root, sync, setLocked, setProgress, button, presetButton };
 }

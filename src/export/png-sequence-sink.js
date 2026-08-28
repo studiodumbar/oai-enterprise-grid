@@ -21,7 +21,8 @@ async function writeFile(directory, name, data) {
 export async function createPngSequenceSink({
   prefix,
   frameCount,
-  windowRef = window,
+  directory,
+  windowRef = globalThis.window,
   download,
 } = {}) {
   if (typeof prefix !== "string" || prefix.length === 0) {
@@ -30,12 +31,15 @@ export async function createPngSequenceSink({
   if (!Number.isInteger(frameCount) || frameCount <= 0) {
     throw new RangeError("PNG-sequence frameCount must be a positive integer.");
   }
-  if (typeof windowRef?.showDirectoryPicker === "function") {
-    const directory = await windowRef.showDirectoryPicker({ mode: "readwrite" });
+  const selectedDirectory = directory
+    ?? (typeof windowRef?.showDirectoryPicker === "function"
+      ? await windowRef.showDirectoryPicker({ mode: "readwrite" })
+      : null);
+  if (selectedDirectory) {
     return {
       kind: "directory",
       async write(index, data) {
-        await writeFile(directory, sequenceFrameName(prefix, index, frameCount), data);
+        await writeFile(selectedDirectory, sequenceFrameName(prefix, index, frameCount), data);
       },
       async close() {},
     };

@@ -818,6 +818,7 @@ test("the shipped catalog registers every mode and each composition selects one"
     "flock",
     "gameOfLife",
     "inferenceLoop",
+    "interactiveFlock",
     "interactiveGrid",
     "lTree",
     "mold",

@@ -14,6 +14,7 @@ import {
   createHeadlessDirector,
   runFrames,
 } from "../src/debug/headless.js";
+import { captureDebug } from "../src/debug/index.js";
 import { SETTINGS } from "../config.js";
 import { FLOCK_GRID_CONFIG } from "../config/compositions/flock-grid.js";
 
@@ -82,22 +83,227 @@ test("flock rejects a non-boolean wrapEdges setting", () => {
   );
 });
 
-test("every flock pulse uses the canvas center as its spawn origin", () => {
-  const spawnRadius = 0.01;
+test("centered flock emission retains its legacy golden-angle state", () => {
   const flock = new Flock({
-    count: 8,
+    count: 4,
     perceptionRadius: 10,
-    birthsPerPulse: 8,
-    emissionSeconds: 0.1,
-    lifetimeSeconds: 10,
+    birthsPerPulse: 4,
+    pulseEverySeconds: 2,
+    emissionSeconds: 0.6,
+    lifetimeSeconds: 9,
     initialSpeed: 20,
-    spawnRadius,
+    spawnRadius: 3,
+  });
+  flock.pulseIndex = 2;
+
+  const lines = captureDebug(["cells"], () => flock.emitPulse(200, 100));
+  assert.deepEqual(lines, [
+    "[cg:cells] f=0000 flock-pulse=2 births=4 active=1",
+  ]);
+  assert.deepEqual(flock.snapshotState(), {
+    version: 1,
+    time: 0,
+    nextPulseTime: 0,
+    lastPulseTime: 0,
+    birthIndex: 4,
+    pulseIndex: 3,
+    boids: [
+      {
+        x: 101.92093727122986,
+        y: 50,
+        vx: -1.0922771916410445,
+        vy: -18.34751565026232,
+        ax: 0,
+        ay: 0,
+        age: 0,
+        lifeProgress: 0,
+        opacity: 1,
+        birthDelay: 0,
+        spawnIndex: 0,
+        scheduled: true,
+        active: true,
+        targetSpeed: 18.38,
+        endOfLifeProgress: 0,
+        lifetime: 9,
+      },
+      {
+        x: 99.62961916572428,
+        y: 50.339299184128514,
+        vx: 5.865131065727186,
+        vy: -14.981006086225653,
+        ax: 0,
+        ay: 0,
+        age: 0,
+        lifeProgress: 0,
+        opacity: 0,
+        birthDelay: 0.19999999999999998,
+        spawnIndex: 1,
+        scheduled: true,
+        active: false,
+        targetSpeed: 16.08820393249937,
+        endOfLifeProgress: 0,
+        lifetime: 9,
+      },
+      {
+        x: 100.21081407522689,
+        y: 47.597882346098686,
+        vx: 2.0902606606084717,
+        vy: -19.685745470469147,
+        ax: 0,
+        ay: 0,
+        age: 0,
+        lifeProgress: 0,
+        opacity: 0,
+        birthDelay: 0.39999999999999997,
+        spawnIndex: 2,
+        scheduled: true,
+        active: false,
+        targetSpeed: 19.796407864998738,
+        endOfLifeProgress: 0,
+        lifetime: 9,
+      },
+      {
+        x: 100.93804574246272,
+        y: 51.223514561129015,
+        vx: -2.81629643449745,
+        vy: -17.27657108844654,
+        ax: 0,
+        ay: 0,
+        age: 0,
+        lifeProgress: 0,
+        opacity: 0,
+        birthDelay: 0.6,
+        spawnIndex: 3,
+        scheduled: true,
+        active: false,
+        targetSpeed: 17.504611797498107,
+        endOfLifeProgress: 0,
+        lifetime: 9,
+      },
+    ],
+  });
+});
+
+test("directed flock emission normalizes direction with deterministic spread", () => {
+  const options = {
+    count: 4,
+    perceptionRadius: 10,
+    birthsPerPulse: 4,
+    pulseEverySeconds: 2,
+    emissionSeconds: 0.6,
+    lifetimeSeconds: 9,
+    initialSpeed: 20,
+    spawnRadius: 3,
+  };
+  const first = new Flock(options);
+  const second = new Flock(options);
+  const lines = captureDebug(["transition"], () => {
+    first.emitPulse(200, 100, {
+      originX: 24,
+      originY: 19,
+      directionX: 3,
+      directionY: 4,
+      strength: 0.25,
+    });
+  });
+  second.emitPulse(200, 100, {
+    originX: 24,
+    originY: 19,
+    directionX: 0.6,
+    directionY: 0.8,
+    strength: 0.25,
   });
 
-  flock.emitPulse(200, 100);
-  for (const boid of flock.boids) {
-    assert.ok(Math.hypot(boid.x - 100, boid.y - 50) <= spawnRadius + 1e-12);
+  assert.deepEqual(first.snapshotState(), second.snapshotState());
+  assert.ok(first.boids.every(boid => (
+    Math.hypot(boid.x - 24, boid.y - 19) <= options.spawnRadius + 1e-12
+  )));
+  assert.ok(first.boids.every(boid => (
+    Math.abs(Math.hypot(boid.vx, boid.vy) - boid.targetSpeed) <= 1e-12
+    && boid.vx * 0.6 + boid.vy * 0.8 > 0
+    && boid.targetSpeed <= options.initialSpeed * 0.25
+  )));
+  assert.deepEqual(lines, [
+    "[cg:transition] f=0000 flock-pulse=0 mode=directed originX=24.000 originY=19.000 directionX=0.600000 directionY=0.800000 strength=0.250 births=4 active=1",
+  ]);
+});
+
+test("directed flock emission rejects invalid origins and directions atomically", () => {
+  const flock = new Flock({
+    count: 1,
+    perceptionRadius: 10,
+    birthsPerPulse: 1,
+    pulseEverySeconds: 2,
+  });
+  const initial = flock.snapshotState();
+  const invalid = [
+    [null, /emission must be an object/],
+    [{ originX: NaN, originY: 10, directionX: 1, directionY: 0 }, /originX must be finite/],
+    [{ originX: 10, originY: Infinity, directionX: 1, directionY: 0 }, /originY must be finite/],
+    [{ originX: 10, originY: 10, directionX: 0, directionY: 0 }, /direction must be non-zero/],
+    [{ originX: 10, originY: 10, directionX: 1 }, /directionY must be finite/],
+    [{ originX: 10, originY: 10, directionX: 1, directionY: 0, strength: 0 }, /strength must be finite and between zero and one/],
+    [{ originX: 10, originY: 10, directionX: 1, directionY: 0, strength: 1.1 }, /strength must be finite and between zero and one/],
+  ];
+
+  for (const [emission, message] of invalid) {
+    assert.throws(() => flock.emitPulse(100, 50, emission), message);
+    assert.deepEqual(flock.snapshotState(), initial);
   }
+});
+
+test("flock simulation snapshots are copied, JSON-safe, and deterministic", () => {
+  const options = {
+    count: 3,
+    perceptionRadius: 20,
+    proximityRadius: 20,
+    separationRadius: 5,
+    birthsPerPulse: 3,
+    pulseEverySeconds: 4,
+    emissionSeconds: 0.3,
+    lifetimeSeconds: 9,
+    fadeStartsAt: 0.8,
+    initialSpeed: 20,
+    spawnRadius: 2,
+    maxSpeed: 100,
+    maxForce: 50,
+    alignment: 0.5,
+    cohesion: 0.2,
+    separation: 0.7,
+    pointerRadius: 10,
+    pointerForce: 10,
+    wrapEdges: false,
+  };
+  const source = new Flock(options);
+  source.time = 1;
+  source.nextPulseTime = Infinity;
+  source.emitPulse(100, 50, {
+    originX: 30,
+    originY: 20,
+    directionX: -2,
+    directionY: 1,
+  });
+  source.update(0.25, 100, 50, { active: false });
+
+  const snapshot = source.snapshotState();
+  const serialized = JSON.parse(JSON.stringify(snapshot));
+  assert.deepEqual(serialized, snapshot);
+  assert.equal(snapshot.nextPulseTime, null);
+  const restored = new Flock(options);
+  const boidIdentities = [...restored.boids];
+  assert.equal(restored.restoreState(serialized), true);
+  assert.equal(restored.nextPulseTime, Infinity);
+  assert.deepEqual(restored.snapshotState(), snapshot);
+  assert.ok(restored.boids.every((boid, index) => boid === boidIdentities[index]));
+  const sourceX = source.boids[0].x;
+  snapshot.boids[0].x += 100;
+  assert.equal(source.boids[0].x, sourceX);
+
+  source.update(1 / 60, 100, 50, { active: false });
+  restored.update(1 / 60, 100, 50, { active: false });
+  assert.deepEqual(restored.snapshotState(), source.snapshotState());
+  serialized.boids[0].x += 100;
+  assert.notEqual(restored.boids[0].x, serialized.boids[0].x);
 });
 
 test("end-of-life progress accounts for pool recycling pressure", () => {
@@ -209,6 +415,91 @@ test("the visible grid samples the offscreen flock field by parent cell", () => 
   assert.equal(field.resolveCell(1), 0);
   assert.ok(Math.abs(source.lifeInCell(0, layout) - 0.8) < 0.01);
   assert.equal(source.lifeInCell(1, layout), 0);
+});
+
+test("flock rolls cell appearance once per influence episode", () => {
+  const flock = {
+    boids: [{ active: true, x: 25, y: 25, opacity: 1, endOfLifeProgress: 0 }],
+  };
+  const rolls = [0.75, 0.25];
+  const source = new FlockFieldSource(flock, FIELD_OPTIONS, VIEWPORT, {
+    probability: 0.5,
+    unit: () => rolls.shift(),
+  });
+  const layout = {
+    width: 100,
+    height: 50,
+    columns: 2,
+    rows: 1,
+    cellSize: 50,
+    offsetX: 0,
+    offsetY: 0,
+  };
+  const field = new GridField(layout, { fieldGain: 1 });
+
+  source.write(field);
+  assert.equal(field.resolveCell(0), 0);
+  assert.equal(rolls.length, 1);
+
+  field.reset();
+  source.write(field);
+  assert.equal(field.resolveCell(0), 0);
+  assert.equal(rolls.length, 1, "continuing influence must not reroll");
+
+  flock.boids[0].active = false;
+  field.reset();
+  source.write(field);
+  flock.boids[0].active = true;
+  field.reset();
+  source.write(field);
+
+  assert.equal(field.resolveCell(0), 1);
+  assert.equal(rolls.length, 0);
+  assert.deepEqual([...source.influenceCounts], [2, 0]);
+});
+
+test("flock and interactive flock share configurable cell thinning", () => {
+  for (const [composition, generatorName, settingsKey] of [
+    ["flock", "flockGrid", "flock"],
+    ["interactive-flock", "interactiveFlockGrid", "interactiveFlock"],
+  ]) {
+    const { director } = createHeadlessDirector({ composition });
+    const generator = director.generator(generatorName);
+    assert.equal(
+      generator.flockField.appearanceProbability,
+      SETTINGS[settingsKey].grid.appearanceProbability,
+    );
+    assert.equal(generator.inspect().appearance.probability, 0.7);
+    director.dispose();
+  }
+});
+
+test("flock rejects invalid cell appearance probabilities at startup", () => {
+  for (const [composition, settingsKey] of [
+    ["flock", "flock"],
+    ["interactive-flock", "interactiveFlock"],
+  ]) {
+    const settings = structuredClone(SETTINGS);
+    settings[settingsKey].grid.appearanceProbability = 1.1;
+    const { director } = createHeadlessDirector({ composition, settings });
+    assert.throws(
+      () => director.generator(
+        composition === "flock" ? "flockGrid" : "interactiveFlockGrid",
+      ),
+      /appearanceProbability must be between zero and one/,
+    );
+    director.dispose();
+  }
+});
+
+test("flock excludes the singular-dot subdivision through config", () => {
+  const { director } = createHeadlessDirector({ composition: "flock" });
+  const transition = director.generator("flockGrid").grid.cellTransition;
+
+  assert.deepEqual(transition.subdivisionPolicy.levels, [1, 2, 3]);
+  assert.equal(transition.subdivisionPolicy.levelAt(0), 1);
+  assert.equal(transition.subdivisionPolicy.levelAt(1), 3);
+  director.dispose();
 });
 
 test("step palette mode returns authored swatches without color interpolation", () => {
@@ -686,9 +977,14 @@ test("flock preview is the shared field and clears while an endpoint owns the ca
 });
 
 test("flock runs the shared Dijkstra outro to one center dot", async () => {
+  const framesThroughCycleWrap = Math.ceil((
+    SETTINGS.flock.circleEndpoints.start.durationSeconds
+    + SETTINGS.flock.timing.bodyDurationSeconds
+    + SETTINGS.flock.circleEndpoints.end.durationSeconds
+  ) * 60) + 1;
   const run = await runFrames({
     composition: "flock",
-    frames: 900,
+    frames: framesThroughCycleWrap,
     channels: ["timeline", "transition"],
   });
   const stages = run.lines.filter(line => (

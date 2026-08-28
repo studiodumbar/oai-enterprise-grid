@@ -8,7 +8,7 @@ export const FLOCK_GRID_CONFIG = {
       },
       // Flock uses the shared phase system without reintroducing typography.
       intro: {
-        enabled: true,
+        enabled: false,
         mode: "text",
         durationSeconds: "auto",
       },
@@ -18,8 +18,8 @@ export const FLOCK_GRID_CONFIG = {
         durationSeconds: "auto",
       },
       circleEndpoints: {
-        start: { enabled: true, durationSeconds: "auto", mode: "native" },
-        end: { enabled: true, durationSeconds: "auto", mode: "dijkstra" },
+        start: { enabled: false, durationSeconds: "auto", mode: "native" },
+        end: { enabled: false, durationSeconds: "auto", mode: "dijkstra" },
         modes: {
           dijkstra: {
             // Give route growth a full beat-scale gesture instead of six frames.
@@ -41,7 +41,7 @@ export const FLOCK_GRID_CONFIG = {
             baseIntensity: 0.08,
           },
       "radar-arc": { 
-        cycleSeconds: "calc(auto * 0.5)",
+        cycleSeconds: "calc(auto * 0.25)",
         gridSteps: 5,
         beamWidth: 0.55,
         wakeWidth: 1.15,
@@ -59,7 +59,7 @@ export const FLOCK_GRID_CONFIG = {
           // WHEN flicker is applied. Switch back to "end-of-life" to use the
           // age ramp below instead of selecting cells as their energy falls.
           trigger: "disappearing-cell",
-          probability: 0.2,
+          probability: 0.4,
           // 0, 1, 2, 3 render 1, 4, 16, 64 glyphs in a selected parent cell.
           subdivisionLevel: 1,
           endOfLifeStart: 0.5,
@@ -67,6 +67,8 @@ export const FLOCK_GRID_CONFIG = {
       },
       grid: {
         longSideCells: 22,
+        // Roll once whenever flock energy enters a cell; lower values thin it.
+        appearanceProbability: 0.35,
         dotMargin: 0.0,
         showCellGrid: false,
         fieldRadiusInCells: 1,
@@ -85,16 +87,16 @@ export const FLOCK_GRID_CONFIG = {
         // One emission pulse per resolved composition beat.
         pulseEverySeconds: "auto",
         pulseDecaySeconds: 1.5,
-        birthsPerPulse: 5,
+        birthsPerPulse: 8,
         emissionSeconds: 0.1,
-        lifetimeSeconds: 8,
+        lifetimeSeconds: 12,
         fadeStartsAt: 5,
         initialSpeed: 1000,
         spawnRadius: 0.01,
         count: 20,
         perceptionRadius: 5,
         separationRadius: 10,
-        maxSpeed: 520,
+        maxSpeed: 1020,
         maxForce: 720,
         acceleration: 360,
         drag: 520,
@@ -113,7 +115,11 @@ export const FLOCK_GRID_CONFIG = {
     flockGrid: {
       type: "flock-grid",
       settingsKey: "flock",
-      cellTransition: { type: "none", options: "none" },
+      cellTransition: {
+        type: "none",
+        // 1, 2, 3 render 4, 16, 64 dots. Level 0 is the singular dot.
+        options: { subdivisionLevels: [1, 2, 3] },
+      },
     },
   },
 

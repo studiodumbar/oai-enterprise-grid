@@ -1099,7 +1099,20 @@ test("canvas context-menu routing scales coordinates and suppresses the native m
   }), true);
   assert.deepEqual(routed, [{
     type: "contextmenu",
-    payload: { x: 200, y: 100, button: 2, shiftKey: false },
+    payload: {
+      x: 200,
+      y: 100,
+      normalizedX: 0.5,
+      normalizedY: 0.5,
+      cssX: 100,
+      cssY: 50,
+      button: 2,
+      buttons: undefined,
+      shiftKey: false,
+      pointerId: undefined,
+      pointerType: undefined,
+      isPrimary: undefined,
+    },
   }]);
   assert.equal(prevented, true);
   assert.deepEqual(focusedWith, { preventScroll: true });

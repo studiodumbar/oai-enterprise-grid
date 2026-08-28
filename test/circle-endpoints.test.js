@@ -263,6 +263,66 @@ test("composition director adds endpoint durations and passes native phase frame
   assert.equal(drawFrames.at(-1).compositionEndpoint.progress, 1);
 });
 
+test("a timed looping rule owns one stable core duration across endpoint phases", () => {
+  const updateFrames = [];
+  const generatorTypes = new FactoryRegistry("generator type");
+  const compositionRules = new FactoryRegistry("composition rule");
+  generatorTypes.register("fake", ({ name }) => ({
+    update: frame => updateFrames.push({ name, frame }),
+    // These deliberately disagree with both one another and the sequence.
+    // The active generator must not be able to relocate the endpoint boundary.
+    animationDuration: () => name === "first" ? 20 : 0.25,
+  }));
+  compositionRules.register(
+    "sequence",
+    ({ definition }) => new SequenceRule(definition),
+  );
+  const director = new CompositionDirector({
+    settings: {
+      composition: {
+        startWithCircle: true,
+        startWithCircleDurationSeconds: 1,
+        endWithCircle: true,
+        endWithCircleDurationSeconds: 2,
+        circleSubdivision: 1,
+      },
+    },
+    generatorDefinitions: {
+      first: { type: "fake" },
+      second: { type: "fake" },
+    },
+    compositionDefinitions: {
+      demo: {
+        rule: "sequence",
+        loop: true,
+        steps: [
+          { use: "first", durationSeconds: 1 },
+          { use: "second", durationSeconds: 2 },
+        ],
+      },
+    },
+    generatorTypes,
+    compositionRules,
+    runtime: { context: () => ({ save() {}, restore() {} }) },
+  });
+
+  director.use("demo");
+  assert.equal(director.animationDuration(), 6);
+  director.update({ dt: 0, compositionDt: 0, time: 0 });
+  director.update({ dt: 1.5, compositionDt: 1.5, time: 1.5 });
+  assert.equal(updateFrames.at(-1).name, "first");
+  assert.equal(updateFrames.at(-1).frame.compositionEndpoint, null);
+
+  director.update({ dt: 0.75, compositionDt: 0.75, time: 2.25 });
+  assert.equal(updateFrames.at(-1).name, "second");
+  assert.equal(director.animationDuration(), 6);
+
+  director.update({ dt: 2.25, compositionDt: 2.25, time: 4.5 });
+  assert.equal(updateFrames.at(-1).frame.compositionEndpoint.phase, "end");
+  assert.equal(updateFrames.at(-1).frame.compositionEndpoint.progress, 0.25);
+  assert.equal(director.animationDuration(), 6);
+});
+
 test("a custom endpoint owns its phase instead of sharing it with the overlay", () => {
   const drawFrames = [];
   const overlayFrames = [];

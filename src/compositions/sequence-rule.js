@@ -1,3 +1,5 @@
+import { debug } from "../debug/index.js";
+
 function requireDefinition(definition) {
   if (!definition || typeof definition !== "object" || Array.isArray(definition)) {
     throw new TypeError("Sequence definition must be an object.");
@@ -75,6 +77,31 @@ export class SequenceRule {
     };
   }
 
+  // Only a finite looping sequence owns a composition cycle. Existing
+  // indefinite selector recipes return undefined and continue deferring to
+  // their active generator's legacy animationDuration().
+  animationDuration() {
+    return this.loop && this.allStepsAreFinite ? this.cycleSeconds : undefined;
+  }
+
+  seek(time) {
+    if (!Number.isFinite(time) || time < 0) return false;
+    this.index = 0;
+    this.elapsedSeconds = 0;
+    this.advance(
+      this.loop && this.allStepsAreFinite
+        ? time % this.cycleSeconds
+        : time,
+    );
+    debug.timeline(
+      "sequence-seek step=%d use=%s elapsed=%.3f",
+      this.index,
+      this.steps[this.index].planEntry.use,
+      this.elapsedSeconds,
+    );
+    return true;
+  }
+
   advance(dt) {
     const current = this.steps[this.index];
     if (dt === 0 || current.durationSeconds === null) return;
@@ -94,7 +121,7 @@ export class SequenceRule {
         && this.index === this.steps.length - 1
         && this.elapsedSeconds >= step.durationSeconds
       ) {
-        return;
+        break;
       }
 
       const timeLeft = step.durationSeconds - this.elapsedSeconds;
@@ -108,13 +135,24 @@ export class SequenceRule {
 
       if (this.index < this.steps.length - 1) {
         this.index += 1;
+        this.logStepTransition();
       } else if (this.loop) {
         this.index = 0;
+        this.logStepTransition();
       } else {
         this.elapsedSeconds = step.durationSeconds;
-        return;
+        break;
       }
     }
+  }
+
+  logStepTransition() {
+    debug.timeline(
+      "sequence-step step=%d use=%s elapsed=%.3f",
+      this.index,
+      this.steps[this.index].planEntry.use,
+      this.elapsedSeconds,
+    );
   }
 }
 

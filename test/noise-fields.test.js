@@ -178,7 +178,7 @@ test("noise-grid defaults retain the remapped Diogo geometry and field setup", (
   const { director } = createHeadlessDirector({ composition: "noise-grid" });
   const generator = director.generator("noiseGrid");
   const configured = generator.settingsSnapshot();
-  assert.equal(configured.longSideCells, 9);
+  assert.equal(configured.longSideCells, 5);
   assert.equal(configured.frameMargin, 0);
   assert.equal(configured.dotMargin, 0);
   assert.equal(configured.backgroundColor, "#000000");

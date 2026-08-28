@@ -44,22 +44,23 @@ export function nameSegment(value) {
     .replace(/^-+|-+$/g, "");
 }
 
-// OAI_<composition>_<flicker mode>_MMDD-HHMMSS; missing segments drop out.
-export function exportBaseName(date = new Date(), { composition, flicker } = {}) {
+// OAI_<composition>_<flicker mode>_<variant>_MMDD-HHMMSS; missing segments drop out.
+export function exportBaseName(date = new Date(), { composition, flicker, variant } = {}) {
   return [
     "OAI",
     nameSegment(composition),
     nameSegment(flicker),
+    nameSegment(variant),
     exportStamp(date),
   ].filter(Boolean).join("_");
 }
 
 export function exportFilename(
   extension,
-  { date = new Date(), alpha = false, composition, flicker } = {},
+  { date = new Date(), alpha = false, composition, flicker, variant } = {},
 ) {
   const suffix = alpha ? "-alpha" : "";
-  const base = exportBaseName(date, { composition, flicker });
+  const base = exportBaseName(date, { composition, flicker, variant });
   return `${base}${suffix}.${extensionName(extension)}`;
 }
 
@@ -70,6 +71,7 @@ export function exportSequenceFilename(
     date = new Date(),
     composition,
     flicker,
+    variant,
     padding = 4,
     extension = "png",
   } = {},
@@ -81,7 +83,7 @@ export function exportSequenceFilename(
     throw new RangeError("PNG sequence padding must be an integer of at least four.");
   }
   const root = baseName === undefined
-    ? exportBaseName(date, { composition, flicker })
+    ? exportBaseName(date, { composition, flicker, variant })
     : String(baseName);
   if (root.length === 0 || /[\\/\0]/.test(root)) {
     throw new TypeError("PNG sequence base name must be a safe non-empty filename.");

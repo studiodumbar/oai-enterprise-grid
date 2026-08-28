@@ -18,6 +18,7 @@ export const LONG_EDGE_PRESETS = Object.freeze({
 
 export const ASPECT_RATIO_PRESETS = Object.freeze([
   "16:9",
+  "2:1",
   "4:3",
   "3:2",
   "1:1",

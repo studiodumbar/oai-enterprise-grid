@@ -43,6 +43,7 @@ Commands
   list                          list composition ids (* marks the active one)
   status                        active composition, panel visibility, export settings
   use <composition>             switch the live composition
+  duration <seconds>            set the active composition's core loop duration
   export [flags]                export the active composition (or --all / --composition)
   panel show|hide|toggle        show or hide the export panel
   noise-preview show|hide|toggle show the active noise generator's four fields
@@ -338,10 +339,13 @@ function panelAction(parsed) {
 export function createExportConsole({
   state,
   runExport,
+  prepareExport,
   listCompositions,
   canonicalCompositions = listCompositions,
   activeComposition,
   useComposition,
+  coreDuration = () => null,
+  setCoreDuration,
   previewComposition = "base",
   listFlickerModes = () => [],
   listFlickerScopes = () => ["canvas", "cell"],
@@ -365,6 +369,7 @@ export function createExportConsole({
       panelVisible: isPanelVisible(),
       noisePreviewVisible: isNoisePreviewVisible(),
       flockPreviewVisible: isFlockPreviewVisible(),
+      coreDuration: coreDuration(),
       export: { ...state },
     };
   }
@@ -431,6 +436,11 @@ export function createExportConsole({
     }
 
     const results = [];
+    // Request the one gesture-gated destination before the first await, then
+    // reuse it for every composition in this command.
+    const exportSession = state.exportFormat === "png-sequence"
+      ? prepareExport?.()
+      : undefined;
     let startingPreview = null;
     let previewPrepared = false;
     try {
@@ -450,7 +460,8 @@ export function createExportConsole({
         }
         const label = flicker === null ? composition : `${scope} / ${flicker}`;
         log(`Exporting ${label} (${index + 1}/${jobs.length}) as ${state.exportFormat}…`);
-        const result = await runExport({ cycles });
+        const options = exportSession === undefined ? { cycles } : { cycles, session: exportSession };
+        const result = await runExport(options);
         const ok = result?.ok !== false;
         results.push({
           composition,
@@ -526,6 +537,39 @@ export function createExportConsole({
         log(`Composition: ${activeComposition()}`);
         return { ok: true, composition: activeComposition() };
       }
+      case "duration": {
+        if (parsed.flags && Object.keys(parsed.flags).length > 0) {
+          fail("duration accepts one positional value, e.g. cg`duration 12`.");
+        }
+        if (parsed.args.length === 0) {
+          const seconds = coreDuration();
+          log(Number.isFinite(seconds) ? `Core loop: ${seconds} seconds.` : "Core loop: continuous.");
+          return {
+            ok: true,
+            composition: activeComposition(),
+            coreDuration: seconds,
+          };
+        }
+        if (parsed.args.length !== 1) {
+          fail("duration needs exactly one value, e.g. cg`duration 12`.");
+        }
+        const seconds = Number(parsed.args[0]);
+        if (!Number.isFinite(seconds) || seconds <= 0) {
+          fail(`duration must be a finite positive number, got "${parsed.args[0]}".`);
+        }
+        if (isExporting()) fail("Core duration cannot change while an export is running.");
+        if (typeof setCoreDuration !== "function") {
+          fail("Core-duration changes are unavailable in this runtime.");
+        }
+        const resolved = await setCoreDuration(seconds);
+        const current = Number.isFinite(resolved) ? resolved : coreDuration();
+        log(`Core loop: ${current} seconds for ${activeComposition()}.`);
+        return {
+          ok: true,
+          composition: activeComposition(),
+          coreDuration: current,
+        };
+      }
       case "panel":
       case "ui":
       case "tab": {
@@ -575,6 +619,7 @@ export function createExportConsole({
   run.help = () => run("help");
   run.list = () => run("list");
   run.status = () => run("status");
+  run.duration = seconds => run(seconds === undefined ? "duration" : `duration ${seconds}`);
   run.panel = action => run(`panel ${action ?? "toggle"}`);
   run.noisePreview = action => run(`noise-preview ${action ?? "toggle"}`);
   run.flockPreview = action => run(`flock-preview ${action ?? "toggle"}`);

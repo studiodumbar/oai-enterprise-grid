@@ -191,6 +191,33 @@ test("the headless director exposes draw volume per frame", async () => {
   director.dispose();
 });
 
+test("headless setup authors state before frame zero without consuming trace logs", async () => {
+  let called = false;
+  const run = await runFrames({
+    composition: "base",
+    frames: 1,
+    channels: ["timeline"],
+    setup: ({ director, viewport }) => {
+      called = true;
+      director.update({
+        dt: 0,
+        compositionDt: 0,
+        time: 0,
+        frameIndex: 0,
+        viewport,
+        pointer: { active: false, x: 0, y: 0 },
+      });
+    },
+  });
+
+  assert.equal(called, true);
+  assert.ok(run.lines.some(line => line.includes("phase=start")));
+  await assert.rejects(
+    () => runFrames({ composition: "base", frames: 1, setup: true }),
+    /setup must be a function/,
+  );
+});
+
 test("frames rejects a non-positive count instead of silently doing nothing", async () => {
   await assert.rejects(() => runFrames({ composition: "base", frames: 0 }), /positive integer/);
   await assert.rejects(() => runFrames({ composition: "base", fps: 0 }), /positive number/);

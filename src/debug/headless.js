@@ -164,6 +164,7 @@ export async function runFrames({
   snapshotEvery = 1,
   settings,
   projectSeed = 1,
+  setup,
 } = {}) {
   if (!Number.isSafeInteger(frames) || frames <= 0) {
     throw new RangeError("Headless frames must be a positive integer.");
@@ -171,13 +172,21 @@ export async function runFrames({
   if (!Number.isFinite(fps) || fps <= 0) {
     throw new RangeError("Headless fps must be a finite positive number.");
   }
+  if (setup !== undefined && typeof setup !== "function") {
+    throw new TypeError("Headless setup must be a function when provided.");
+  }
 
   const lines = [];
   const previousSink = debug.sink;
   const previousChannels = debug.channels();
   debug.configure({ channels, sink: line => lines.push(line) });
 
-  const { director, context, viewport: activeViewport } = createHeadlessDirector({
+  const {
+    director,
+    context,
+    runtime,
+    viewport: activeViewport,
+  } = createHeadlessDirector({
     composition,
     viewport,
     settings,
@@ -191,6 +200,22 @@ export async function runFrames({
   let previousSnapshot = null;
 
   try {
+    if (setup) {
+      // Setup authors deterministic project state before frame zero. Its logs
+      // are deliberately excluded so the trace describes only the resulting
+      // composition cycle, with fresh per-channel rate limits.
+      await setup({
+        director,
+        context,
+        runtime,
+        viewport: activeViewport,
+        fps,
+        dt,
+      });
+      lines.length = 0;
+      debug.configure({ channels, sink: line => lines.push(line) });
+      debug.setFrame(0);
+    }
     for (let frameIndex = 0; frameIndex < frames; frameIndex += 1) {
       debug.setFrame(frameIndex);
       const frame = {

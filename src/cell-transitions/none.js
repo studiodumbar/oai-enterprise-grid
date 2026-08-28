@@ -4,7 +4,9 @@ import {
 } from "./cell-state-buffer.js";
 import {
   FourLevelSubdivisionPolicy,
+  SelectedSubdivisionPolicy,
 } from "../grid/subdivision-policy.js";
+import { debug } from "../debug/index.js";
 import {
   roundnessForKind,
 } from "../shapes/rounded-rect.js";
@@ -18,10 +20,19 @@ export const DEFAULT_NONE_CONFIG = Object.freeze({
 });
 
 export class NoneTransition {
-  constructor(config = {}, subdivisionPolicy = new FourLevelSubdivisionPolicy()) {
+  constructor(config = {}, subdivisionPolicy) {
     this.config = { ...DEFAULT_NONE_CONFIG, ...config };
-    this.subdivisionPolicy = subdivisionPolicy;
+    this.subdivisionPolicy = subdivisionPolicy
+      ?? (config.subdivisionLevels === undefined
+        ? new FourLevelSubdivisionPolicy()
+        : new SelectedSubdivisionPolicy(config.subdivisionLevels));
     this.buffer = new CellStateBuffer();
+    if (this.subdivisionPolicy instanceof SelectedSubdivisionPolicy) {
+      debug.config(
+        "cell-shaper=none subdivisionLevels=%s",
+        this.subdivisionPolicy.levels.join(","),
+      );
+    }
   }
 
   resize(length, cellState) {

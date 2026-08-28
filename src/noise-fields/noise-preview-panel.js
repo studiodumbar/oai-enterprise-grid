@@ -1,3 +1,5 @@
+import { mountPreviewPanel } from "../ui/preview-panel-mount.js";
+
 const LABELS = Object.freeze(["size", "color", "contrast", "visibility"]);
 
 function paint(canvas, bytes, width, height, palette = null) {
@@ -19,6 +21,7 @@ function paint(canvas, bytes, width, height, palette = null) {
 
 export function createNoisePreviewPanel({
   document,
+  mount,
   snapshot,
   isExporting = () => false,
 }) {
@@ -29,12 +32,12 @@ export function createNoisePreviewPanel({
   root.hidden = true;
   root.className = "noise-preview-panel";
   root.innerHTML = `<summary>Noise fields</summary><div class="noise-preview-grid">${LABELS.map(label => `<figure><canvas data-field="${label}"></canvas><figcaption>${label}</figcaption></figure>`).join("")}</div>`;
-  Object.assign(root.style, { position: "fixed", right: "12px", bottom: "12px", width: "320px", maxHeight: "calc(100vh - 24px)", overflow: "auto", padding: "10px", color: "white", background: "#111e", zIndex: "20", font: "12px sans-serif" });
+  const floatingStyles = { position: "fixed", right: "12px", bottom: "12px", width: "320px", maxHeight: "calc(100vh - 24px)", overflow: "auto", padding: "10px", color: "white", background: "#111e", zIndex: "20", font: "12px sans-serif" };
   const grid = root.querySelector(".noise-preview-grid");
   Object.assign(grid.style, { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" });
   for (const figure of root.querySelectorAll("figure")) Object.assign(figure.style, { margin: "0" });
   for (const canvas of root.querySelectorAll("canvas")) Object.assign(canvas.style, { width: "100%", aspectRatio: "16 / 9", imageRendering: "pixelated", background: "#000" });
-  document.body.append(root);
+  mountPreviewPanel({ document, mount, root, floatingStyles });
 
   function setVisible(next) { visible = Boolean(next); root.hidden = !visible; return visible; }
   function update(now = performance.now()) {
@@ -55,5 +58,5 @@ export function createNoisePreviewPanel({
     paint(root.querySelector('[data-field="visibility"]'), value.visibility, columns * 16, rows * 16);
     return true;
   }
-  return { setVisible, isVisible: () => visible, update, remove: () => root.remove() };
+  return { root, setVisible, isVisible: () => visible, update, remove: () => root.remove() };
 }

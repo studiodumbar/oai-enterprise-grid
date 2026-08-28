@@ -3,6 +3,7 @@ import {
   SETTINGS,
   GENERATOR_DEFINITIONS,
   COMPOSITION_DEFINITIONS,
+  createRuntimeConfig,
 } from "../config.js";
 import { CompositionDirector } from "./core/composition-director.js";
 import { routeCanvasPointerInput } from "./core/canvas-pointer-input.js";
@@ -20,6 +21,9 @@ import { flickerModes } from "./visuals/flicker/index.js";
 import { configureDebug, debug, resolveDebugChannels } from "./debug/index.js";
 import { createNoisePreviewPanel } from "./noise-fields/noise-preview-panel.js";
 import { createFlockPreviewPanel } from "./fields/flock-preview-panel.js";
+import { createPanelWorkspace } from "./ui/panel-workspace.js";
+import { createCompositionPanel } from "./ui/composition-panel.js";
+import { createInteractiveFlockPanel } from "./ui/interactive-flock-panel.js";
 
 if (typeof window.p5 !== "function") {
   throw new Error("p5.js did not load. Check the CDN request before starting the sketch.");
@@ -43,6 +47,11 @@ new window.p5(p => {
   let resetPreviewDelta = false;
   let noisePreviewPanel = null;
   let flockPreviewPanel = null;
+  let panelWorkspace = null;
+  let compositionPanel = null;
+  let interactiveFlockPanel = null;
+  let lastPanelSyncTime = -Infinity;
+  let compositionTimingOverrides = new Map();
   let projectSeed = createProjectSeed();
   const pointer = { active: false, x: 0, y: 0 };
   const exportState = createExportState();
@@ -85,12 +94,26 @@ new window.p5(p => {
     document.title = `OAI // ${composition}`;
   }
 
-  function createDirectorForRuntime(runtimeOverride) {
+  function resolvedRuntimeConfig(overrides = compositionTimingOverrides) {
+    if (overrides.size === 0) {
+      return {
+        settings: SETTINGS,
+        generatorDefinitions: GENERATOR_DEFINITIONS,
+        compositionDefinitions: COMPOSITION_DEFINITIONS,
+      };
+    }
+    return createRuntimeConfig({ compositionTimingOverrides: overrides });
+  }
+
+  function createDirectorForRuntime(
+    runtimeOverride,
+    config = resolvedRuntimeConfig(),
+  ) {
     const catalog = createCatalog({ palettes: GLOBAL_CONFIG.palettes });
     const next = new CompositionDirector({
-      settings: SETTINGS,
-      generatorDefinitions: GENERATOR_DEFINITIONS,
-      compositionDefinitions: COMPOSITION_DEFINITIONS,
+      settings: config.settings,
+      generatorDefinitions: config.generatorDefinitions,
+      compositionDefinitions: config.compositionDefinitions,
       generatorTypes: catalog.generatorTypes,
       compositionRules: catalog.compositionRules,
       sceneTransitionTypes: catalog.sceneTransitionTypes,
@@ -99,6 +122,54 @@ new window.p5(p => {
     });
     next.resize(runtimeOverride.viewport());
     return next;
+  }
+
+  function setCoreDurationFromConsole(seconds) {
+    if (inputLocked) throw new Error("Core duration cannot change while input is locked.");
+    const compositionId = director.inspect().compositionId;
+    const nextOverrides = new Map(compositionTimingOverrides);
+    nextOverrides.set(compositionId, seconds);
+    const config = resolvedRuntimeConfig(nextOverrides);
+    const saved = director.snapshotProjectState();
+    let next = null;
+    try {
+      next = createDirectorForRuntime(runtime, config);
+      next.restoreProjectState(saved);
+      next.update(currentFrame(0));
+      next.seek(elapsed);
+    } catch (error) {
+      next?.dispose();
+      debug.config(
+        "timing-override state=failed composition=%s body=%.3f error=%s",
+        compositionId,
+        seconds,
+        error?.name ?? "Error",
+      );
+      throw error;
+    }
+
+    const previous = director;
+    director = next;
+    compositionTimingOverrides = nextOverrides;
+    try {
+      previous.dispose();
+    } catch (error) {
+      debug.config(
+        "timing-override state=dispose-failed composition=%s error=%s",
+        compositionId,
+        error?.name ?? "Error",
+      );
+    }
+    const coreDuration = director.inspect().timeline.coreDuration;
+    debug.config(
+      "timing-override state=applied composition=%s body=%.3f",
+      compositionId,
+      coreDuration,
+    );
+    syncDocumentTitle();
+    syncCompositionUi();
+    renderPreview();
+    return coreDuration;
   }
 
   function currentFrame(dt = 0) {
@@ -195,6 +266,7 @@ new window.p5(p => {
     director.update(currentFrame(0));
     director.seek(elapsed);
     syncDocumentTitle();
+    syncCompositionUi();
   }
 
   function commitHistory() {
@@ -205,9 +277,14 @@ new window.p5(p => {
   // progress through it; only its DOM mount is optional, so showing and
   // hiding it is a matter of (un)mounting the same element.
   function setExportPanelVisible(visible) {
+    exportPanelVisible = Boolean(visible);
+    if (panelWorkspace && exportPanel) {
+      panelWorkspace.attach("export", exportPanel.root);
+      panelWorkspace.setVisible("export", exportPanelVisible);
+      return exportPanelVisible;
+    }
     const host = document.getElementById("export-ui");
     if (!host || !exportPanel) return exportPanelVisible;
-    exportPanelVisible = Boolean(visible);
     host.hidden = !exportPanelVisible;
     if (exportPanelVisible) host.append(exportPanel.root);
     else exportPanel.root.remove();
@@ -222,6 +299,15 @@ new window.p5(p => {
       .filter(id => !COMPOSITION_DEFINITIONS[id]?.legacyAliasFor);
   }
 
+  function canonicalCompositionInspection() {
+    const inspection = director.inspect();
+    const canonicalId = COMPOSITION_DEFINITIONS[inspection.compositionId]?.legacyAliasFor
+      ?? inspection.compositionId;
+    return canonicalId === inspection.compositionId
+      ? inspection
+      : { ...inspection, compositionId: canonicalId };
+  }
+
   function activeCompositionUi() {
     const compositionId = director?.inspect().compositionId;
     const definition = COMPOSITION_DEFINITIONS[compositionId];
@@ -234,8 +320,51 @@ new window.p5(p => {
   }
 
   function syncCompositionUi() {
-    noisePreviewPanel?.setVisible(activeCompositionUi().noisePreview === true);
-    flockPreviewPanel?.setVisible(activeCompositionUi().flockPreview === true);
+    const ui = activeCompositionUi();
+    const noiseVisible = ui.noisePreview === true;
+    const flockVisible = ui.flockPreview === true;
+    noisePreviewPanel?.setVisible(noiseVisible);
+    flockPreviewPanel?.setVisible(flockVisible);
+    panelWorkspace?.setVisible("interactive-flock", ui.interactiveFlock === true);
+    panelWorkspace?.setVisible("fields", noiseVisible || flockVisible);
+    compositionPanel?.sync();
+    interactiveFlockPanel?.sync();
+  }
+
+  function setNoisePreviewVisible(visible) {
+    const next = noisePreviewPanel?.setVisible(visible) ?? false;
+    panelWorkspace?.setVisible(
+      "fields",
+      next || (flockPreviewPanel?.isVisible() ?? false),
+    );
+    return next;
+  }
+
+  function setFlockPreviewVisible(visible) {
+    const next = flockPreviewPanel?.setVisible(visible) ?? false;
+    panelWorkspace?.setVisible(
+      "fields",
+      next || (noisePreviewPanel?.isVisible() ?? false),
+    );
+    return next;
+  }
+
+  function syncPanels(now = performance.now(), force = false) {
+    if (!force && now - lastPanelSyncTime < 100) return;
+    lastPanelSyncTime = now;
+    compositionPanel?.sync();
+    interactiveFlockPanel?.sync();
+  }
+
+  function dispatchDirectorInput(type, payload) {
+    if (inputLocked) return false;
+    const handled = director.input(type, payload);
+    if (!handled) return false;
+    director.update(currentFrame(0));
+    commitHistory();
+    syncPanels(performance.now(), true);
+    renderPreview();
+    return true;
   }
 
   function useCompositionFromConsole(id) {
@@ -261,19 +390,12 @@ new window.p5(p => {
       list: () => director.list(),
       use: name => {
         if (inputLocked) return director.inspect().compositionId;
-        director.use(name);
-        director.update(currentFrame(0));
-        syncCompositionUi();
-        syncDocumentTitle();
-        commitHistory();
+        useCompositionFromConsole(name);
         return name;
       },
       inspect: () => director.inspect(),
       input: (type, payload) => {
-        if (inputLocked) return false;
-        const handled = director.input(type, payload);
-        if (handled) commitHistory();
-        return handled;
+        return dispatchDirectorInput(type, payload);
       },
       export: () => exportController?.run(),
       exportState: () => Object.freeze({ ...exportState }),
@@ -307,17 +429,58 @@ new window.p5(p => {
     canvasElement.setAttribute("aria-label", "Circle grid canvas");
     canvasElement.setAttribute("tabindex", "0");
     canvasElement.setAttribute("aria-describedby", "grid-keyboard-instructions");
+    let capturedPointerId = null;
     const deactivatePointer = () => {
       pointerActive = false;
     };
+    const routePrimaryPointer = (event, inputType, { commit = false } = {}) => {
+      if (inputLocked || event.isPrimary === false) return false;
+      const handled = routeCanvasPointerInput({
+        canvas: canvas.elt,
+        event,
+        canvasWidth: p.width,
+        canvasHeight: p.height,
+        inputType,
+        input: (type, payload) => director?.input(type, payload),
+        preventDefault: true,
+      });
+      if (handled && commit) commitHistory();
+      return handled;
+    };
     canvas.mouseOut(deactivatePointer);
-    canvas.elt.addEventListener("pointercancel", deactivatePointer);
+    canvas.elt.addEventListener("pointercancel", event => {
+      routePrimaryPointer(event, "pointercancel");
+      if (
+        capturedPointerId === event.pointerId
+        && canvas.elt.hasPointerCapture?.(event.pointerId)
+      ) canvas.elt.releasePointerCapture?.(event.pointerId);
+      if (capturedPointerId === event.pointerId) capturedPointerId = null;
+      deactivatePointer();
+    });
     canvas.elt.addEventListener("pointerup", event => {
+      routePrimaryPointer(event, "pointerup", { commit: true });
+      if (
+        capturedPointerId === event.pointerId
+        && canvas.elt.hasPointerCapture?.(event.pointerId)
+      ) canvas.elt.releasePointerCapture?.(event.pointerId);
+      if (capturedPointerId === event.pointerId) capturedPointerId = null;
       if (event.pointerType !== "mouse") deactivatePointer();
     });
     canvas.elt.addEventListener("pointerdown", event => {
-      if (inputLocked) return;
+      if (inputLocked || event.isPrimary === false) return;
       pointerActive = true;
+      if (!routePrimaryPointer(event, "pointerdown")) return;
+      if (Number.isInteger(event.pointerId)) {
+        canvas.elt.setPointerCapture?.(event.pointerId);
+        capturedPointerId = event.pointerId;
+      }
+    });
+    canvas.elt.addEventListener("pointermove", event => {
+      if (
+        capturedPointerId !== null
+        && event.pointerId !== capturedPointerId
+      ) return;
+      routePrimaryPointer(event, "pointermove");
     });
     canvas.elt.addEventListener("click", event => {
       if (inputLocked) return;
@@ -379,9 +542,31 @@ new window.p5(p => {
     syncDocumentTitle();
     history = createSnapshotHistory(projectSnapshot());
 
+    panelWorkspace = createPanelWorkspace({
+      document,
+      window,
+      mount: document.body,
+    });
+    compositionPanel = createCompositionPanel({
+      container: panelWorkspace.body("composition"),
+      compositions: canonicalCompositions(),
+      current: canonicalCompositionInspection,
+      use: useCompositionFromConsole,
+    });
+    interactiveFlockPanel = createInteractiveFlockPanel({
+      container: panelWorkspace.body("interactive-flock"),
+      inspectTake: () => director.inspect().timeline.rule,
+      input: dispatchDirectorInput,
+      palettes: GLOBAL_CONFIG.palettes,
+      defaults: SETTINGS.interactiveFlock,
+      viewport: runtime.viewport,
+      confirm: message => window.confirm(message),
+    });
+
     exportPanel = createExportPanel({
       state: exportState,
       onExport: () => exportController?.run(),
+      onExportPreset: name => exportController?.runPreset(name),
       onStateChange: () => {
         syncCanvasViewport("export-spec");
         commitHistory();
@@ -447,16 +632,24 @@ new window.p5(p => {
       setInputLocked: value => {
         inputLocked = value;
         pointerActive = false;
+        if (panelWorkspace?.root) panelWorkspace.root.inert = value;
       },
       background: GLOBAL_CONFIG.canvas.background,
     });
     consoleCommands = createExportConsole({
       state: exportState,
-      runExport: ({ cycles } = {}) => exportController.run({ notify: false, cycles }),
+      prepareExport: () => exportController.prepareSession(),
+      runExport: ({ cycles, session } = {}) => exportController.run({
+        notify: false,
+        cycles,
+        session,
+      }),
       listCompositions: () => director.list(),
       canonicalCompositions,
       activeComposition: () => director.inspect().compositionId,
       useComposition: useCompositionFromConsole,
+      coreDuration: () => director.inspect().timeline.coreDuration,
+      setCoreDuration: setCoreDurationFromConsole,
       previewComposition: "base",
       listFlickerModes: () => flickerModes.list(),
       listFlickerScopes: () => ["canvas", "cell"],
@@ -468,14 +661,15 @@ new window.p5(p => {
       syncPanel: () => exportPanel?.sync(),
       onStateChange: () => syncCanvasViewport("export-spec"),
       isExporting: () => Boolean(exportController?.exporting),
-      setNoisePreviewVisible: visible => noisePreviewPanel?.setVisible(visible),
+      setNoisePreviewVisible,
       isNoisePreviewVisible: () => noisePreviewPanel?.isVisible() ?? false,
-      setFlockPreviewVisible: visible => flockPreviewPanel?.setVisible(visible),
+      setFlockPreviewVisible,
       isFlockPreviewVisible: () => flockPreviewPanel?.isVisible() ?? false,
       log: message => console.log(message),
     });
     noisePreviewPanel = createNoisePreviewPanel({
       document,
+      mount: panelWorkspace.body("fields"),
       isExporting: () => Boolean(exportController?.exporting),
       snapshot: options => director.inspect().compositionId === "noise-grid"
         ? director.generator("noiseGrid").noisePreviewSnapshot(options)
@@ -483,6 +677,7 @@ new window.p5(p => {
     });
     flockPreviewPanel = createFlockPreviewPanel({
       document,
+      mount: panelWorkspace.body("fields"),
       isExporting: () => Boolean(exportController?.exporting),
       snapshot: () => director.inspect().compositionId.startsWith("flock")
         ? director.generator("flockGrid").flockPreviewSnapshot()
@@ -529,6 +724,7 @@ new window.p5(p => {
     director.draw(frame);
     noisePreviewPanel?.update();
     flockPreviewPanel?.update();
+    syncPanels();
   };
 
   p.mouseMoved = () => {
@@ -638,5 +834,12 @@ new window.p5(p => {
     event.preventDefault();
     event.returnValue = "";
   });
-  window.addEventListener("pagehide", () => director?.dispose(), { once: true });
+  window.addEventListener("pagehide", () => {
+    compositionPanel?.dispose();
+    interactiveFlockPanel?.dispose();
+    noisePreviewPanel?.remove();
+    flockPreviewPanel?.remove();
+    panelWorkspace?.destroy();
+    director?.dispose();
+  }, { once: true });
 });

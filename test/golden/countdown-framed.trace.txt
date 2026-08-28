@@ -1,0 +1,12 @@
+# composition: countdown-framed
+# frames: 900
+
+[cg:timeline] f=0000 phase=core cycle=0 duration=- paused=no
+[cg:plan] f=0000 enter=countdownFramedGrid
+[cg:plan] f=0000 render=[countdownFramedGrid@1.00]
+[cg:timeline] f=0001 phase=core cycle=0 duration=181.000 paused=no
+
+# draw volume
+blankFrames=0
+firstDrawnFrame=0
+totalFill=0

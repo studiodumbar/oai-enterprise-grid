@@ -3,10 +3,61 @@ import { debug } from "../debug/index.js";
 
 const GOLDEN_RATIO_CONJUGATE = 0.6180339887498949;
 const GOLDEN_ANGLE = 2.399963229728653;
+const FLOCK_STATE_VERSION = 1;
+const BOID_NUMERIC_STATE_KEYS = Object.freeze([
+  "x",
+  "y",
+  "vx",
+  "vy",
+  "ax",
+  "ay",
+  "age",
+  "lifeProgress",
+  "opacity",
+  "birthDelay",
+  "spawnIndex",
+  "targetSpeed",
+  "endOfLifeProgress",
+]);
 
 function unitSequence(index, offset) {
   const value = offset + index * GOLDEN_RATIO_CONJUGATE;
   return value - Math.floor(value);
+}
+
+function normalizedGuide(guide) {
+  if (guide === undefined || guide === null) return null;
+  if (!guide || typeof guide !== "object" || Array.isArray(guide)) {
+    throw new TypeError("Flock guidance must be an object.");
+  }
+  for (const key of [
+    "x",
+    "y",
+    "directionX",
+    "directionY",
+    "force",
+    "radius",
+    "tangentWeight",
+  ]) {
+    if (!Number.isFinite(guide[key])) {
+      throw new RangeError(`Flock guidance ${key} must be finite.`);
+    }
+  }
+  if (guide.force < 0 || guide.tangentWeight < 0) {
+    throw new RangeError("Flock guidance force and tangentWeight must be non-negative.");
+  }
+  if (!(guide.radius > 0)) {
+    throw new RangeError("Flock guidance radius must be positive.");
+  }
+  const magnitude = Math.hypot(guide.directionX, guide.directionY);
+  if (!(magnitude > 0)) {
+    throw new RangeError("Flock guidance direction must be non-zero.");
+  }
+  return {
+    ...guide,
+    directionX: guide.directionX / magnitude,
+    directionY: guide.directionY / magnitude,
+  };
 }
 
 export class Boid {
@@ -187,6 +238,128 @@ export class Flock {
     return this;
   }
 
+  snapshotState() {
+    return {
+      version: FLOCK_STATE_VERSION,
+      time: this.time,
+      nextPulseTime: Number.isFinite(this.nextPulseTime)
+        ? this.nextPulseTime
+        : null,
+      lastPulseTime: Number.isFinite(this.lastPulseTime)
+        ? this.lastPulseTime
+        : null,
+      birthIndex: this.birthIndex,
+      pulseIndex: this.pulseIndex,
+      boids: this.boids.map(boid => ({
+        x: boid.x,
+        y: boid.y,
+        vx: boid.vx,
+        vy: boid.vy,
+        ax: boid.ax,
+        ay: boid.ay,
+        age: boid.age,
+        lifeProgress: boid.lifeProgress,
+        opacity: boid.opacity,
+        birthDelay: boid.birthDelay,
+        spawnIndex: boid.spawnIndex,
+        scheduled: boid.scheduled,
+        active: boid.active,
+        targetSpeed: boid.targetSpeed,
+        endOfLifeProgress: boid.endOfLifeProgress,
+        lifetime: Number.isFinite(boid.lifetime) ? boid.lifetime : null,
+      })),
+    };
+  }
+
+  restoreState(state) {
+    if (
+      !state
+      || typeof state !== "object"
+      || state.version !== FLOCK_STATE_VERSION
+    ) {
+      throw new TypeError(
+        `Flock state must be a version ${FLOCK_STATE_VERSION} object.`,
+      );
+    }
+    if (!Array.isArray(state.boids) || state.boids.length !== this.boids.length) {
+      throw new RangeError(
+        `Flock state must contain ${this.boids.length} boids.`,
+      );
+    }
+    if (!Number.isFinite(state.time) || state.time < 0) {
+      throw new RangeError("Flock state time must be finite and non-negative.");
+    }
+    if (
+      state.nextPulseTime !== null
+      && (!Number.isFinite(state.nextPulseTime) || state.nextPulseTime < 0)
+    ) {
+      throw new RangeError(
+        "Flock state nextPulseTime must be finite and non-negative or null.",
+      );
+    }
+    if (state.lastPulseTime !== null && !Number.isFinite(state.lastPulseTime)) {
+      throw new RangeError("Flock state lastPulseTime must be finite or null.");
+    }
+    for (const key of ["birthIndex", "pulseIndex"]) {
+      if (!Number.isInteger(state[key]) || state[key] < 0) {
+        throw new RangeError(
+          `Flock state ${key} must be a non-negative integer.`,
+        );
+      }
+    }
+
+    for (let index = 0; index < state.boids.length; index += 1) {
+      const source = state.boids[index];
+      if (!source || typeof source !== "object") {
+        throw new TypeError(`Flock state boid ${index} must be an object.`);
+      }
+      for (const key of BOID_NUMERIC_STATE_KEYS) {
+        if (!Number.isFinite(source[key])) {
+          throw new RangeError(
+            `Flock state boid ${index} ${key} must be finite.`,
+          );
+        }
+      }
+      if (
+        source.lifetime !== null
+        && (!Number.isFinite(source.lifetime) || source.lifetime <= 0)
+      ) {
+        throw new RangeError(
+          `Flock state boid ${index} lifetime must be positive or null.`,
+        );
+      }
+      for (const key of ["scheduled", "active"]) {
+        if (typeof source[key] !== "boolean") {
+          throw new TypeError(
+            `Flock state boid ${index} ${key} must be a boolean.`,
+          );
+        }
+      }
+    }
+
+    this.time = state.time;
+    this.nextPulseTime = state.nextPulseTime === null
+      ? Infinity
+      : state.nextPulseTime;
+    this.lastPulseTime = state.lastPulseTime === null
+      ? -Infinity
+      : state.lastPulseTime;
+    this.birthIndex = state.birthIndex;
+    this.pulseIndex = state.pulseIndex;
+    for (let index = 0; index < state.boids.length; index += 1) {
+      const source = state.boids[index];
+      const boid = this.boids[index];
+      for (const key of BOID_NUMERIC_STATE_KEYS) boid[key] = source[key];
+      boid.scheduled = source.scheduled;
+      boid.active = source.active;
+      if (source.lifetime === null) delete boid.lifetime;
+      else boid.lifetime = source.lifetime;
+    }
+    this.hash.heads.fill(-1);
+    this.hash.next.fill(-1);
+    return true;
+  }
+
   effectiveResidenceSeconds() {
     const births = Math.max(1, Math.min(
       this.options.count,
@@ -197,7 +370,8 @@ export class Flock {
     return Math.min(this.options.lifetimeSeconds, capacitySeconds);
   }
 
-  update(dt, width, height, pointer = { active: false }) {
+  update(dt, width, height, pointer = { active: false }, guide) {
+    const activeGuide = normalizedGuide(guide);
     this.time += dt;
     for (const boid of this.boids) {
       boid.advanceLife(dt, this.options.fadeStartsAt);
@@ -223,7 +397,7 @@ export class Flock {
         this.boids[index].targetSpeed = 0;
         continue;
       }
-      this.computeAcceleration(index, width, height, pointer);
+      this.computeAcceleration(index, width, height, pointer, activeGuide);
     }
     for (const boid of this.boids) {
       if (!boid.active) continue;
@@ -249,16 +423,69 @@ export class Flock {
     );
   }
 
-  emitPulse(width, height) {
+  emitPulse(width, height, emission) {
     const births = Math.min(
       this.boids.length,
       Math.max(1, Math.round(this.options.birthsPerPulse)),
     );
-    this.lastPulseTime = this.time;
     const pulse = this.pulseIndex;
-    const originX = width * 0.5;
-    const originY = height * 0.5;
-    const baseAngle = pulse * GOLDEN_ANGLE;
+    let originX = width * 0.5;
+    let originY = height * 0.5;
+    let baseAngle = pulse * GOLDEN_ANGLE;
+    let mode = "centered";
+    let strength = 1;
+
+    if (emission !== undefined) {
+      if (!emission || typeof emission !== "object" || Array.isArray(emission)) {
+        throw new TypeError("Flock pulse emission must be an object.");
+      }
+      for (const key of ["originX", "originY", "directionX", "directionY"]) {
+        if (!Number.isFinite(emission[key])) {
+          throw new RangeError(`Flock pulse ${key} must be finite.`);
+        }
+      }
+      if (emission.strength !== undefined) {
+        if (
+          !Number.isFinite(emission.strength)
+          || emission.strength <= 0
+          || emission.strength > 1
+        ) {
+          throw new RangeError("Flock pulse strength must be finite and between zero and one.");
+        }
+        strength = emission.strength;
+      }
+      let directionMagnitude = Math.hypot(
+        emission.directionX,
+        emission.directionY,
+      );
+      if (!(directionMagnitude > 0)) {
+        throw new RangeError("Flock pulse direction must be non-zero.");
+      }
+      originX = emission.originX;
+      originY = emission.originY;
+      let directionX;
+      let directionY;
+      if (!Number.isFinite(directionMagnitude)) {
+        const directionScale = Math.max(
+          Math.abs(emission.directionX),
+          Math.abs(emission.directionY),
+        );
+        const scaledDirectionX = emission.directionX / directionScale;
+        const scaledDirectionY = emission.directionY / directionScale;
+        const scaledMagnitude = Math.hypot(
+          scaledDirectionX,
+          scaledDirectionY,
+        );
+        directionX = scaledDirectionX / scaledMagnitude;
+        directionY = scaledDirectionY / scaledMagnitude;
+      } else {
+        directionX = emission.directionX / directionMagnitude;
+        directionY = emission.directionY / directionMagnitude;
+      }
+      baseAngle = Math.atan2(directionY, directionX);
+      mode = "directed";
+    }
+    this.lastPulseTime = this.time;
 
     for (let indexInPulse = 0; indexInPulse < births; indexInPulse += 1) {
       const boid = this.nextBirthSlot();
@@ -275,7 +502,7 @@ export class Flock {
         originX + Math.cos(spreadAngle) * spreadRadius,
         originY + Math.sin(spreadAngle) * spreadRadius,
         baseAngle + directionOffset,
-        this.options.initialSpeed * speedScale,
+        this.options.initialSpeed * strength * speedScale,
         delay,
         this.options.lifetimeSeconds,
         index,
@@ -283,12 +510,30 @@ export class Flock {
       this.birthIndex += 1;
     }
     this.pulseIndex += 1;
-    debug.cells(
-      "flock-pulse=%d births=%d active=%d",
-      pulse,
-      births,
-      this.boids.reduce((total, boid) => total + Number(boid.active), 0),
+    const active = this.boids.reduce(
+      (total, boid) => total + Number(boid.active),
+      0,
     );
+    if (mode === "directed") {
+      debug.transition(
+        "flock-pulse=%d mode=directed originX=%.3f originY=%.3f directionX=%.6f directionY=%.6f strength=%.3f births=%d active=%d",
+        pulse,
+        originX,
+        originY,
+        Math.cos(baseAngle),
+        Math.sin(baseAngle),
+        strength,
+        births,
+        active,
+      );
+    } else {
+      debug.cells(
+        "flock-pulse=%d births=%d active=%d",
+        pulse,
+        births,
+        active,
+      );
+    }
   }
 
   nextBirthSlot() {
@@ -341,7 +586,7 @@ export class Flock {
     return boid.x >= 0 && boid.x < width && boid.y >= 0 && boid.y < height;
   }
 
-  computeAcceleration(index, width, height, pointer) {
+  computeAcceleration(index, width, height, pointer, guide = null) {
     const boid = this.boids[index];
     const options = this.options;
     const radius = options.perceptionRadius;
@@ -471,12 +716,33 @@ export class Flock {
       }
     }
 
+    if (guide) this.applyGuide(boid, guide);
+
     const force = Math.hypot(boid.ax, boid.ay);
     if (force > options.maxForce) {
       const scale = options.maxForce / force;
       boid.ax *= scale;
       boid.ay *= scale;
     }
+  }
+
+  applyGuide(boid, guide) {
+    boid.targetSpeed = this.options.maxSpeed;
+    this.addSteer(
+      boid,
+      guide.directionX,
+      guide.directionY,
+      guide.tangentWeight,
+      this.options.maxSpeed,
+    );
+
+    const deltaX = guide.x - boid.x;
+    const deltaY = guide.y - boid.y;
+    const distance = Math.hypot(deltaX, deltaY);
+    if (distance <= 1e-9 || guide.force === 0) return;
+    const amount = guide.force * Math.min(1, distance / guide.radius);
+    boid.ax += deltaX / distance * amount;
+    boid.ay += deltaY / distance * amount;
   }
 
   addSteer(boid, x, y, weight, targetSpeed = this.options.maxSpeed) {

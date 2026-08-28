@@ -5,6 +5,7 @@
 import { GLOBAL_CONFIG } from "./config/global.js";
 import { SHARED_CONFIG } from "./config/shared.js";
 import { INTERACTIVE_GRID_CONFIG } from "./config/compositions/interactive-grid.js";
+import { INTERACTIVE_FLOCK_CONFIG } from "./config/compositions/interactive-flock.js";
 import { FLOCK_GRID_CONFIG } from "./config/compositions/flock-grid.js";
 import { INFERENCE_LOOP_CONFIG } from "./config/compositions/inference-loop.js";
 import { CONTEXT_WINDOW_CONFIG } from "./config/compositions/context-window.js";
@@ -15,6 +16,7 @@ import { MOLD_CONFIG } from "./config/compositions/mold.js";
 import { GAME_OF_LIFE_CONFIG } from "./config/compositions/game-of-life.js";
 import { BASE_CONFIG } from "./config/compositions/base.js";
 import { NOISE_GRID_CONFIG } from "./config/compositions/noise-grid.js";
+import { COUNTDOWN_FRAMED_CONFIG } from "./config/compositions/countdown-framed.js";
 import { mergeFlickerSettings } from "./src/visuals/flicker/index.js";
 import { resolveSceneTransitionSettings } from "./src/scene-transitions/index.js";
 import { resolveCellTransitionSettings } from "./src/cell-transitions/transition-settings.js";
@@ -27,6 +29,7 @@ import {
 export { GLOBAL_CONFIG } from "./config/global.js";
 export { SHARED_CONFIG } from "./config/shared.js";
 export { INTERACTIVE_GRID_CONFIG } from "./config/compositions/interactive-grid.js";
+export { INTERACTIVE_FLOCK_CONFIG } from "./config/compositions/interactive-flock.js";
 export { FLOCK_GRID_CONFIG } from "./config/compositions/flock-grid.js";
 export {
   INFERENCE_LOOP_CONFIG,
@@ -40,6 +43,7 @@ export { MOLD_CONFIG } from "./config/compositions/mold.js";
 export { GAME_OF_LIFE_CONFIG } from "./config/compositions/game-of-life.js";
 export { BASE_CONFIG } from "./config/compositions/base.js";
 export { NOISE_GRID_CONFIG } from "./config/compositions/noise-grid.js";
+export { COUNTDOWN_FRAMED_CONFIG } from "./config/compositions/countdown-framed.js";
 
 export const COMPOSITION_BUNDLES = Object.freeze({
   base: BASE_CONFIG,
@@ -52,7 +56,9 @@ export const COMPOSITION_BUNDLES = Object.freeze({
   mold: MOLD_CONFIG,
   "game-of-life": GAME_OF_LIFE_CONFIG,
   "interactive-grid": INTERACTIVE_GRID_CONFIG,
+  "interactive-flock": INTERACTIVE_FLOCK_CONFIG,
   "flock-grid": FLOCK_GRID_CONFIG,
+  "countdown-framed": COUNTDOWN_FRAMED_CONFIG,
 });
 
 // Compatibility export retained for code that imported the old family-map
@@ -116,10 +122,11 @@ function timingBySettingsKey(configs) {
         const existing = byKey.get(key);
         if (
           existing
-          && (
-            existing.bodyDurationSeconds !== timing.bodyDurationSeconds
-            || existing.beatCount !== timing.beatCount
-          )
+          && (existing.mode === "fixed-beat" || timing.mode === "fixed-beat"
+            ? existing.mode !== timing.mode
+              || existing.beatSeconds !== timing.beatSeconds
+            : existing.bodyDurationSeconds !== timing.bodyDurationSeconds
+              || existing.beatCount !== timing.beatCount)
         ) {
           throw new Error(
             `SETTINGS.${key} is used by compositions with conflicting timing roots.`,
@@ -132,7 +139,101 @@ function timingBySettingsKey(configs) {
   return byKey;
 }
 
-const compositionTimingBySettingsKey = timingBySettingsKey(compositionConfigs);
+function normalizedTimingOverrides(value) {
+  const entries = value instanceof Map ? [...value] : Object.entries(value ?? {});
+  const overrides = new Map();
+  for (const [name, seconds] of entries) {
+    if (typeof name !== "string" || name.trim() === "") {
+      throw new TypeError("Composition timing override names must be non-empty strings.");
+    }
+    if (!Number.isFinite(seconds) || seconds <= 0) {
+      throw new RangeError(
+        `Composition timing override for "${name}" must be a finite positive number.`,
+      );
+    }
+    overrides.set(name, seconds);
+  }
+  return overrides;
+}
+
+function withCompositionTimingOverrides(configs, authoredOverrides) {
+  const overrides = normalizedTimingOverrides(authoredOverrides);
+  if (overrides.size === 0) return configs;
+  const durationBySettingsKey = new Map();
+
+  for (const [requestedName, seconds] of overrides) {
+    const config = configs.find(candidate => (
+      Object.hasOwn(candidate.compositionDefinitions ?? {}, requestedName)
+    ));
+    const requested = config?.compositionDefinitions?.[requestedName];
+    if (!requested) {
+      throw new Error(`Unknown composition timing override "${requestedName}".`);
+    }
+    const canonicalName = requested.legacyAliasFor ?? requestedName;
+    const canonical = config.compositionDefinitions[canonicalName];
+    const timing = resolveTimelineSettings(
+      canonical?.timing,
+      `compositionDefinitions.${canonicalName}.timing`,
+    );
+    if (timing.mode === "fixed-beat") {
+      throw new Error(
+        `Composition "${requestedName}" uses fixed-beat timing; its core duration `
+        + "is owned by recorded beats and cannot be overridden.",
+      );
+    }
+    for (const id of definitionGeneratorIds(canonical)) {
+      const generator = config.generatorDefinitions?.[id];
+      const key = generator?.settingsKey
+        ?? (typeof generator?.options === "string" ? generator.options : null);
+      if (key === null) continue;
+      // A later command for another composition sharing this settings group
+      // replaces the earlier value; both recipes must keep one timing root.
+      durationBySettingsKey.set(key, seconds);
+    }
+  }
+
+  return configs.map(config => {
+    let changed = false;
+    const compositionDefinitions = {};
+    for (const [name, definition] of Object.entries(config.compositionDefinitions ?? {})) {
+      if (definition.legacyAliasFor !== undefined) {
+        compositionDefinitions[name] = definition;
+        continue;
+      }
+      const durations = new Set();
+      for (const id of definitionGeneratorIds(definition)) {
+        const generator = config.generatorDefinitions?.[id];
+        const key = generator?.settingsKey
+          ?? (typeof generator?.options === "string" ? generator.options : null);
+        if (durationBySettingsKey.has(key)) durations.add(durationBySettingsKey.get(key));
+      }
+      if (durations.size > 1) {
+        throw new Error(`Composition "${name}" received conflicting timing overrides.`);
+      }
+      const bodyDurationSeconds = [...durations][0];
+      if (bodyDurationSeconds === undefined) {
+        compositionDefinitions[name] = definition;
+        continue;
+      }
+      const timing = resolveTimelineSettings(
+        definition.timing,
+        `compositionDefinitions.${name}.timing`,
+      );
+      if (timing.mode === "fixed-beat") {
+        throw new Error(
+          `Composition "${name}" shares settings with a fixed-body timing override `
+          + "but uses fixed-beat timing.",
+        );
+      }
+      changed = true;
+      compositionDefinitions[name] = {
+        ...definition,
+        timing: { ...definition.timing, bodyDurationSeconds },
+      };
+    }
+    return changed ? { ...config, compositionDefinitions } : config;
+  });
+}
 
 // A settings group that declares `flicker` inherits the app-wide flicker
 // defaults and overrides only the keys it authored. Groups without flicker are
@@ -260,30 +361,48 @@ function withResolvedCompositionTiming(settingsGroups, timingByKey) {
   return resolved;
 }
 
+function resolveRuntimeConfig(configs) {
+  const timing = timingBySettingsKey(configs);
+  const settings = withResolvedCompositionTiming(
+    withGlobalFlickerDefaults(mergeUnique("settings group", [
+      {
+        canvas: GLOBAL_CONFIG.canvas,
+        composition: GLOBAL_CONFIG.composition,
+        cellTransitions: GLOBAL_CONFIG.cellTransitions,
+        noiseFields: GLOBAL_CONFIG.noiseFields,
+      },
+      SHARED_CONFIG.settings,
+      ...configs.map(config => withGlobalCompositionDefaults(config.settings)),
+    ])),
+    timing,
+  );
+  return {
+    settings,
+    generatorDefinitions: mergeUnique(
+      "generator definition",
+      configs.map(config => config.generatorDefinitions),
+    ),
+    compositionDefinitions: mergeUnique(
+      "composition definition",
+      configs.map(config => config.compositionDefinitions),
+    ),
+  };
+}
+
+export function createRuntimeConfig({ compositionTimingOverrides } = {}) {
+  return resolveRuntimeConfig(
+    withCompositionTimingOverrides(compositionConfigs, compositionTimingOverrides),
+  );
+}
+
 // These assembled aliases preserve the existing director/generator API while
 // authoring stays separated by ownership above.
-export const SETTINGS = withResolvedCompositionTiming(
-  withGlobalFlickerDefaults(mergeUnique("settings group", [
-    {
-      canvas: GLOBAL_CONFIG.canvas,
-      composition: GLOBAL_CONFIG.composition,
-      cellTransitions: GLOBAL_CONFIG.cellTransitions,
-      noiseFields: GLOBAL_CONFIG.noiseFields,
-    },
-    SHARED_CONFIG.settings,
-    ...compositionConfigs.map(config => withGlobalCompositionDefaults(config.settings)),
-  ])),
-  compositionTimingBySettingsKey,
-);
+const RUNTIME_CONFIG = resolveRuntimeConfig(compositionConfigs);
+
+export const SETTINGS = RUNTIME_CONFIG.settings;
 
 export const PALETTES = GLOBAL_CONFIG.palettes;
 
-export const GENERATOR_DEFINITIONS = mergeUnique(
-  "generator definition",
-  compositionConfigs.map(config => config.generatorDefinitions),
-);
+export const GENERATOR_DEFINITIONS = RUNTIME_CONFIG.generatorDefinitions;
 
-export const COMPOSITION_DEFINITIONS = mergeUnique(
-  "composition definition",
-  compositionConfigs.map(config => config.compositionDefinitions),
-);
+export const COMPOSITION_DEFINITIONS = RUNTIME_CONFIG.compositionDefinitions;

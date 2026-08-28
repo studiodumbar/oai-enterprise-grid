@@ -1,3 +1,5 @@
+import { mountPreviewPanel } from "../ui/preview-panel-mount.js";
+
 function colorChannels(hex) {
   const value = Number.parseInt(hex.slice(1), 16);
   return [value >> 16, value >> 8 & 255, value & 255];
@@ -24,6 +26,7 @@ function paint(canvas, snapshot) {
 
 export function createFlockPreviewPanel({
   document,
+  mount,
   snapshot,
   isExporting = () => false,
 }) {
@@ -34,7 +37,7 @@ export function createFlockPreviewPanel({
   root.hidden = true;
   root.className = "flock-preview-panel";
   root.innerHTML = "<summary>Flock field</summary><canvas></canvas>";
-  Object.assign(root.style, {
+  const floatingStyles = {
     position: "fixed",
     right: "12px",
     bottom: "12px",
@@ -44,7 +47,7 @@ export function createFlockPreviewPanel({
     background: "#111e",
     zIndex: "20",
     font: "12px sans-serif",
-  });
+  };
   const canvas = root.querySelector("canvas");
   Object.assign(canvas.style, {
     display: "block",
@@ -54,7 +57,7 @@ export function createFlockPreviewPanel({
     imageRendering: "pixelated",
     background: "#000",
   });
-  document.body.append(root);
+  mountPreviewPanel({ document, mount, root, floatingStyles });
 
   function setVisible(next) {
     visible = Boolean(next);
@@ -78,6 +81,7 @@ export function createFlockPreviewPanel({
   }
 
   return {
+    root,
     setVisible,
     isVisible: () => visible,
     update,

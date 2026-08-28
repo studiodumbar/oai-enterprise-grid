@@ -1,5 +1,6 @@
 import { FactoryRegistry } from "./core/registry.js";
 import { SequenceRule } from "./compositions/sequence-rule.js";
+import { InteractiveTakeRule } from "./compositions/interactive-take-rule.js";
 import { createCellTransitionModeRegistry } from "./cell-transitions/index.js";
 import { RoundedRectRenderer } from "./shapes/rounded-rect.js";
 import { FlockGridGenerator } from "./generators/flock-grid-generator.js";
@@ -12,6 +13,7 @@ import { PathfindingGenerator } from "./generators/pathfinding-generator.js";
 import { BaseCompositionGenerator } from "./generators/base-composition-generator.js";
 import { createSceneTransitionModeRegistry } from "./scene-transitions/index.js";
 import { NoiseCircleGridGenerator } from "./generators/noise-circle-grid-generator.js";
+import { CountdownFramedGenerator } from "./generators/countdown-framed-generator.js";
 import { createNoiseFieldRegistry } from "./noise-fields/index.js";
 
 // This is the implementation catalog. Generator factories are registered here;
@@ -29,10 +31,19 @@ export function createCatalog({ palettes }) {
     "sequence",
     ({ definition }) => new SequenceRule(definition),
   );
+  compositionRules.register(
+    "interactive-take",
+    creationContext => new InteractiveTakeRule(creationContext),
+  );
 
   generatorTypes.register(
     "noise-circle-grid",
     creationContext => new NoiseCircleGridGenerator({ ...creationContext, palettes, noiseFieldModes }),
+  );
+
+  generatorTypes.register(
+    "countdown-framed",
+    creationContext => new CountdownFramedGenerator({ ...creationContext, palettes }),
   );
 
   generatorTypes.register(

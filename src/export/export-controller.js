@@ -10,6 +10,12 @@ import { createSvgRecordingContext } from "./svg-recording-context.js";
 import { createVideoEncoder } from "./video-encoder.js";
 import { evenSize } from "./resolution.js";
 import { diogoniseImport, isDiogonisatorImport } from "./diogonisator.js";
+import { debug } from "../debug/index.js";
+import {
+  applyExportPresetJob,
+  exportPreset,
+  exportPresetJobSession,
+} from "./export-presets.js";
 
 const signature = projectSignature;
 const INACTIVE_POINTER = Object.freeze({ active: false, x: 0, y: 0 });
@@ -108,6 +114,35 @@ export function createExportController({
   background = "#fff",
 } = {}) {
   let exporting = false;
+
+  // Calling the picker, rather than awaiting its result, must happen in the
+  // original click/console gesture. A session can be shared by a batch so its
+  // later compositions keep writing to the directory selected up front.
+  function prepareSession({ format = state.exportFormat } = {}) {
+    if (format !== "png-sequence") return {};
+    const picker = globalThis.window?.showDirectoryPicker;
+    if (typeof picker !== "function") {
+      debug.export("destination format=png-sequence kind=zip state=selected");
+      return {};
+    }
+    debug.export("destination format=png-sequence kind=directory state=requested");
+    const pngSequenceDirectory = Promise.resolve(
+      picker.call(globalThis.window, { mode: "readwrite" }),
+    ).then(
+      directory => {
+        debug.export("destination format=png-sequence kind=directory state=selected");
+        return directory;
+      },
+      error => {
+        debug.export(
+          "destination format=png-sequence kind=directory state=failed error=%s",
+          error?.name ?? "Error",
+        );
+        throw error;
+      },
+    );
+    return { pngSequenceDirectory };
+  }
 
   function projectPayload(director = getDirector()) {
     return {
@@ -235,7 +270,7 @@ export function createExportController({
     downloadBlob(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }), names.svg());
   }
 
-  async function exportMotion(payload, names, format, cycles) {
+  async function exportMotion(payload, names, format, cycles, exportSession, jobLabel) {
     const { width, height } = normalizedOutputSize(state, format !== "png-sequence");
     const fps = Math.max(1, Math.round(state.fps));
     const duration = motionDurationForCycles(getDirector().animationDuration(), cycles);
@@ -255,11 +290,18 @@ export function createExportController({
     let encoder = null;
     let sink = null;
     try {
+      const directory = format === "png-sequence"
+        ? await exportSession.pngSequenceDirectory
+        : undefined;
       session = await createMotionSession(width, height, fps);
       if (format === "png-sequence") {
         sink = await createPngSequenceSink({
           prefix: names.base,
           frameCount: frames,
+          directory,
+          // Directory selection was deliberately completed before async setup.
+          // Do not let the sink open a second, gesture-gated picker here.
+          windowRef: {},
           download: downloadBlob,
         });
       } else {
@@ -281,16 +323,17 @@ export function createExportController({
           await encoder.add(time, 1 / fps);
         }
         await session.advanceFrame(index);
-        panel.setProgress(`Rendering ${index + 1}/${frames}…`, (index + 1) / frames);
+        const label = jobLabel ? `${jobLabel} · ` : "";
+        panel.setProgress(`${label}Rendering ${index + 1}/${frames}…`, (index + 1) / frames);
         await yieldToBrowser();
       }
 
       if (sink) {
-        panel.setProgress("Packaging sequence…", 1);
+        panel.setProgress(jobLabel ? `${jobLabel} · Packaging…` : "Packaging sequence…", 1);
         await sink.close();
         return;
       }
-      panel.setProgress("Finalizing video…", 1);
+      panel.setProgress(jobLabel ? `${jobLabel} · Finalizing…` : "Finalizing video…", 1);
       const video = await encoder.finalize();
       const parts = format === "mp4" && state.embedProjectState
         ? [video, signature.mp4Box(payload)]
@@ -309,7 +352,7 @@ export function createExportController({
 
   // `notify` is on for the panel button and off for the console, which
   // summarises failures itself instead of stacking alert dialogs.
-  async function run({ notify = true, cycles = 1 } = {}) {
+  async function run({ notify = true, cycles = 1, session, variant, jobLabel } = {}) {
     if (exporting) {
       return { ok: false, error: new Error("An export is already running.") };
     }
@@ -317,7 +360,7 @@ export function createExportController({
     let failure = null;
     const wasLooping = typeof p.isLooping === "function" ? p.isLooping() : true;
     const exportDate = new Date();
-    const parts = { date: exportDate, ...exportNameParts() };
+    const parts = { date: exportDate, ...exportNameParts(), variant };
     const base = exportBaseName(exportDate, parts);
     const names = {
       base,
@@ -327,22 +370,37 @@ export function createExportController({
       webm: alpha => exportFilename("webm", { ...parts, alpha }),
     };
     panel.setLocked(true);
-    panel.setProgress("Preparing export…", 0);
+    panel.setProgress(jobLabel ? `${jobLabel} · Preparing…` : "Preparing export…", 0);
     setInputLocked(true);
     pausePreview();
     try {
+      const exportSession = session ?? prepareSession();
+      debug.export("run state=started format=%s cycles=%d", state.exportFormat, cycles);
       const payload = projectPayload();
       if (state.exportFormat === "png") await exportPng(payload, names);
       else if (state.exportFormat === "svg") await exportSvg(payload, names);
       else if (state.exportFormat === "png-sequence") {
-        await exportMotion(payload, names, "png-sequence", cycles);
+        await exportMotion(
+          payload,
+          names,
+          "png-sequence",
+          cycles,
+          exportSession,
+          jobLabel,
+        );
       } else if (state.exportFormat === "webm") {
-        await exportMotion(payload, names, "webm", cycles);
+        await exportMotion(payload, names, "webm", cycles, exportSession, jobLabel);
       } else {
-        await exportMotion(payload, names, "mp4", cycles);
+        await exportMotion(payload, names, "mp4", cycles, exportSession, jobLabel);
       }
     } catch (error) {
       failure = error;
+      debug.export(
+        "run state=failed format=%s cycles=%d error=%s",
+        state.exportFormat,
+        cycles,
+        error?.name ?? "Error",
+      );
       console.error("Export failed:", error);
       if (notify) window.alert(`Export failed: ${error.message}`);
     } finally {
@@ -355,7 +413,68 @@ export function createExportController({
         exporting = false;
       }
     }
+    if (!failure) {
+      debug.export("run state=completed format=%s cycles=%d", state.exportFormat, cycles);
+    }
     return failure ? { ok: false, error: failure } : { ok: true };
+  }
+
+  async function runPreset(name, { notify = true, cycles = 1 } = {}) {
+    if (exporting) {
+      return { ok: false, error: new Error("An export is already running.") };
+    }
+    const preset = exportPreset(name);
+    const before = exportStateSnapshot(state);
+    // The preset includes two PNG sequences. Acquire their shared destination
+    // now, while this function is still executing inside the button gesture.
+    const session = prepareSession({ format: "png-sequence" });
+    const results = [];
+    let failure = null;
+    debug.export("preset state=started name=%s jobs=%d", preset.id, preset.jobs.length);
+    try {
+      for (const [index, job] of preset.jobs.entries()) {
+        applyExportPresetJob(state, preset, job);
+        panel.sync();
+        debug.export(
+          "preset state=job name=%s index=%d format=%s aspect=%s size=%dx%d fps=%d directory=%s",
+          preset.id,
+          index,
+          job.format,
+          job.aspect,
+          state.resW,
+          state.resH,
+          state.fps,
+          job.directory ?? "parent",
+        );
+        const result = await run({
+          notify: false,
+          cycles,
+          session: exportPresetJobSession(session, job),
+          variant: job.variant,
+          jobLabel: `${index + 1}/${preset.jobs.length} ${job.label}`,
+        });
+        results.push({ ...job, ...result });
+        if (!result.ok) {
+          failure = result.error;
+          break;
+        }
+      }
+    } finally {
+      applyKnownExportState(state, before);
+      panel.sync();
+    }
+    if (failure) {
+      debug.export(
+        "preset state=failed name=%s completed=%d error=%s",
+        preset.id,
+        results.filter(result => result.ok).length,
+        failure?.name ?? "Error",
+      );
+      if (notify) globalThis.window?.alert(`Export preset failed: ${failure.message}`);
+      return { ok: false, preset: preset.id, results, error: failure };
+    }
+    debug.export("preset state=completed name=%s jobs=%d", preset.id, results.length);
+    return { ok: true, preset: preset.id, results };
   }
 
   function restorePayload(saved) {
@@ -412,7 +531,9 @@ export function createExportController({
   }
 
   return {
+    prepareSession,
     run,
+    runPreset,
     restoreFile,
     restorePayload,
     get exporting() {

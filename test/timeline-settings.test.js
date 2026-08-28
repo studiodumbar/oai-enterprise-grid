@@ -20,6 +20,18 @@ test("timeline settings resolve the absolute body root into an immutable beat", 
   assert.deepEqual(authored, { bodyDurationSeconds: 12, beatCount: 6 });
 });
 
+test("fixed-beat timing keeps one beat root while body duration stays dynamic", () => {
+  const authored = { mode: "fixed-beat", beatSeconds: 3 };
+  const resolved = resolveTimelineSettings(authored, "interactive.timing");
+
+  assert.deepEqual(resolved, {
+    mode: "fixed-beat",
+    beatSeconds: 3,
+  });
+  assert.equal(Object.isFrozen(resolved), true);
+  assert.deepEqual(authored, { mode: "fixed-beat", beatSeconds: 3 });
+});
+
 test("timeline durations preserve explicit values instead of consulting auto", () => {
   assert.deepEqual(
     resolveTimelineDuration(1.25, {
@@ -87,6 +99,23 @@ test("timeline roots and automatic children reject incomplete timing graphs", ()
       beatCount: 2,
     }, "demo.timing"),
     /demo\.timing\.beatSeconds must be a finite positive number/,
+  );
+  assert.throws(
+    () => resolveTimelineSettings({ mode: "fixed-beat", beatSeconds: 0 }, "demo.timing"),
+    /demo\.timing\.beatSeconds must be a finite positive number/,
+  );
+  assert.throws(
+    () => resolveTimelineSettings({ mode: "moving-target", beatSeconds: 2 }, "demo.timing"),
+    /demo\.timing\.mode must be "fixed-body" or "fixed-beat"/,
+  );
+  assert.throws(
+    () => resolveTimelineSettings({
+      mode: "fixed-beat",
+      beatSeconds: 2,
+      bodyDurationSeconds: 8,
+      beatCount: 4,
+    }, "demo.timing"),
+    /fixed-beat timing cannot also declare bodyDurationSeconds or beatCount/,
   );
   assert.throws(
     () => resolveTimelineDuration("auto", {

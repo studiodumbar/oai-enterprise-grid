@@ -17,14 +17,20 @@
 [cg:transition] f=0609 scene=state mode=aurora targets=96 sources=98 duration=1.200 key=l-tree:0:prune:1:7x3 pass=4 sweep=top-down
 [cg:transition] f=0681 scene=state mode=aurora targets=72 sources=96 duration=1.200 key=l-tree:0:commit:0:7x3 pass=5 sweep=bottom-up
 [cg:transition] f=0767 scene=cut strategy=l-tree key=l-tree:0:settle:0
-[cg:timeline] f=0839 phase=end cycle=0 duration=3.000 paused=yes
+[cg:timeline] f=0839 phase=end cycle=0 duration=0.750 paused=yes
 [cg:transition] f=0839 endpoint=end mode=dijkstra grid=parent cycle=0 starts=1 center=10 paths=1 cells=4 changing=3 trail=1.000 cost=3.000
 [cg:transition] f=0839 endpoint=end mode=dijkstra stage=loading cycle=0
-[cg:transition] f=0841 endpoint=end mode=dijkstra stage=path cycle=0
-[cg:transition] f=0847 endpoint=end mode=dijkstra stage=blink cycle=0
-[cg:transition] f=0883 endpoint=end mode=dijkstra stage=subdivide cycle=0
+[cg:transition] f=0840 endpoint=end mode=dijkstra stage=path cycle=0
+[cg:transition] f=0841 endpoint=end mode=dijkstra stage=blink cycle=0
+[cg:transition] f=0850 endpoint=end mode=dijkstra stage=subdivide cycle=0
+[cg:transition] f=0880 endpoint=end mode=dijkstra stage=center cycle=0
+[cg:timeline] f=0884 phase=start cycle=1 duration=2.000 paused=no
+[cg:transition] f=0884 endpoint=start mode=text cycle=1 targets=17 sources=1 padded=0 subdivision=1 unpaired=16
+[cg:transition] f=0884 text hold clamped authored=3 requested=3.000 applied=1.200 phase=2.000
+[cg:transition] f=0884 overlay=intro mode=text
+[cg:timeline] f=0885 phase=start cycle=1 duration=2.000 paused=yes
 
 # draw volume
-blankFrames=18
+blankFrames=3
 firstDrawnFrame=0
-totalFill=77125
+totalFill=96063

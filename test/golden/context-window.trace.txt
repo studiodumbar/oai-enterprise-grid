@@ -16,22 +16,24 @@
 [cg:transition] f=0369 scene=state mode=aurora targets=141 sources=125 duration=0.880 key=context:0:readout:3:11x7 pass=3 sweep=bottom-up
 [cg:transition] f=0436 scene=state mode=aurora targets=3 sources=141 duration=0.880 key=context:0:commit:3:11x7 pass=4 sweep=top-down
 [cg:transition] f=0489 scene=state mode=aurora targets=3 sources=3 duration=0.880 key=context:0:quiet:3:11x7 pass=5 sweep=bottom-up
-[cg:timeline] f=0599 phase=end cycle=0 duration=2.000 paused=yes
+[cg:timeline] f=0599 phase=end cycle=0 duration=0.500 paused=yes
 [cg:transition] f=0599 endpoint=end mode=dijkstra grid=parent cycle=0 starts=3 center=38 paths=3 cells=5 changing=4 trail=1.000 cost=8.000
 [cg:transition] f=0599 endpoint=end mode=dijkstra stage=loading cycle=0
 [cg:transition] f=0600 endpoint=end mode=dijkstra stage=path cycle=0
-[cg:transition] f=0604 endpoint=end mode=dijkstra stage=blink cycle=0
-[cg:transition] f=0628 endpoint=end mode=dijkstra stage=subdivide cycle=0
-[cg:transition] f=0707 endpoint=end mode=dijkstra stage=center cycle=0
-[cg:timeline] f=0719 phase=start cycle=1 duration=2.000 paused=no
-[cg:transition] f=0719 endpoint=start mode=text cycle=1 targets=324 sources=1 padded=0 subdivision=1 unpaired=323
-[cg:transition] f=0719 text hold clamped authored=3 requested=3.000 applied=1.200 phase=2.000
-[cg:transition] f=0719 overlay=intro mode=text
-[cg:timeline] f=0720 phase=start cycle=1 duration=2.000 paused=yes
-[cg:timeline] f=0839 phase=core cycle=1 duration=8.000 paused=no
-[cg:transition] f=0839 overlay=- mode=-
+[cg:transition] f=0601 endpoint=end mode=dijkstra stage=blink cycle=0
+[cg:transition] f=0607 endpoint=end mode=dijkstra stage=subdivide cycle=0
+[cg:transition] f=0626 endpoint=end mode=dijkstra stage=center cycle=0
+[cg:timeline] f=0629 phase=start cycle=1 duration=2.000 paused=no
+[cg:transition] f=0629 endpoint=start mode=text cycle=1 targets=324 sources=1 padded=0 subdivision=1 unpaired=323
+[cg:transition] f=0629 text hold clamped authored=3 requested=3.000 applied=1.200 phase=2.000
+[cg:transition] f=0629 overlay=intro mode=text
+[cg:timeline] f=0630 phase=start cycle=1 duration=2.000 paused=yes
+[cg:timeline] f=0749 phase=core cycle=1 duration=8.000 paused=no
+[cg:transition] f=0749 overlay=- mode=-
+[cg:transition] f=0812 scene=state mode=aurora targets=120 sources=324 duration=0.880 key=context:1:attention:1:11x7 pass=6 sweep=top-down
+[cg:transition] f=0874 scene=state mode=aurora targets=255 sources=120 duration=0.880 key=context:1:attention:2:11x7 pass=7 sweep=bottom-up
 
 # draw volume
-blankFrames=12
+blankFrames=6
 firstDrawnFrame=0
-totalFill=115692
+totalFill=124837
