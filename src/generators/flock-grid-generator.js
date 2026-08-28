@@ -18,6 +18,7 @@ import {
   compositionEndpointPaletteColor,
   drawCompositionEndpointFrame,
 } from "../composition-endpoints/render.js";
+import { drawCellGridGuides } from "../grid/cell-grid-guides.js";
 import { debug } from "../debug/index.js";
 import { hashUnit } from "./grid-scene-strategies.js";
 import {
@@ -956,6 +957,9 @@ export class FlockGridGenerator {
         dotMargin: this.grid.options.dotMargin,
         colorForGlyph: glyph => this.compositionEndpointColor(glyph),
       });
+      if (frame?.showCellGrid === true) {
+        drawCellGridGuides(context, this.grid.layout);
+      }
       return;
     }
     this.circleEndpointActive = this.circleEndpoint?.prepare?.(
@@ -969,6 +973,7 @@ export class FlockGridGenerator {
     }
     this.grid.draw(context, undefined, {
       guides: !frame?.exporting,
+      showCellGrid: this.grid.options.showCellGrid || frame?.showCellGrid === true,
       glyphPresentation: this.circleEndpointActive
         ? item => this.circleEndpoint.presentationsFor(item.id)
         : undefined,

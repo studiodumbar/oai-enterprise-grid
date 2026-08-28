@@ -9,8 +9,10 @@ export const GLOBAL_CONFIG = {
   },
 
   ui: {
-    showExportPanel: true,
-    noisePreview: false,
+    showCompositionPanel: false,
+    showCellGrid: false,
+    showExportPanel: false,
+    noisePreview: true,
     flockPreview: false,
   },
 
@@ -33,7 +35,7 @@ export const GLOBAL_CONFIG = {
     // game-of-life
     // voronoi,
     // noise-grid
-    active: "interactive-flock",
+    active: "countdown-framed",
     // Legacy phase defaults stay flat while compositions are migrated one by
     // one. A migrated composition overrides them through circleEndpoints.
     startWithCircle: true,
@@ -249,6 +251,13 @@ export const GLOBAL_CONFIG = {
     lightBlue: ["#d4ebf7", "#a8ddf0", "#6db9e7", "#2e7ec6", "#0066b3"],
     justBlue: ["#2e7ec6", "#3a89ce", "#5aa0d9", "#7ab7e3", "#9aceee"],
     green: ["#003415", "#00692a", "#00a240", "#04b84c", "#8cdfad"],
+    snake: ["#00a240", "#04b84c", "#8cdfad"],
+       countdown: [
+          "#2C6731", 
+          "#489F4C", 
+          "#93DDB1", 
+          "#FFFFFF", 
+      ],
     
       flocker: [
           "#00692a", 

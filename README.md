@@ -411,7 +411,10 @@ settings and returns the plan without exporting.
 Each command resolves to a result object (`{ ok, compositions, results, … }`),
 so a failed batch can be inspected in the console. `panel show` and `panel
 hide` mount and unmount the export panel at runtime; the checked-in default
-comes from `ui.showExportPanel` in `config/global.js`.
+comes from `ui.showExportPanel` in `config/global.js`. The Composition panel's
+checked-in visibility comes from `ui.showCompositionPanel`; composition-local
+`ui` settings may override it. `ui.showCellGrid` adds parent-cell guides to the
+browser preview across compositions; exported output never includes the guides.
 
 ## Architecture
 

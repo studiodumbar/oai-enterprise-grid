@@ -85,12 +85,20 @@ export function createCompositionPanel({
   compositions,
   current,
   use,
+  noisePreviewVisible = () => false,
+  setNoisePreviewVisible = () => false,
 } = {}) {
   if (!container?.append) {
     throw new TypeError("Composition panel needs a DOM container.");
   }
   if (typeof current !== "function" || typeof use !== "function") {
     throw new TypeError("Composition panel needs current() and use(id) functions.");
+  }
+  if (
+    typeof noisePreviewVisible !== "function"
+    || typeof setNoisePreviewVisible !== "function"
+  ) {
+    throw new TypeError("Composition panel noise preview hooks must be functions.");
   }
 
   const choices = canonicalCompositionChoices(compositions);
@@ -109,6 +117,7 @@ export function createCompositionPanel({
     cycle: initial.cycle,
     coreDuration: initial.coreDuration,
     instruction: initial.instruction,
+    noisePreview: Boolean(noisePreviewVisible()),
   };
   const pane = new Pane({ container });
   pane.element.setAttribute("aria-label", "Composition controls and timeline status");
@@ -122,6 +131,9 @@ export function createCompositionPanel({
   pane.addBinding(values, "phase", { label: "Phase", readonly: true });
   pane.addBinding(values, "cycle", { label: "Cycle", readonly: true });
   pane.addBinding(values, "coreDuration", { label: "Core loop", readonly: true });
+  const noisePreviewBinding = pane.addBinding(values, "noisePreview", {
+    label: "Noise preview",
+  });
   const instructionBinding = pane.addBinding(values, "instruction", {
     label: "How to add a beat",
     readonly: true,
@@ -142,6 +154,7 @@ export function createCompositionPanel({
       values.cycle = telemetry.cycle;
       values.coreDuration = telemetry.coreDuration;
       values.instruction = telemetry.instruction;
+      values.noisePreview = Boolean(noisePreviewVisible());
       instructionBinding.hidden = telemetry.instruction === "";
       pane.refresh();
     } finally {
@@ -157,6 +170,11 @@ export function createCompositionPanel({
     } finally {
       sync();
     }
+  });
+  noisePreviewBinding.on("change", event => {
+    if (syncing || event.last === false) return;
+    setNoisePreviewVisible(event.value === true);
+    sync();
   });
 
   sync();

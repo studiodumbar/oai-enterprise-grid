@@ -815,6 +815,7 @@ test("the shipped catalog registers every mode and each composition selects one"
   assert.deepEqual(flickering.map(([name]) => name).sort(), [
     "base",
     "contextWindow",
+    "countdownFramed",
     "flock",
     "gameOfLife",
     "inferenceLoop",

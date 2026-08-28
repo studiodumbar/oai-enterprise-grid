@@ -1,9 +1,11 @@
 import {
   createNoiseFieldRegistry,
+  noiseVisibilityFill,
   NoiseFieldSampler,
   resolveNoiseFieldSettings,
 } from "../noise-fields/index.js";
 import { debug } from "../debug/index.js";
+import { drawCellGridGuides } from "../grid/cell-grid-guides.js";
 
 const TAU = Math.PI * 2;
 
@@ -18,13 +20,6 @@ function legacyVisibilityUnit(x, y, subdivisions) {
     (x + 0.5) * 127.1 + (y + 0.5) * 311.7 + subdivisions * 74.7,
   ) * 43758.5453;
   return value - Math.floor(value);
-}
-
-function visibilityFill(value, layer) {
-  if (layer.softness <= 1e-7) return Number(value >= layer.threshold);
-  return Math.max(0, Math.min(1, (
-    value - layer.threshold + layer.softness
-  ) / (2 * layer.softness)));
 }
 
 function densityFromSize(raw, layer) {
@@ -273,7 +268,7 @@ export class NoiseCircleGridGenerator {
     const visibilityValue = visibilityLayer.softness <= 1e-7
       ? this.sampled.visibilityLevels[4].data[cell] / 255
       : visibilityLevel.data[sampleIndex] / 255;
-    const fill = visibilityFill(visibilityValue, visibilityLayer);
+    const fill = noiseVisibilityFill(visibilityValue, visibilityLayer);
     const visibility = Number(
       legacyVisibilityUnit(x, y, subdivisions) * 0.999999 <= fill,
     );
@@ -446,6 +441,7 @@ export class NoiseCircleGridGenerator {
           context.strokeRect?.(offsetX + column * cellSize, offsetY + row * cellSize, cellSize, cellSize);
         }
       }
+      if (frame?.showCellGrid === true) drawCellGridGuides(context, this.layout);
     } finally { context.restore(); }
   }
 
@@ -489,7 +485,7 @@ export class NoiseCircleGridGenerator {
       previewDimensions: continuous?.dimensions ?? null,
       contrast: this.sampled.contrastLevels[0].data.slice(),
       visibility: Uint8Array.from(this.sampled.visibilityLevels[0].data, value => (
-        Math.round(visibilityFill(value / 255, this.visibilitySettings) * 255)
+        Math.round(noiseVisibilityFill(value / 255, this.visibilitySettings) * 255)
       )),
       visibilitySettings: {
         threshold: this.visibilitySettings.threshold,

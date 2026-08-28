@@ -43,7 +43,11 @@ export function createCatalog({ palettes }) {
 
   generatorTypes.register(
     "countdown-framed",
-    creationContext => new CountdownFramedGenerator({ ...creationContext, palettes }),
+    creationContext => new CountdownFramedGenerator({
+      ...creationContext,
+      palettes,
+      noiseFieldModes,
+    }),
   );
 
   generatorTypes.register(

@@ -69,7 +69,19 @@ export class NoiseFieldSampler {
     debug.config("noise-backend=%s %s", backend, reason);
   }
 
-  samplePlane({ name, width, height, progress, timeSeconds, projectSeed, settings }) {
+  samplePlane({
+    name,
+    width,
+    height,
+    progress,
+    timeSeconds,
+    temporalOffset = 0,
+    projectSeed,
+    settings,
+  }) {
+    if (!Number.isFinite(temporalOffset)) {
+      throw new RangeError("Noise temporal offset must be finite.");
+    }
     const layer = settings.layers[name];
     const effectiveSeedBase = Math.fround((Number(projectSeed) >>> 0) / TWO32);
     const effectiveSeed = Math.fround(layer.seed + effectiveSeedBase);
@@ -78,10 +90,10 @@ export class NoiseFieldSampler {
     const field = mode.createField({ settings: layer.modes[layer.mode], loopPeriod, seed: effectiveSeed });
     const layerProgress = ((progress % 1) + 1) % 1;
     const direction = Math.sign(layer.cyclesPerLoop);
-    const z = layer.speed !== null
+    const z = (layer.speed !== null
       ? layer.speed * Math.max(0, timeSeconds) + effectiveSeed * 0.173
       : direction * layerProgress * Math.abs(layer.cyclesPerLoop)
-      + effectiveSeed * 0.173;
+      + effectiveSeed * 0.173) + temporalOffset;
     const output = new Uint8Array(width * height);
     const aspect = width / Math.max(1, height);
     for (let y = 0; y < height; y += 1) {

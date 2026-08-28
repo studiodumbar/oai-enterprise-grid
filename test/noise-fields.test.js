@@ -144,6 +144,32 @@ test("speed animates simplex as documented free drift rather than a seamless loo
   assert.notDeepEqual(start.size, end.size);
 });
 
+test("temporal offsets move a stationary field without changing its base clock", () => {
+  const { registry, resolved } = settings({
+    layers: { visibility: { mode: "simplex", cyclesPerLoop: 0, speed: null } },
+  });
+  const sampler = new NoiseFieldSampler({ modeRegistry: registry });
+  const input = {
+    name: "visibility",
+    width: 24,
+    height: 16,
+    progress: 0,
+    timeSeconds: 0,
+    projectSeed: 7,
+    settings: resolved,
+  };
+  const start = sampler.samplePlane({ ...input, temporalOffset: 0 }).data;
+  const moved = sampler.samplePlane({ ...input, temporalOffset: 0.08 }).data;
+  const returned = sampler.samplePlane({ ...input, temporalOffset: 0 }).data;
+
+  assert.notDeepEqual(start, moved);
+  assert.deepEqual(start, returned);
+  assert.throws(
+    () => sampler.samplePlane({ ...input, temporalOffset: Number.NaN }),
+    /temporal offset must be finite/,
+  );
+});
+
 test("noise-grid lifecycle draws level-four glyphs and returns copied preview planes", () => {
   const headless = createHeadlessDirector({ composition: "noise-grid" });
   const { director, context } = headless;

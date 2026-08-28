@@ -18,6 +18,7 @@ import {
 } from "../timeline/timeline-settings.js";
 import { createSceneTransitionModeRegistry } from "../scene-transitions/index.js";
 import { debug } from "../debug/index.js";
+import { drawCellGridGuides } from "../grid/cell-grid-guides.js";
 import {
   FLICKER_DOTS_PER_CELL_AXIS,
   createFlicker,
@@ -1600,6 +1601,7 @@ export class InteractiveGridGenerator {
       : null;
     if (customEndpoint) {
       this.drawCustomCompositionEndpoint(context, customEndpoint, frame);
+      if (frame?.showCellGrid === true) drawCellGridGuides(context, this.layout);
       return;
     }
     this.circleEndpointActive = this.circleEndpoint?.prepare?.(
@@ -1627,7 +1629,16 @@ export class InteractiveGridGenerator {
       }
     }
 
-    if (this.options.showCellGrid && !frame?.exporting) this.drawCellGrid(context);
+    if (
+      !frame?.exporting
+      && (this.options.showCellGrid || frame?.showCellGrid === true)
+    ) {
+      drawCellGridGuides(context, this.layout, {
+        strokeStyle: frame?.showCellGrid === true
+          ? "rgba(255, 70, 95, 0.42)"
+          : "rgba(6, 20, 38, 0.08)",
+      });
+    }
     if (!frame?.exporting && this.hoveredCell >= 0 && !this.hoveredSubdivisionLeaf) {
       this.drawHover(context, this.hoveredCell);
     }
@@ -1950,34 +1961,6 @@ export class InteractiveGridGenerator {
 
   marginScale() {
     return 1 - Math.max(0, Math.min(0.95, Number(this.options.dotMargin) || 0));
-  }
-
-  drawCellGrid(context) {
-    const {
-      columns,
-      rows,
-      cellSize,
-      offsetX,
-      offsetY,
-      patternWidth,
-      patternHeight,
-    } = this.layout;
-    context.save();
-    context.strokeStyle = "rgba(6, 20, 38, 0.08)";
-    context.lineWidth = 1;
-    context.beginPath();
-    for (let column = 0; column <= columns; column += 1) {
-      const x = offsetX + column * cellSize;
-      context.moveTo(x, offsetY);
-      context.lineTo(x, offsetY + patternHeight);
-    }
-    for (let row = 0; row <= rows; row += 1) {
-      const y = offsetY + row * cellSize;
-      context.moveTo(offsetX, y);
-      context.lineTo(offsetX + patternWidth, y);
-    }
-    context.stroke();
-    context.restore();
   }
 
   drawHover(context, index) {

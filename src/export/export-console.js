@@ -46,7 +46,7 @@ Commands
   duration <seconds>            set the active composition's core loop duration
   export [flags]                export the active composition (or --all / --composition)
   panel show|hide|toggle        show or hide the export panel
-  noise-preview show|hide|toggle show the active noise generator's four fields
+  noise-preview show|hide|toggle show the active composition's noise fields
   flock-preview show|hide|toggle show the offscreen field driving the flock grid
   debug [channels|all|off]      trace subsystem state changes to the console
 

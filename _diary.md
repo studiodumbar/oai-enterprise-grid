@@ -1,31 +1,24 @@
 
 [ === tbd== ]
 
-
 [] fractal
-[] generative backdrops?
-    connecting thread is an open ai logo
-    30sec loops stitched together
-    think of it as chapters happening one after another, from 1a to 1d and etc
-[] png sequence export
-
-
-[] export panel to be tweakpane
-    [] be able to dictate duration and beats
 
 [ === wip === ]
 
-
-[] mold 
-[] More organic feel, less computer
-    [x] night sky
-    [] water ripples
-    [x] autora
-
+[] snake to always be the full size
 
 
 [ === arc === ]
 
+[[] More organic feel, less computer
+    [x] night sky
+    [] water ripples
+    [x] autora
+x] export panel to be tweakpane
+[x] mold 
+[x] generative backdrops?
+[x] png sequence export
+    [x] be able to dictate duration and beats
 [x] monokai vim selection to be neon green with black type
 [x] figure out diogos tool
 [x] debug diogo

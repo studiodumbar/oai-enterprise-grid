@@ -176,6 +176,7 @@ new window.p5(p => {
     return {
       dt,
       compositionDt: dt,
+      showCellGrid: GLOBAL_CONFIG.ui.showCellGrid === true,
       time: elapsed,
       frameIndex,
       viewport: runtime.viewport(),
@@ -325,6 +326,7 @@ new window.p5(p => {
     const flockVisible = ui.flockPreview === true;
     noisePreviewPanel?.setVisible(noiseVisible);
     flockPreviewPanel?.setVisible(flockVisible);
+    panelWorkspace?.setVisible("composition", ui.showCompositionPanel === true);
     panelWorkspace?.setVisible("interactive-flock", ui.interactiveFlock === true);
     panelWorkspace?.setVisible("fields", noiseVisible || flockVisible);
     compositionPanel?.sync();
@@ -421,6 +423,10 @@ new window.p5(p => {
         config: GLOBAL_CONFIG.debug,
       }),
     });
+    debug.config(
+      "cell-grid-guides visible=%s",
+      GLOBAL_CONFIG.ui.showCellGrid === true ? "yes" : "no",
+    );
 
     const initialViewport = configuredCanvasViewport();
     const canvas = p.createCanvas(initialViewport.width, initialViewport.height);
@@ -552,6 +558,8 @@ new window.p5(p => {
       compositions: canonicalCompositions(),
       current: canonicalCompositionInspection,
       use: useCompositionFromConsole,
+      noisePreviewVisible: () => noisePreviewPanel?.isVisible() ?? false,
+      setNoisePreviewVisible,
     });
     interactiveFlockPanel = createInteractiveFlockPanel({
       container: panelWorkspace.body("interactive-flock"),
@@ -673,7 +681,10 @@ new window.p5(p => {
       isExporting: () => Boolean(exportController?.exporting),
       snapshot: options => director.inspect().compositionId === "noise-grid"
         ? director.generator("noiseGrid").noisePreviewSnapshot(options)
-        : null,
+        : (director.inspect().compositionId === "countdown-framed"
+          ? director.generator("countdownFramedGrid")
+            .countdownNoisePreviewSnapshot(options)
+          : null),
     });
     flockPreviewPanel = createFlockPreviewPanel({
       document,

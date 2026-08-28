@@ -33,6 +33,7 @@ import {
   drawCompositionEndpointFrame as drawEndpointFrame,
 } from "../composition-endpoints/render.js";
 import { debug } from "../debug/index.js";
+import { drawCellGridGuides } from "../grid/cell-grid-guides.js";
 import {
   isAutomaticDurationSetting,
   resolveAutomaticDuration,
@@ -954,6 +955,7 @@ export class CircleGridSceneGenerator {
         progress: frame.compositionEndpoint.progress,
       });
       this.drawCompositionEndpointFrame(context, endpointFrame);
+      if (frame?.showCellGrid === true) drawCellGridGuides(context, this.layout);
       return;
     }
     if (preparingEndpoint) {
@@ -964,6 +966,7 @@ export class CircleGridSceneGenerator {
         progress: endpointPreparationProgress,
       });
       this.drawCompositionEndpointFrame(context, endpointFrame);
+      if (frame?.showCellGrid === true) drawCellGridGuides(context, this.layout);
       return;
     }
     this.circleEndpointActive = this.circleEndpoint.prepare(
@@ -985,6 +988,7 @@ export class CircleGridSceneGenerator {
         this.drawFace(context, index, currentFace, opacity.current, true);
       }
     }
+    if (frame?.showCellGrid === true) drawCellGridGuides(context, this.layout);
   }
 
   drawCompositionEndpointFrame(context, endpointFrame) {

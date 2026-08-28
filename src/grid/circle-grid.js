@@ -1,5 +1,6 @@
 import { GridField } from "../fields/grid-field.js";
 import { CellStateBuffer } from "../cell-transitions/cell-state-buffer.js";
+import { drawCellGridGuides } from "./cell-grid-guides.js";
 
 function clamp01(value) {
   return Math.max(0, Math.min(1, value));
@@ -158,7 +159,13 @@ export class CircleGrid {
   draw(
     context,
     isGlyphHidden,
-    { guides = true, glyphPresentation, cellColor, glyphColor } = {},
+    {
+      guides = true,
+      showCellGrid = this.options.showCellGrid,
+      glyphPresentation,
+      cellColor,
+      glyphColor,
+    } = {},
   ) {
     const { columns, rows, cellSize, offsetX, offsetY } = this.layout;
     const marginScale = 1 - Math.max(0, Math.min(0.95, this.options.dotMargin));
@@ -318,7 +325,7 @@ export class CircleGrid {
       }
     }
 
-    if (guides && this.options.showCellGrid) this.drawCellGrid(context);
+    if (guides && showCellGrid) drawCellGridGuides(context, this.layout);
   }
 
   paletteColor(value) {
@@ -367,35 +374,6 @@ export class CircleGrid {
 
   textColor() {
     return this.paletteColor(0.82 + this.meanEnergy * 0.18);
-  }
-
-  drawCellGrid(context) {
-    const {
-      columns,
-      rows,
-      cellSize,
-      offsetX,
-      offsetY,
-      patternWidth,
-      patternHeight,
-    } = this.layout;
-
-    context.save();
-    context.strokeStyle = "rgba(255, 70, 95, 0.42)";
-    context.lineWidth = 1;
-    context.beginPath();
-    for (let column = 0; column <= columns; column += 1) {
-      const x = offsetX + column * cellSize;
-      context.moveTo(x, offsetY);
-      context.lineTo(x, offsetY + patternHeight);
-    }
-    for (let row = 0; row <= rows; row += 1) {
-      const y = offsetY + row * cellSize;
-      context.moveTo(offsetX, y);
-      context.lineTo(offsetX + patternWidth, y);
-    }
-    context.stroke();
-    context.restore();
   }
 
   inspect() {

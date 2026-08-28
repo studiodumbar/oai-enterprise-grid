@@ -16,3 +16,4 @@ export function createNoiseFieldRegistry() {
 
 export { resolveNoiseFieldSettings } from "./noise-field-settings.js";
 export { NoiseFieldSampler } from "./noise-field-sampler.js";
+export { noiseVisibilityFill } from "./visibility.js";

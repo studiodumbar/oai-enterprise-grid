@@ -20,6 +20,7 @@ import {
   compositionEndpointPaletteColor,
   drawCompositionEndpointFrame,
 } from "../composition-endpoints/render.js";
+import { drawCellGridGuides } from "../grid/cell-grid-guides.js";
 import {
   requireMatchingTimelineValue,
   resolveTimelineSettings,
@@ -414,6 +415,7 @@ export class BaseCompositionGenerator {
       : null;
     if (customEndpoint) {
       this.drawCustomCompositionEndpoint(context, customEndpoint, frame);
+      if (frame?.showCellGrid === true) drawCellGridGuides(context, this.layout);
       return;
     }
     this.circleEndpointActive = this.circleEndpoint.prepare(
@@ -468,6 +470,7 @@ export class BaseCompositionGenerator {
       }
       context.restore();
     }
+    if (frame?.showCellGrid === true) drawCellGridGuides(context, this.layout);
   }
 
   useFlickerMode(name) {

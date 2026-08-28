@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+import { GLOBAL_CONFIG } from "../config.js";
+import { drawCellGridGuides } from "../src/grid/cell-grid-guides.js";
 import { VERSION as TWEAKPANE_VERSION } from "../src/vendor/tweakpane-4.0.5.min.js";
 import {
   DEFAULT_PANEL_DEFINITIONS,
@@ -42,6 +44,9 @@ function assertSafeDefault(viewport) {
 }
 
 test("default panel layouts are collision-free at desktop and phone sizes", () => {
+  assert.equal(typeof GLOBAL_CONFIG.ui.showCompositionPanel, "boolean");
+  assert.equal(typeof GLOBAL_CONFIG.ui.showCellGrid, "boolean");
+
   const desktop = assertSafeDefault({ width: 1440, height: 900 });
   assert.equal(desktop.viewportClass, "wide");
   assert.ok(Object.values(desktop.panels).every(panel => !panel.collapsed));
@@ -54,6 +59,34 @@ test("default panel layouts are collision-free at desktop and phone sizes", () =
       .map(([id]) => id),
     ["interactive-flock"],
   );
+});
+
+test("cell grid guides trace every parent-cell boundary", () => {
+  const lines = [];
+  const context = {
+    save() {},
+    restore() {},
+    beginPath() {},
+    stroke() {},
+    moveTo(x, y) { lines.push(["move", x, y]); },
+    lineTo(x, y) { lines.push(["line", x, y]); },
+  };
+  drawCellGridGuides(context, {
+    columns: 2,
+    rows: 1,
+    cellSize: 10,
+    offsetX: 5,
+    offsetY: 7,
+    patternWidth: 20,
+    patternHeight: 10,
+  });
+  assert.deepEqual(lines, [
+    ["move", 5, 7], ["line", 5, 17],
+    ["move", 15, 7], ["line", 15, 17],
+    ["move", 25, 7], ["line", 25, 17],
+    ["move", 5, 7], ["line", 25, 7],
+    ["move", 5, 17], ["line", 25, 17],
+  ]);
 });
 
 test("panel rectangles remain entirely inside the safe viewport", () => {
