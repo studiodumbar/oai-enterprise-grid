@@ -271,6 +271,225 @@ export function countdownFrameSquaresWithEdgeDistance(
   return squaresWithEdgeDistance(squares, columns / 2, rows / 2);
 }
 
+export function countdownSnakeBubblePlan({
+  layout,
+  cells,
+  progress,
+  appearanceTick = 0,
+  subdivisionLevel = 3,
+}) {
+  const columns = requirePositiveInteger(layout?.columns, "Countdown snake-bubble columns");
+  const rows = requirePositiveInteger(layout?.rows, "Countdown snake-bubble rows");
+  const level = requireNonNegativeInteger(
+    subdivisionLevel,
+    "Countdown snake-bubble subdivision level",
+  );
+  if (level !== 3) {
+    throw new RangeError("Countdown snake-bubble subdivision level must be three (8x8).");
+  }
+  if (!Array.isArray(cells)) {
+    throw new TypeError("Countdown snake-bubble cells must be an array.");
+  }
+  const tick = requireNonNegativeInteger(
+    appearanceTick,
+    "Countdown snake-bubble appearance tick",
+  );
+  const revealProgress = Math.max(0, Math.min(1, Number(progress) || 0));
+  const subdivisions = 1 << level;
+  const gridColumns = columns * subdivisions;
+  const gridRows = rows * subdivisions;
+  const tileColumns = gridColumns / 2;
+  const tilesByIndex = new Map();
+  for (const cell of cells) {
+    const cellIndex = requireNonNegativeInteger(
+      cell?.index,
+      "Countdown snake-bubble cell index",
+    );
+    if (cellIndex >= columns * rows) {
+      throw new RangeError("Countdown snake-bubble cell must be inside the board.");
+    }
+    const cellLevel = requireNonNegativeInteger(
+      cell?.level,
+      "Countdown snake-bubble cell level",
+    );
+    if (cellLevel > level) {
+      throw new RangeError("Countdown snake-bubble cell level exceeds its grid.");
+    }
+    const cellColumn = cellIndex % columns;
+    const cellRow = Math.floor(cellIndex / columns);
+    const cellSubdivisions = 1 << cellLevel;
+    for (let subRow = 0; subRow < cellSubdivisions; subRow += 1) {
+      for (let subColumn = 0; subColumn < cellSubdivisions; subColumn += 1) {
+        const localTileColumn = Math.min(
+          3,
+          Math.floor((subColumn + 0.5) * 4 / cellSubdivisions),
+        );
+        const localTileRow = Math.min(
+          3,
+          Math.floor((subRow + 0.5) * 4 / cellSubdivisions),
+        );
+        const tileColumn = cellColumn * 4 + localTileColumn;
+        const tileRow = cellRow * 4 + localTileRow;
+        const tileIndex = tileRow * tileColumns + tileColumn;
+        if (!tilesByIndex.has(tileIndex)) {
+          tilesByIndex.set(tileIndex, {
+            tileIndex,
+            topLeftColumn: tileColumn * 2,
+            topLeftRow: tileRow * 2,
+            sourceCellIndex: cellIndex,
+            sourceLevel: cellLevel,
+          });
+        }
+      }
+    }
+  }
+  const availableTiles = [...tilesByIndex.values()];
+  const visibleTileCount = revealProgress <= 0
+    ? 0
+    : Math.min(availableTiles.length, Math.ceil(revealProgress * availableTiles.length));
+  const squares = availableTiles.slice(0, visibleTileCount).map((tile, squareIndex) => {
+    const dots = bubbleSquareDots(
+      tile.topLeftColumn,
+      tile.topLeftRow,
+      gridColumns,
+      squareIndex,
+    ).map(dot => ({ ...dot, appearanceTick: tick }));
+    return {
+      ...tile,
+      squareIndex,
+      appearanceTick: tick,
+      mergeSource: "snake",
+      dots,
+    };
+  });
+  const edgedSquares = countdownFrameSquaresWithEdgeDistance(
+    squares,
+    gridColumns,
+    gridRows,
+  );
+  return {
+    tick,
+    subdivisions,
+    gridColumns,
+    gridRows,
+    progress: revealProgress,
+    availableSquareCount: availableTiles.length,
+    squares: edgedSquares,
+    dots: edgedSquares.flatMap(square => square.dots),
+  };
+}
+
+export function countdownSnakeBubbleExclusionCircles({
+  layout,
+  cells,
+  subdivisionLevel = 3,
+  clearanceInCells = 0,
+  dotMargin = 0,
+}) {
+  const columns = requirePositiveInteger(
+    layout?.columns,
+    "Countdown snake-bubble exclusion columns",
+  );
+  const rows = requirePositiveInteger(
+    layout?.rows,
+    "Countdown snake-bubble exclusion rows",
+  );
+  const level = requireNonNegativeInteger(
+    subdivisionLevel,
+    "Countdown snake-bubble exclusion subdivision level",
+  );
+  if (level !== 3) {
+    throw new RangeError(
+      "Countdown snake-bubble exclusion subdivision level must be three (8x8).",
+    );
+  }
+  if (!Array.isArray(cells)) {
+    throw new TypeError("Countdown snake-bubble exclusion cells must be an array.");
+  }
+  const clearance = requireFiniteNonNegative(
+    clearanceInCells,
+    "Countdown snake-bubble exclusion clearance",
+  );
+  if (!Number.isFinite(dotMargin) || dotMargin < 0 || dotMargin >= 1) {
+    throw new RangeError(
+      "Countdown snake-bubble exclusion dot margin must be from zero up to one.",
+    );
+  }
+  const subdivisions = 1 << level;
+  const circles = [];
+  for (const cell of cells) {
+    const cellIndex = requireNonNegativeInteger(
+      cell?.index,
+      "Countdown snake-bubble exclusion cell index",
+    );
+    if (cellIndex >= columns * rows) {
+      throw new RangeError(
+        "Countdown snake-bubble exclusion cell must be inside the board.",
+      );
+    }
+    const cellLevel = requireNonNegativeInteger(
+      cell?.level,
+      "Countdown snake-bubble exclusion cell level",
+    );
+    if (cellLevel < 1 || cellLevel > level) {
+      throw new RangeError(
+        "Countdown snake-bubble exclusion cell level must be from one to three.",
+      );
+    }
+    const cellColumn = cellIndex % columns;
+    const cellRow = Math.floor(cellIndex / columns);
+    const cellSubdivisions = 1 << cellLevel;
+    const slot = subdivisions / cellSubdivisions;
+    const radius = slot * 0.5 * (1 - dotMargin) + clearance * subdivisions;
+    for (let subRow = 0; subRow < cellSubdivisions; subRow += 1) {
+      for (let subColumn = 0; subColumn < cellSubdivisions; subColumn += 1) {
+        circles.push({
+          x: cellColumn * subdivisions + (subColumn + 0.5) * slot,
+          y: cellRow * subdivisions + (subRow + 0.5) * slot,
+          radius,
+        });
+      }
+    }
+  }
+  return circles;
+}
+
+export function countdownFramePlanWithSnakeTrail(plan, trailPlan) {
+  if (!plan || !Array.isArray(plan.squares) || !Array.isArray(plan.dots)) {
+    throw new TypeError("Countdown bubbles render plan requires generated squares.");
+  }
+  if (!trailPlan || !Array.isArray(trailPlan.squares)) {
+    throw new TypeError("Countdown bubbles render plan requires a snake trail.");
+  }
+  if (
+    plan.gridColumns !== trailPlan.gridColumns
+    || plan.gridRows !== trailPlan.gridRows
+  ) {
+    throw new RangeError("Countdown bubbles and snake trail grids must match.");
+  }
+  const usedTiles = new Set(trailPlan.squares.map(square => square.tileIndex));
+  const generatedSquares = plan.squares.filter(square => !usedTiles.has(square.tileIndex));
+  const combined = [...trailPlan.squares, ...generatedSquares];
+  const reindexed = combined.map((square, squareIndex) => ({
+    ...square,
+    squareIndex,
+    dots: square.dots.map(dot => ({ ...dot, squareIndex })),
+  }));
+  const squares = countdownFrameSquaresWithEdgeDistance(
+    reindexed,
+    plan.gridColumns,
+    plan.gridRows,
+  );
+  return {
+    ...plan,
+    trailSquareCount: trailPlan.squares.length,
+    trailOverlapCount: plan.squares.length - generatedSquares.length,
+    renderedSquareCount: squares.length,
+    squares,
+    dots: squares.flatMap(square => square.dots),
+  };
+}
+
 /** Seeded 2x2 board tiles ranked outward from four digit anchors. */
 export function countdownFramePlan({
   seed,
@@ -587,12 +806,54 @@ export function countdownFrameDigitCircles({
   }));
 }
 
+/** Timer text exclusion in the frame effect's subdivision coordinates. */
+export function countdownFrameTextSafeRectangle({
+  layout,
+  cellIndex,
+  subdivisionLevel,
+  textSafeZone,
+}) {
+  const columns = requirePositiveInteger(layout?.columns, "Countdown frame columns");
+  const rows = requirePositiveInteger(layout?.rows, "Countdown frame rows");
+  const textCellIndex = requireNonNegativeInteger(
+    cellIndex,
+    "Countdown frame text cell",
+  );
+  if (textCellIndex >= columns * rows) {
+    throw new RangeError("Countdown frame text cell must be inside the parent grid.");
+  }
+  const level = requireNonNegativeInteger(
+    subdivisionLevel,
+    "Countdown frame subdivision level",
+  );
+  const safeZone = requireObject(textSafeZone, "Countdown frame text safe zone");
+  const widthInCells = requireFinitePositive(
+    safeZone.widthInCells,
+    "Countdown frame text safe-zone width",
+  );
+  const heightInCells = requireFinitePositive(
+    safeZone.heightInCells,
+    "Countdown frame text safe-zone height",
+  );
+  const subdivisions = 1 << level;
+  const centerColumn = (textCellIndex % columns + 0.5) * subdivisions;
+  const centerRow = (Math.floor(textCellIndex / columns) + 0.5) * subdivisions;
+  return {
+    left: centerColumn - widthInCells * subdivisions / 2,
+    top: centerRow - heightInCells * subdivisions / 2,
+    right: centerColumn + widthInCells * subdivisions / 2,
+    bottom: centerRow + heightInCells * subdivisions / 2,
+  };
+}
+
 export function countdownFrameAt(
   plan,
   linearProgress,
   settings,
   avoidanceCircles = [],
   visibilityNoise = null,
+  dotExclusionCircles = [],
+  squareExclusionRectangles = [],
 ) {
   const totalDotCount = plan?.squares?.length * settings.dotsPerSquare;
   if (!plan || !Array.isArray(plan.dots) || plan.dots.length !== totalDotCount) {
@@ -601,8 +862,40 @@ export function countdownFrameAt(
   if (!Array.isArray(avoidanceCircles)) {
     throw new TypeError("Countdown frame avoidance circles must be an array.");
   }
+  if (!Array.isArray(dotExclusionCircles)) {
+    throw new TypeError("Countdown frame dot-exclusion circles must be an array.");
+  }
+  if (!Array.isArray(squareExclusionRectangles)) {
+    throw new TypeError("Countdown frame square-exclusion rectangles must be an array.");
+  }
+  for (const circle of dotExclusionCircles) {
+    if (
+      !Number.isFinite(circle?.x)
+      || !Number.isFinite(circle?.y)
+      || !Number.isFinite(circle?.radius)
+      || circle.radius < 0
+    ) {
+      throw new RangeError(
+        "Countdown frame dot-exclusion circles require finite coordinates and radius.",
+      );
+    }
+  }
+  for (const rectangle of squareExclusionRectangles) {
+    if (
+      !Number.isFinite(rectangle?.left)
+      || !Number.isFinite(rectangle?.top)
+      || !Number.isFinite(rectangle?.right)
+      || !Number.isFinite(rectangle?.bottom)
+      || rectangle.right <= rectangle.left
+      || rectangle.bottom <= rectangle.top
+    ) {
+      throw new RangeError(
+        "Countdown frame square-exclusion rectangles require finite positive bounds.",
+      );
+    }
+  }
   const progress = Math.max(0, Math.min(1, Number(linearProgress) || 0));
-  const avoidedSquares = new Set(plan.squares
+  const circleAvoidedSquares = new Set(plan.squares
     .filter(square => square.dots.some(dot => avoidanceCircles.some(circle => {
       const distance = Math.hypot(
         dot.column + 0.5 - circle.x,
@@ -613,9 +906,29 @@ export function countdownFrameAt(
         && distance >= (circle.refillRadius ?? 0);
     })))
     .map(square => square.squareIndex));
-  const eligibleDots = plan.dots.filter(
+  const rectangleAvoidedSquares = new Set(plan.squares
+    .filter(square => square.dots.some(dot => (
+      squareExclusionRectangles.some(rectangle => (
+        dot.column < rectangle.right
+        && dot.column + 1 > rectangle.left
+        && dot.row < rectangle.bottom
+        && dot.row + 1 > rectangle.top
+      ))
+    )))
+    .map(square => square.squareIndex));
+  const avoidedSquares = new Set([
+    ...circleAvoidedSquares,
+    ...rectangleAvoidedSquares,
+  ]);
+  const timerEligibleDots = plan.dots.filter(
     dot => !avoidedSquares.has(dot.squareIndex),
   );
+  const eligibleDots = timerEligibleDots.filter(dot => !dotExclusionCircles.some(
+    circle => Math.hypot(
+      dot.column + 0.5 - circle.x,
+      dot.row + 0.5 - circle.y,
+    ) < circle.radius,
+  ));
   let dots = eligibleDots;
   if (visibilityNoise?.enabled === true) {
     const { data, width, height, layer, edgeWidthInSquares, seed } = visibilityNoise;
@@ -647,7 +960,9 @@ export function countdownFrameAt(
     progress,
     visibleCount: dots.length,
     avoidedSquareCount: avoidedSquares.size,
+    rectangleAvoidedSquareCount: rectangleAvoidedSquares.size,
     eligibleVisibleCount: eligibleDots.length,
+    snakeHiddenCount: timerEligibleDots.length - eligibleDots.length,
     noiseHiddenCount: eligibleDots.length - dots.length,
     dots,
   };
