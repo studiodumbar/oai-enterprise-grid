@@ -8,12 +8,8 @@
 
 [ === wip === ]
 
-[] margins top bottom
-
-## clock
-[] more diverse, not sync, not always next to the timer
-[] more complex composition in there
-[] more out of sync // tool for compositions to be inspiration 
+[] single circle grow
+[] last seconds video input
 
 ## snake -> bubbles
 [] adjust decay transition
@@ -21,6 +17,11 @@
 
 [ === arc === ]
 
+[x] more diverse, not sync, not always next to the timer
+[x] more complex composition in there
+[x] more out of sync // tool for compositions to be inspiration 
+
+[x] margins top bottom
 [x] WYSIWYG preview on canvas
 [x] adjust the snake merging, disappearing of the one big dot
 [x] palette updates

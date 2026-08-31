@@ -64,25 +64,37 @@ connector interval that the track owns. This lets an effect supply the data for
 a handoff without making its track a second active state. A custom gap is valid
 and renders only the timer.
 
+An endpoint effect that should configure a connector without receiving its own
+visible interval can use `anchor: true` with a zero-second track window at a
+countdown boundary. Its positive evolution window must still fit inside
+connector time owned by that endpoint.
+
 ## Default `clock → snake → bubbles` timing
 
-Let `T = COUNT_FROM_SECONDS`. The two authored merge ranges are normalized to
-the complete countdown, so changing only `T` stretches the whole preset.
+Let `T = COUNT_FROM_SECONDS`. Clock→snake remains normalized to the complete
+countdown. Snake→bubbles is an explicit three-second transition ending at the
+bubbles boundary.
 
 | Item | Active window | Evolution window |
 |---|---:|---:|
 | clock track | `[0, T/6)` | `[T/6, T/3)` |
 | clock→snake connector | `[T/6, T/3)` | same as active window |
-| snake track | `[T/3, 2T/3)` | `[2T/3, 5T/6)` |
-| snake→bubbles connector | `[2T/3, 5T/6)` | same as active window |
-| bubbles track | `[5T/6, T)` | same as active window |
+| snake track | `[T/3, 2T/3 - 3s)` | `[2T/3 - 3s, 2T/3)` |
+| snake→bubbles connector | `[2T/3 - 3s, 2T/3)` | same as active window |
+| bubbles track | `[2T/3, T)` | same as active window |
 
-The five rows form one continuous, exclusive lane. After the clock handoff, the
-snake grows only on `[T/3, 2T/3)`. Its final body freezes at merge start. During
-`[2T/3, 5T/6)`, the first tail dot converts from level 0 to level 1 immediately,
-then the remaining frozen body is consumed tail-first into bubbles. At `5T/6`,
-the connector commits its converted trail into the bubbles track, and the
-snake is gone.
+The five rows form one continuous, exclusive lane. During the snake→bubbles
+connector, the snake follows one deterministic toroidal coverage cycle. It
+wraps at canvas edges and passes behind the timer instead of diverting around
+each new label. The tail advances normally between growth steps, but the head
+may cross occupied body cells; a crossing is counted and never kills the snake.
+Normal snake motion continues until the connector boundary; the three-second
+connector is only the state transition. By its final half-beat the body occupies
+every parent cell except a reserved level-0 meal. The meal appears beside the
+head, completes full coverage, and pulses with the head while movement freezes
+and the registered `strobe-stack` flicker runs across the body. At `2T/3`, the meal joins the complete body and that death snapshot is
+atomically committed into the bubbles track's body-derived field. The connector
+never exposes bubbles early.
 
 For `T = 30`, the important boundaries are:
 
@@ -91,9 +103,24 @@ For `T = 30`, the important boundaries are:
 | 0 | clock begins |
 | 5 | clock→snake merge begins |
 | 10 | clock ends; snake begins growing at `00:20` |
-| 20 | snake growth freezes; tail-first bubble merge begins at `00:10` |
-| 25 | snake is fully consumed; bubble-only phase begins at `00:05` |
+| 17 | snake→bubbles transition begins at `00:13` |
+| 20 | snake dies atomically; bubble-only phase begins at `00:10` |
 | 30 | loop returns to time 0 |
+
+### Current appearance-tuning loop
+
+The checked-in track list temporarily isolates the final three states for
+visual refinement. With the 30-second countdown it plays snake growth on
+`[0, 17)`, the snake→bubbles transition on `[17, 20)`, and bubbles on
+`[20, 30)`. The death flicker occupies `[19.5, 20)`. The countdown labels at
+the major boundaries are `00:30`, `00:13`, and `00:10`. Clock settings remain authored for later
+restoration, but the clock has no active synth track in this tuning loop.
+
+`BUBBLES_SETTINGS.debug.visualizeBubbles` enables a translucent diagnostic
+overlay for every live timer-avoidance bubble. Each circle is drawn separately
+with `debug.opacity`, so intersections accumulate opacity and remain easy to
+spot. The overlay follows the actual emptying and refilling annulus and does not
+change which production dots are visible.
 
 ## Choose one timing mode
 
@@ -234,7 +261,7 @@ track's start.
 | Pair | Resolved connector | Behavior |
 |---|---|---|
 | clock→snake | `clock-to-snake` | Owns the bridge interval and draws the handcrafted clock handoff. |
-| snake→bubbles | `snake-to-bubbles` | Owns the bridge interval, freezes the grown snake, and consumes it tail-first into a trail committed to bubbles. |
+| snake→bubbles | `snake-to-bubbles` | Owns the bridge interval, grows the living snake, runs its registered body flicker for the final half-beat, then atomically commits the complete body to bubbles. |
 | any unsupported pair | `hard-cut` | Shows the source through connection evolution and the target after that evolution finishes. |
 
 Connector endpoint IDs refer to track `id`, never to effect `use`. Track and
@@ -244,12 +271,40 @@ connection window may overlap any other timeline item.
 Explicitly naming `clock-to-snake` or `snake-to-bubbles` for the wrong pair is a
 startup error. Required semantic ports are also checked at startup.
 
+### Clock-to-snake birth ripple
+
+`CLOCK_SETTINGS.birthRipple.startBeforeHandoffBeats` places the ripple relative
+to the clock-to-snake boundary, so countdown length changes do not move it away
+from the snake birth. The shipped value is `1`: the ripple begins at `00:21`,
+the snake starts at the half-open `00:20` boundary, and the four-beat ripple
+continues behind the snake through `00:18`. Connector and track ownership stay
+exclusive; after handoff the active snake track owns both its main layer and the
+decorative ripple layer.
+
+The ripple uses parent-grid cells. Its primary crest expands from the snake's
+handoff cell using `radialTimingCurve`; cells behind the narrow crest subdivide
+through levels `0`, `1`, `2`, and `3`, then clear after `wakeDepthInCells`.
+Ripple glyphs keep the snake's normal dot size. Subdivided cells mask their
+glyph grid into a circle instead of filling the complete square; when a cell
+reaches level `3` (`8x8`), a stable nested subset of the circular fill drops out
+as wake distance grows. Existing glyphs never move, and direct seek reconstructs
+the same subset.
+The handoff cell stays at level `0` only until the snake takes ownership. The
+radius continues one full wake depth beyond the farthest canvas cell, and its
+timing curve retains positive exit velocity so the last level-3 cells do not
+stall at the edge. `wakeFlicker` applies deterministic flashes only to passed
+primary cells at levels `1`, `2`, and `3`; both flash probability and opacity
+strength decay exponentially with distance from the birthplace. The first crest
+cell intersecting the timer's safe zone starts one fixed-cell echo capped by
+`secondaryRadiusInCells`. The echo source stays fixed while the countdown text
+moves each beat.
+
 ## Layers and ownership
 
 Outside an intentional gap, exactly one timeline item owns rendering. A normal
 track produces its effect layer. A connector can produce several internal
-layers—for example the snake→bubbles connector draws the frozen snake and its
-converted trail—but those layers still belong to one connector state.
+layers, but the snake→bubbles connector deliberately draws only the living
+snake; its bubble field does not exist until destination-track ownership begins.
 
 The final stable sort inside that owner is:
 

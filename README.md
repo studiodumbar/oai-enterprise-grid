@@ -682,8 +682,8 @@ Change `COUNT_FROM_SECONDS` once in
 `config/compositions/countdown-framed.js`; the composition body, beat count, and
 default synth schedule all use that same total.
 
-The shipped schedule authors two normalized merge ranges instead of fixed
-seconds:
+The shipped schedule keeps clock→snake normalized and expresses the final
+three-second connector against the complete countdown:
 
 ```js
 synth: {
@@ -694,8 +694,9 @@ synth: {
         endProgress: 1 / 3,
       },
       "snake-to-bubbles": {
-        startProgress: 2 / 3,
-        endProgress: 5 / 6,
+        startProgress:
+          (BUBBLES_START_SECONDS - 3) / COUNT_FROM_SECONDS,
+        endProgress: BUBBLES_START_SECONDS / COUNT_FROM_SECONDS,
       },
     },
   },
@@ -713,13 +714,18 @@ synth: {
 
 Progress is measured against the complete countdown: `0` is its first frame and
 `1` is its end. For a total duration `T`, the defaults resolve clock→snake to
-`[T/6, T/3)` and snake→bubbles evolution to `[2T/3, 5T/6)`. The snake grows only
-on `[T/3, 2T/3)`, freezes at full length, then is consumed tail-first by the
-second connector. The converted trail is committed into the bubbles track at
-`5T/6` and persists through `T`.
+`[T/6, T/3)` and reserve the three seconds immediately before `2T/3` for
+snake→bubbles. Normal snake movement owns the preceding snake track. During the
+connector, the snake follows a deterministic toroidal coverage cycle, wrapping
+at canvas edges and passing behind the timer while it fills the canvas. The body
+may cross itself without ending the run; crossings are deterministic telemetry
+events. During the final half-beat the meal completes full coverage and pulses
+with the head while the registered `strobe-stack` flicker runs across the body.
+At `2T/3`, the meal and complete body atomically become
+the bubbles track's body-derived noise field, which persists through `T`.
 
 The resolved lane is exclusive: clock `[0, T/6)`, clock→snake `[T/6, T/3)`,
-snake `[T/3, 2T/3)`, snake→bubbles `[2T/3, 5T/6)`, then bubbles `[5T/6, T)`.
+snake `[T/3, 2T/3 - 3s)`, snake→bubbles `[2T/3 - 3s, 2T/3)`, then bubbles `[2T/3, T)`.
 At most one track or connector is active; a custom gap may intentionally leave
 only the timer.
 
@@ -742,7 +748,7 @@ at its source track's end and finish at its destination track's start.
   equal consecutive slices in array order. Reorder the array to reorder the
   visuals; remove entries to render only the remaining visuals.
 - The shipped `clock > snake > bubbles` array automatically enables its two
-  handcrafted merge connectors and normalized merge timing. Any other array
+  handcrafted merge connectors and authored merge timing. Any other array
   shape uses consecutive hard cuts unless exclusive connector windows are
   explicitly authored.
 

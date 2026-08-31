@@ -19,7 +19,7 @@ export const GLOBAL_CONFIG = {
 
     ui: {
         showCompositionPanel: false,
-        showCellGrid: false,
+        showCellGrid: true,
         showExportPanel: false,
         noisePreview: false,
         flockPreview: false,

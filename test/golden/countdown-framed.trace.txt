@@ -2,14 +2,15 @@
 # frames: 900
 
 [cg:timeline] f=0000 phase=core cycle=0 duration=- paused=no
+[cg:plan] f=0000 countdown-engorgement-plan state=created columns=11 rows=7 startLength=6 targetLength=77 capacityLength=77 meal=43 beats=3 routeSteps=90 growthStartProgress=0.000 growthStartStep=0 cruiseSteps=0 growthSteps=75 movementSteps=75 cycleCells=77 explored=75 collisions=1 wraps=6
 [cg:plan] f=0000 enter=countdownFramedGrid
-[cg:timeline] f=0000 composition-timeline composition=countdown-framed time=0.017 active=track:clock-main states=track:clock-main:on,connection:clock-snake:off,track:snake-main:off,connection:snake-bubbles:off,track:bubbles-main:off
-[cg:plan] f=0000 countdown-effect mode=clock tick=0 evolution=no evolutionTick=0 seed=1 cell=13 mode=clock size=2 handoff=29 squares=2 safeText=15:9:25:15 squareGap=1 reserveExpansion=0 motion=traveling,anchored reservations=23:1,15:16 placements=26:4,18:19 dots=378,379,467,466,1690,1691,1779,1778
-[cg:timeline] f=0000 countdown-track id=clock-main state=enter
-[cg:plan] f=0000 countdown-synth plan=rebuilt tracks=clock-main connectors=none layers=behind-timer:10:track:clock-main:clock-main:main
-[cg:timeline] f=0000 countdown-order stage=clock index=0/3 next=snake phase=stable evolution=no stageProgress=0.003 evolutionProgress=0.000
+[cg:timeline] f=0000 composition-timeline composition=countdown-framed time=0.017 active=track:snake-main states=track:snake-main:on,connection:snake-bubbles:off,track:bubbles-main:off
+[cg:plan] f=0000 countdown-effect mode=snake tick=0 evolution=no evolutionTick=0 growthTick=0 engorgement=no seed=1 length=7 maximum=75 cellFrom=13 cellTo=38 from=24 to=27 textSafeCells=12,13,14 path=24,25,26,27
+[cg:timeline] f=0000 countdown-track id=snake-main state=enter
+[cg:plan] f=0000 countdown-synth plan=rebuilt tracks=snake-main connectors=none layers=behind-timer:20:track:snake-main:snake-main:main
+[cg:timeline] f=0000 countdown-order stage=snake index=0/2 next=bubbles phase=stable evolution=no stageProgress=0.001 evolutionProgress=0.000
 [cg:transition] f=0000 countdown-intro tick=0 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0000 countdown-clock tick=0 mode=clock size=2 visible=2/8 handoff=29 progress=0.001
+[cg:transition] f=0000 countdown-snake stage=snake tick=0 engorgement=no head=0/3 cell=24 levels=0 progress=0.001
 [cg:plan] f=0000 render=[countdownFramedGrid@1.00]
 [cg:timeline] f=0001 phase=core cycle=0 duration=30.000 paused=no
 [cg:transition] f=0003 countdown-intro tick=0 step=1 colors=[0,0,1,0,0]
@@ -17,311 +18,226 @@
 [cg:transition] f=0011 countdown-intro tick=0 step=3 colors=[1,2,3,2,1]
 [cg:transition] f=0015 countdown-intro tick=0 step=4 colors=[2,3,3,3,2]
 [cg:transition] f=0019 countdown-intro tick=0 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0020 countdown-clock tick=0 mode=clock size=2 visible=4/8 handoff=29 progress=0.255
-[cg:transition] f=0030 countdown-clock tick=0 mode=clock size=2 visible=6/8 handoff=29 progress=0.529
-[cg:transition] f=0039 countdown-clock tick=0 mode=clock size=2 visible=8/8 handoff=29 progress=0.768
-[cg:plan] f=0059 countdown-effect mode=clock tick=1 evolution=no evolutionTick=0 seed=1 cell=38 mode=clock size=2 handoff=29 squares=2 safeText=39:25:49:31 squareGap=1 reserveExpansion=0 motion=anchored,traveling reservations=41:16,32:16 placements=44:19,35:19 dots=1716,1717,1805,1804,1707,1708,1796,1795
+[cg:transition] f=0020 countdown-snake stage=snake tick=0 engorgement=no head=1/3 cell=25 levels=0,0 progress=0.255
+[cg:transition] f=0030 countdown-snake stage=snake tick=0 engorgement=no head=2/3 cell=26 levels=0,3,0 progress=0.529
+[cg:transition] f=0039 countdown-snake stage=snake tick=0 engorgement=no head=3/3 cell=27 levels=0,3,3,0 progress=0.768
+[cg:plan] f=0059 countdown-effect mode=snake tick=1 evolution=no evolutionTick=0 growthTick=1 engorgement=no seed=1 length=8 maximum=75 cellFrom=38 cellTo=43 from=49 to=54 textSafeCells=37,38,39 path=49,50,51,52,53,54
 [cg:transition] f=0059 countdown-intro tick=1 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0059 countdown-clock tick=1 mode=clock size=2 visible=2/8 handoff=29 progress=0.000
+[cg:transition] f=0059 countdown-snake stage=snake tick=1 engorgement=no head=0/5 cell=49 levels=0 progress=0.000
 [cg:plan] f=0060 render=[countdownFramedGrid@1.00]
 [cg:transition] f=0063 countdown-intro tick=1 step=1 colors=[0,0,1,0,0]
 [cg:transition] f=0067 countdown-intro tick=1 step=2 colors=[0,1,2,1,0]
 [cg:transition] f=0071 countdown-intro tick=1 step=3 colors=[1,2,3,2,1]
 [cg:transition] f=0075 countdown-intro tick=1 step=4 colors=[2,3,3,3,2]
+[cg:transition] f=0076 countdown-snake stage=snake tick=1 engorgement=no head=1/5 cell=50 levels=0,0 progress=0.167
 [cg:transition] f=0079 countdown-intro tick=1 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0080 countdown-clock tick=1 mode=clock size=2 visible=4/8 handoff=29 progress=0.255
-[cg:transition] f=0090 countdown-clock tick=1 mode=clock size=2 visible=6/8 handoff=29 progress=0.529
-[cg:transition] f=0099 countdown-clock tick=1 mode=clock size=2 visible=8/8 handoff=29 progress=0.768
-[cg:plan] f=0120 countdown-effect mode=clock tick=2 evolution=no evolutionTick=0 seed=1 cell=43 mode=clock size=2 handoff=29 squares=2 safeText=79:25:89:31 squareGap=1 reserveExpansion=0 motion=traveling,anchored reservations=78:16,80:31 placements=81:19,83:34 dots=1753,1754,1842,1841,3075,3076,3164,3163
+[cg:transition] f=0084 countdown-snake stage=snake tick=1 engorgement=no head=2/5 cell=51 levels=0,3,0 progress=0.359
+[cg:transition] f=0090 countdown-snake stage=snake tick=1 engorgement=no head=3/5 cell=52 levels=0,3,3,0 progress=0.529
+[cg:transition] f=0095 countdown-snake stage=snake tick=1 engorgement=no head=4/5 cell=53 levels=0,2,3,2,0 progress=0.668
+[cg:transition] f=0103 countdown-snake stage=snake tick=1 engorgement=no head=5/5 cell=54 levels=0,2,3,3,2,0 progress=0.853
+[cg:plan] f=0120 countdown-effect mode=snake tick=2 evolution=no evolutionTick=0 growthTick=2 engorgement=no seed=1 length=9 maximum=75 cellFrom=43 cellTo=62 from=54 to=51 textSafeCells=42,43 path=54,53,52,51
 [cg:transition] f=0120 countdown-intro tick=2 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0120 countdown-clock tick=2 mode=clock size=2 visible=2/8 handoff=29 progress=0.001
+[cg:transition] f=0120 countdown-snake stage=snake tick=2 engorgement=no head=0/3 cell=54 levels=0 progress=0.001
 [cg:plan] f=0121 render=[countdownFramedGrid@1.00]
 [cg:transition] f=0123 countdown-intro tick=2 step=1 colors=[0,0,1,0,0]
 [cg:transition] f=0127 countdown-intro tick=2 step=2 colors=[0,1,2,1,0]
 [cg:transition] f=0131 countdown-intro tick=2 step=3 colors=[1,2,3,2,1]
 [cg:transition] f=0135 countdown-intro tick=2 step=4 colors=[2,3,3,3,2]
 [cg:transition] f=0139 countdown-intro tick=2 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0140 countdown-clock tick=2 mode=clock size=2 visible=4/8 handoff=29 progress=0.255
-[cg:transition] f=0150 countdown-clock tick=2 mode=clock size=2 visible=6/8 handoff=29 progress=0.529
-[cg:transition] f=0159 countdown-clock tick=2 mode=clock size=2 visible=8/8 handoff=29 progress=0.768
-[cg:plan] f=0180 countdown-effect mode=clock tick=3 evolution=no evolutionTick=0 seed=1 cell=62 mode=clock size=2 handoff=29 squares=2 safeText=55:41:65:47 squareGap=1 reserveExpansion=0 motion=traveling,anchored reservations=56:48,57:33 placements=59:51,60:36 dots=4547,4548,4636,4635,3228,3229,3317,3316
+[cg:transition] f=0140 countdown-snake stage=snake tick=2 engorgement=no head=1/3 cell=53 levels=0,0 progress=0.255
+[cg:transition] f=0150 countdown-snake stage=snake tick=2 engorgement=no head=2/3 cell=52 levels=0,3,0 progress=0.529
+[cg:transition] f=0159 countdown-snake stage=snake tick=2 engorgement=no head=3/3 cell=51 levels=0,3,3,0 progress=0.768
+[cg:plan] f=0180 countdown-effect mode=snake tick=3 evolution=no evolutionTick=0 growthTick=3 engorgement=no seed=1 length=10 maximum=75 cellFrom=62 cellTo=19 from=51 to=30 textSafeCells=61,62,63 path=51,52,41,30
 [cg:transition] f=0180 countdown-intro tick=3 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0180 countdown-clock tick=3 mode=clock size=2 visible=2/8 handoff=29 progress=0.001
+[cg:transition] f=0180 countdown-snake stage=snake tick=3 engorgement=no head=0/3 cell=51 levels=0 progress=0.001
 [cg:plan] f=0181 render=[countdownFramedGrid@1.00]
 [cg:transition] f=0183 countdown-intro tick=3 step=1 colors=[0,0,1,0,0]
 [cg:transition] f=0187 countdown-intro tick=3 step=2 colors=[0,1,2,1,0]
 [cg:transition] f=0191 countdown-intro tick=3 step=3 colors=[1,2,3,2,1]
 [cg:transition] f=0195 countdown-intro tick=3 step=4 colors=[2,3,3,3,2]
 [cg:transition] f=0199 countdown-intro tick=3 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0200 countdown-clock tick=3 mode=clock size=2 visible=4/8 handoff=29 progress=0.255
-[cg:transition] f=0210 countdown-clock tick=3 mode=clock size=2 visible=6/8 handoff=29 progress=0.529
-[cg:transition] f=0219 countdown-clock tick=3 mode=clock size=2 visible=8/8 handoff=29 progress=0.768
-[cg:plan] f=0240 countdown-effect mode=clock tick=4 evolution=no evolutionTick=0 seed=1 cell=19 mode=clock size=2 handoff=29 squares=2 safeText=63:9:73:15 squareGap=1 reserveExpansion=0 motion=anchored,traveling reservations=60:0,72:15 placements=63:3,75:18 dots=327,328,416,415,1659,1660,1748,1747
+[cg:transition] f=0200 countdown-snake stage=snake tick=3 engorgement=no head=1/3 cell=52 levels=0,0 progress=0.255
+[cg:transition] f=0210 countdown-snake stage=snake tick=3 engorgement=no head=2/3 cell=41 levels=0,3,0 progress=0.529
+[cg:transition] f=0219 countdown-snake stage=snake tick=3 engorgement=no head=3/3 cell=30 levels=0,3,3,0 progress=0.768
+[cg:plan] f=0240 countdown-effect mode=snake tick=4 evolution=no evolutionTick=0 growthTick=4 engorgement=no seed=1 length=11 maximum=75 cellFrom=19 cellTo=26 from=30 to=15 textSafeCells=18,19,20 path=30,29,28,17,16,15
 [cg:transition] f=0240 countdown-intro tick=4 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0240 countdown-clock tick=4 mode=clock size=2 visible=2/8 handoff=29 progress=0.001
+[cg:transition] f=0240 countdown-snake stage=snake tick=4 engorgement=no head=0/5 cell=30 levels=0 progress=0.001
 [cg:plan] f=0241 render=[countdownFramedGrid@1.00]
 [cg:transition] f=0243 countdown-intro tick=4 step=1 colors=[0,0,1,0,0]
 [cg:transition] f=0247 countdown-intro tick=4 step=2 colors=[0,1,2,1,0]
 [cg:transition] f=0251 countdown-intro tick=4 step=3 colors=[1,2,3,2,1]
 [cg:transition] f=0255 countdown-intro tick=4 step=4 colors=[2,3,3,3,2]
+[cg:transition] f=0256 countdown-snake stage=snake tick=4 engorgement=no head=1/5 cell=29 levels=0,0 progress=0.167
 [cg:transition] f=0259 countdown-intro tick=4 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0260 countdown-clock tick=4 mode=clock size=2 visible=4/8 handoff=29 progress=0.255
-[cg:transition] f=0270 countdown-clock tick=4 mode=clock size=2 visible=6/8 handoff=29 progress=0.529
-[cg:transition] f=0279 countdown-clock tick=4 mode=clock size=2 visible=8/8 handoff=29 progress=0.768
-[cg:timeline] f=0300 composition-timeline composition=countdown-framed time=5.017 active=connection:clock-snake states=track:clock-main:off,connection:clock-snake:on,track:snake-main:off,connection:snake-bubbles:off,track:bubbles-main:off
-[cg:plan] f=0300 countdown-effect mode=clock tick=5 evolution=yes evolutionTick=0 seed=1 cell=26 mode=expanding size=3 handoff=29 squares=2 safeText=31:17:41:23 squareGap=1 reserveExpansion=0 motion=anchored,traveling reservations=29:24,38:24 placements=31:26,41:27 dots=2319,2320,2321,2409,2497,2496,2495,2407,2408,2417,2418,2419,2507,2595,2594,2593,2505,2506
-[cg:timeline] f=0300 countdown-track id=clock-main state=exit
-[cg:transition] f=0300 countdown-connector id=clock-snake use=clock-to-snake state=enter
-[cg:plan] f=0300 countdown-synth plan=rebuilt tracks=none connectors=clock-snake layers=behind-timer:10:connector:clock-snake:clock-snake:clock
-[cg:timeline] f=0300 countdown-order stage=clock index=0/3 next=snake phase=evolving evolution=yes stageProgress=0.003 evolutionProgress=0.003
+[cg:transition] f=0264 countdown-snake stage=snake tick=4 engorgement=no head=2/5 cell=28 levels=0,3,0 progress=0.359
+[cg:transition] f=0270 countdown-snake stage=snake tick=4 engorgement=no head=3/5 cell=17 levels=0,3,3,0 progress=0.529
+[cg:transition] f=0275 countdown-snake stage=snake tick=4 engorgement=no head=4/5 cell=16 levels=0,2,3,2,0 progress=0.668
+[cg:transition] f=0283 countdown-snake stage=snake tick=4 engorgement=no head=5/5 cell=15 levels=0,2,3,3,2,0 progress=0.853
+[cg:plan] f=0300 countdown-effect mode=snake tick=5 evolution=no evolutionTick=0 growthTick=5 engorgement=no seed=1 length=12 maximum=75 cellFrom=26 cellTo=31 from=37 to=42 textSafeCells=25,26,27 path=37,38,39,40,41,42
 [cg:transition] f=0300 countdown-intro tick=5 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0300 countdown-clock tick=5 mode=expanding size=3 visible=2/18 handoff=29 progress=0.001
-[cg:timeline] f=0301 phase=core cycle=0 duration=30.000 paused=no
+[cg:transition] f=0300 countdown-snake stage=snake tick=5 engorgement=no head=0/5 cell=37 levels=0 progress=0.001
 [cg:plan] f=0301 render=[countdownFramedGrid@1.00]
 [cg:transition] f=0303 countdown-intro tick=5 step=1 colors=[0,0,1,0,0]
 [cg:transition] f=0307 countdown-intro tick=5 step=2 colors=[0,1,2,1,0]
 [cg:transition] f=0311 countdown-intro tick=5 step=3 colors=[1,2,3,2,1]
-[cg:transition] f=0313 countdown-clock tick=5 mode=expanding size=3 visible=4/18 handoff=29 progress=0.112
 [cg:transition] f=0315 countdown-intro tick=5 step=4 colors=[2,3,3,3,2]
+[cg:transition] f=0316 countdown-snake stage=snake tick=5 engorgement=no head=1/5 cell=38 levels=0,0 progress=0.167
 [cg:transition] f=0319 countdown-intro tick=5 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0319 countdown-clock tick=5 mode=expanding size=3 visible=6/18 handoff=29 progress=0.232
-[cg:transition] f=0324 countdown-clock tick=5 mode=expanding size=3 visible=8/18 handoff=29 progress=0.359
-[cg:transition] f=0328 countdown-clock tick=5 mode=expanding size=3 visible=10/18 handoff=29 progress=0.471
-[cg:transition] f=0331 countdown-clock tick=5 mode=expanding size=3 visible=12/18 handoff=29 progress=0.557
-[cg:transition] f=0335 countdown-clock tick=5 mode=expanding size=3 visible=14/18 handoff=29 progress=0.668
-[cg:transition] f=0340 countdown-clock tick=5 mode=expanding size=3 visible=16/18 handoff=29 progress=0.791
-[cg:transition] f=0346 countdown-clock tick=5 mode=expanding size=3 visible=18/18 handoff=29 progress=0.904
-[cg:plan] f=0360 countdown-effect mode=clock tick=6 evolution=yes evolutionTick=1 seed=1 cell=31 mode=expanding size=4 handoff=29 squares=2 safeText=71:17:81:23 squareGap=1 reserveExpansion=0 motion=anchored,traveling reservations=73:23,78.5:8.416666666666668 placements=75:25,80.5:10.416666666666668 dots=2275,2276,2277,2278,2366,2454,2542,2541,2540,2539,2451,2363,2364,2365,2453,2452,997.1666666666667,998.1666666666667,999.1666666666667,1000.1666666666667,1088.1666666666667,1176.1666666666667,1264.1666666666667,1263.1666666666667,1262.1666666666667,1261.1666666666667,1173.1666666666667,1085.1666666666667,1086.1666666666667,1087.1666666666667,1175.1666666666667,1174.1666666666667
+[cg:transition] f=0324 countdown-snake stage=snake tick=5 engorgement=no head=2/5 cell=39 levels=0,3,0 progress=0.359
+[cg:transition] f=0330 countdown-snake stage=snake tick=5 engorgement=no head=3/5 cell=40 levels=0,3,3,0 progress=0.529
+[cg:transition] f=0335 countdown-snake stage=snake tick=5 engorgement=no head=4/5 cell=41 levels=0,2,3,2,0 progress=0.668
+[cg:transition] f=0343 countdown-snake stage=snake tick=5 engorgement=no head=5/5 cell=42 levels=0,2,3,3,2,0 progress=0.853
+[cg:plan] f=0360 countdown-effect mode=snake tick=6 evolution=no evolutionTick=0 growthTick=6 engorgement=no seed=1 length=13 maximum=75 cellFrom=31 cellTo=57 from=42 to=46 textSafeCells=30,31,32 path=42,53,52,51,50,49,48,47,46
 [cg:transition] f=0360 countdown-intro tick=6 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0360 countdown-clock tick=6 mode=expanding size=4 visible=2/32 handoff=29 progress=0.001
+[cg:transition] f=0360 countdown-snake stage=snake tick=6 engorgement=no head=0/8 cell=42 levels=0 progress=0.001
 [cg:plan] f=0361 render=[countdownFramedGrid@1.00]
 [cg:transition] f=0363 countdown-intro tick=6 step=1 colors=[0,0,1,0,0]
 [cg:transition] f=0367 countdown-intro tick=6 step=2 colors=[0,1,2,1,0]
-[cg:transition] f=0370 countdown-clock tick=6 mode=expanding size=4 visible=4/32 handoff=29 progress=0.068
 [cg:transition] f=0371 countdown-intro tick=6 step=3 colors=[1,2,3,2,1]
-[cg:transition] f=0374 countdown-clock tick=6 mode=expanding size=4 visible=6/32 handoff=29 progress=0.129
+[cg:transition] f=0373 countdown-snake stage=snake tick=6 engorgement=no head=1/8 cell=53 levels=0,0 progress=0.112
 [cg:transition] f=0375 countdown-intro tick=6 step=4 colors=[2,3,3,3,2]
-[cg:transition] f=0378 countdown-clock tick=6 mode=expanding size=4 visible=8/32 handoff=29 progress=0.209
 [cg:transition] f=0379 countdown-intro tick=6 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0380 countdown-clock tick=6 mode=expanding size=4 visible=10/32 handoff=29 progress=0.255
-[cg:transition] f=0383 countdown-clock tick=6 mode=expanding size=4 visible=12/32 handoff=29 progress=0.332
-[cg:transition] f=0385 countdown-clock tick=6 mode=expanding size=4 visible=14/32 handoff=29 progress=0.386
-[cg:transition] f=0387 countdown-clock tick=6 mode=expanding size=4 visible=16/32 handoff=29 progress=0.443
-[cg:transition] f=0390 countdown-clock tick=6 mode=expanding size=4 visible=18/32 handoff=29 progress=0.529
-[cg:transition] f=0392 countdown-clock tick=6 mode=expanding size=4 visible=20/32 handoff=29 progress=0.586
-[cg:transition] f=0394 countdown-clock tick=6 mode=expanding size=4 visible=22/32 handoff=29 progress=0.641
-[cg:transition] f=0396 countdown-clock tick=6 mode=expanding size=4 visible=24/32 handoff=29 progress=0.694
-[cg:transition] f=0399 countdown-clock tick=6 mode=expanding size=4 visible=26/32 handoff=29 progress=0.768
-[cg:transition] f=0401 countdown-clock tick=6 mode=expanding size=4 visible=28/32 handoff=29 progress=0.813
-[cg:transition] f=0405 countdown-clock tick=6 mode=expanding size=4 visible=30/32 handoff=29 progress=0.888
-[cg:transition] f=0409 countdown-clock tick=6 mode=expanding size=4 visible=32/32 handoff=29 progress=0.944
-[cg:plan] f=0420 countdown-effect mode=clock tick=7 evolution=yes evolutionTick=2 seed=1 cell=57 mode=expanding size=8 handoff=29 squares=2 safeText=15:41:25:47 squareGap=1 reserveExpansion=0 motion=anchored,traveling reservations=13:47,34:16 placements=13:47,34:16 dots=4149,4150,4151,4152,4153,4154,4155,4156,4244,4332,4420,4508,4596,4684,4772,4771,4770,4769,4768,4767,4766,4765,4677,4589,4501,4413,4325,4237,4238,4239,4240,4241,4242,4243,4331,4419,4507,4595,4683,4682,4681,4680,4679,4678,4590,4502,4414,4326,4327,4328,4329,4330,4418,4506,4594,4593,4592,4591,4503,4415,4416,4417,4505,4504,1442,1443,1444,1445,1446,1447,1448,1449,1537,1625,1713,1801,1889,1977,2065,2064,2063,2062,2061,2060,2059,2058,1970,1882,1794,1706,1618,1530,1531,1532,1533,1534,1535,1536,1624,1712,1800,1888,1976,1975,1974,1973,1972,1971,1883,1795,1707,1619,1620,1621,1622,1623,1711,1799,1887,1886,1885,1884,1796,1708,1709,1710,1798,1797
+[cg:transition] f=0379 countdown-snake stage=snake tick=6 engorgement=no head=2/8 cell=52 levels=0,3,0 progress=0.232
+[cg:transition] f=0384 countdown-snake stage=snake tick=6 engorgement=no head=3/8 cell=51 levels=0,3,3,0 progress=0.359
+[cg:transition] f=0388 countdown-snake stage=snake tick=6 engorgement=no head=4/8 cell=50 levels=0,2,3,2,0 progress=0.471
+[cg:transition] f=0391 countdown-snake stage=snake tick=6 engorgement=no head=5/8 cell=49 levels=0,2,3,3,2,0 progress=0.557
+[cg:transition] f=0395 countdown-snake stage=snake tick=6 engorgement=no head=6/8 cell=48 levels=0,1,2,3,2,1,0 progress=0.668
+[cg:transition] f=0400 countdown-snake stage=snake tick=6 engorgement=no head=7/8 cell=47 levels=0,1,2,3,3,2,1,0 progress=0.791
+[cg:transition] f=0406 countdown-snake stage=snake tick=6 engorgement=no head=8/8 cell=46 levels=0,1,2,2,3,2,2,1,0 progress=0.904
+[cg:plan] f=0420 countdown-effect mode=snake tick=7 evolution=no evolutionTick=0 growthTick=7 engorgement=no seed=1 length=14 maximum=75 cellFrom=57 cellTo=54 from=46 to=43 textSafeCells=56,57,58 path=46,47,48,49,50,51,52,41,42,43
 [cg:transition] f=0420 countdown-intro tick=7 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0420 countdown-clock tick=7 mode=expanding size=8 visible=2/128 handoff=29 progress=0.001
+[cg:transition] f=0420 countdown-snake stage=snake tick=7 engorgement=no head=0/9 cell=46 levels=0 progress=0.001
 [cg:plan] f=0421 render=[countdownFramedGrid@1.00]
 [cg:transition] f=0423 countdown-intro tick=7 step=1 colors=[0,0,1,0,0]
-[cg:transition] f=0425 countdown-clock tick=7 mode=expanding size=8 visible=4/128 handoff=29 progress=0.020
 [cg:transition] f=0427 countdown-intro tick=7 step=2 colors=[0,1,2,1,0]
-[cg:transition] f=0427 countdown-clock tick=7 mode=expanding size=8 visible=6/128 handoff=29 progress=0.036
-[cg:transition] f=0429 countdown-clock tick=7 mode=expanding size=8 visible=8/128 handoff=29 progress=0.056
-[cg:transition] f=0430 countdown-clock tick=7 mode=expanding size=8 visible=10/128 handoff=29 progress=0.068
 [cg:transition] f=0431 countdown-intro tick=7 step=3 colors=[1,2,3,2,1]
-[cg:transition] f=0431 countdown-clock tick=7 mode=expanding size=8 visible=12/128 handoff=29 progress=0.082
-[cg:transition] f=0432 countdown-clock tick=7 mode=expanding size=8 visible=14/128 handoff=29 progress=0.096
-[cg:transition] f=0433 countdown-clock tick=7 mode=expanding size=8 visible=16/128 handoff=29 progress=0.112
-[cg:transition] f=0434 countdown-clock tick=7 mode=expanding size=8 visible=18/128 handoff=29 progress=0.129
+[cg:transition] f=0433 countdown-snake stage=snake tick=7 engorgement=no head=1/9 cell=47 levels=0,0 progress=0.112
 [cg:transition] f=0435 countdown-intro tick=7 step=4 colors=[2,3,3,3,2]
-[cg:transition] f=0435 countdown-clock tick=7 mode=expanding size=8 visible=20/128 handoff=29 progress=0.147
-[cg:transition] f=0436 countdown-clock tick=7 mode=expanding size=8 visible=22/128 handoff=29 progress=0.167
-[cg:transition] f=0437 countdown-clock tick=7 mode=expanding size=8 visible=24/128 handoff=29 progress=0.187
-[cg:transition] f=0438 countdown-clock tick=7 mode=expanding size=8 visible=28/128 handoff=29 progress=0.209
+[cg:transition] f=0438 countdown-snake stage=snake tick=7 engorgement=no head=2/9 cell=48 levels=0,3,0 progress=0.209
 [cg:transition] f=0439 countdown-intro tick=7 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0439 countdown-clock tick=7 mode=expanding size=8 visible=30/128 handoff=29 progress=0.232
-[cg:transition] f=0440 countdown-clock tick=7 mode=expanding size=8 visible=34/128 handoff=29 progress=0.255
-[cg:transition] f=0441 countdown-clock tick=7 mode=expanding size=8 visible=36/128 handoff=29 progress=0.280
-[cg:transition] f=0442 countdown-clock tick=7 mode=expanding size=8 visible=40/128 handoff=29 progress=0.306
-[cg:transition] f=0443 countdown-clock tick=7 mode=expanding size=8 visible=44/128 handoff=29 progress=0.332
-[cg:transition] f=0444 countdown-clock tick=7 mode=expanding size=8 visible=46/128 handoff=29 progress=0.359
-[cg:transition] f=0445 countdown-clock tick=7 mode=expanding size=8 visible=50/128 handoff=29 progress=0.386
-[cg:transition] f=0446 countdown-clock tick=7 mode=expanding size=8 visible=54/128 handoff=29 progress=0.414
-[cg:transition] f=0447 countdown-clock tick=7 mode=expanding size=8 visible=58/128 handoff=29 progress=0.443
-[cg:transition] f=0448 countdown-clock tick=7 mode=expanding size=8 visible=62/128 handoff=29 progress=0.471
-[cg:transition] f=0449 countdown-clock tick=7 mode=expanding size=8 visible=64/128 handoff=29 progress=0.500
-[cg:transition] f=0450 countdown-clock tick=7 mode=expanding size=8 visible=68/128 handoff=29 progress=0.529
-[cg:transition] f=0451 countdown-clock tick=7 mode=expanding size=8 visible=72/128 handoff=29 progress=0.557
-[cg:transition] f=0452 countdown-clock tick=7 mode=expanding size=8 visible=76/128 handoff=29 progress=0.586
-[cg:transition] f=0453 countdown-clock tick=7 mode=expanding size=8 visible=80/128 handoff=29 progress=0.614
-[cg:transition] f=0454 countdown-clock tick=7 mode=expanding size=8 visible=84/128 handoff=29 progress=0.641
-[cg:transition] f=0455 countdown-clock tick=7 mode=expanding size=8 visible=86/128 handoff=29 progress=0.668
-[cg:transition] f=0456 countdown-clock tick=7 mode=expanding size=8 visible=90/128 handoff=29 progress=0.694
-[cg:transition] f=0457 countdown-clock tick=7 mode=expanding size=8 visible=94/128 handoff=29 progress=0.720
-[cg:transition] f=0458 countdown-clock tick=7 mode=expanding size=8 visible=96/128 handoff=29 progress=0.745
-[cg:transition] f=0459 countdown-clock tick=7 mode=expanding size=8 visible=100/128 handoff=29 progress=0.768
-[cg:transition] f=0460 countdown-clock tick=7 mode=expanding size=8 visible=102/128 handoff=29 progress=0.791
-[cg:transition] f=0461 countdown-clock tick=7 mode=expanding size=8 visible=106/128 handoff=29 progress=0.813
-[cg:transition] f=0462 countdown-clock tick=7 mode=expanding size=8 visible=108/128 handoff=29 progress=0.833
-[cg:transition] f=0463 countdown-clock tick=7 mode=expanding size=8 visible=110/128 handoff=29 progress=0.853
-[cg:transition] f=0464 countdown-clock tick=7 mode=expanding size=8 visible=112/128 handoff=29 progress=0.871
-[cg:transition] f=0465 countdown-clock tick=7 mode=expanding size=8 visible=114/128 handoff=29 progress=0.888
-[cg:transition] f=0466 countdown-clock tick=7 mode=expanding size=8 visible=116/128 handoff=29 progress=0.904
-[cg:transition] f=0467 countdown-clock tick=7 mode=expanding size=8 visible=118/128 handoff=29 progress=0.918
-[cg:transition] f=0468 countdown-clock tick=7 mode=expanding size=8 visible=120/128 handoff=29 progress=0.932
-[cg:transition] f=0469 countdown-clock tick=7 mode=expanding size=8 visible=122/128 handoff=29 progress=0.944
-[cg:transition] f=0470 countdown-clock tick=7 mode=expanding size=8 visible=124/128 handoff=29 progress=0.955
-[cg:transition] f=0472 countdown-clock tick=7 mode=expanding size=8 visible=126/128 handoff=29 progress=0.973
-[cg:transition] f=0474 countdown-clock tick=7 mode=expanding size=8 visible=128/128 handoff=29 progress=0.986
-[cg:plan] f=0480 countdown-effect mode=clock tick=8 evolution=yes evolutionTick=3 seed=1 cell=54 mode=expanding size=8 handoff=29 squares=2 safeText=79:33:89:39 squareGap=1 reserveExpansion=0 motion=anchored,traveling reservations=77:25,74.10714285714286:45.75 placements=77:25,74.10714285714286:45.75 dots=2277,2278,2279,2280,2281,2282,2283,2284,2372,2460,2548,2636,2724,2812,2900,2899,2898,2897,2896,2895,2894,2893,2805,2717,2629,2541,2453,2365,2366,2367,2368,2369,2370,2371,2459,2547,2635,2723,2811,2810,2809,2808,2807,2806,2718,2630,2542,2454,2455,2456,2457,2458,2546,2634,2722,2721,2720,2719,2631,2543,2544,2545,2633,2632,4100.107142857143,4101.107142857143,4102.107142857143,4103.107142857143,4104.107142857143,4105.107142857143,4106.107142857143,4107.107142857143,4195.107142857143,4283.107142857143,4371.107142857143,4459.107142857143,4547.107142857143,4635.107142857143,4723.107142857143,4722.107142857143,4721.107142857143,4720.107142857143,4719.107142857143,4718.107142857143,4717.107142857143,4716.107142857143,4628.107142857143,4540.107142857143,4452.107142857143,4364.107142857143,4276.107142857143,4188.107142857143,4189.107142857143,4190.107142857143,4191.107142857143,4192.107142857143,4193.107142857143,4194.107142857143,4282.107142857143,4370.107142857143,4458.107142857143,4546.107142857143,4634.107142857143,4633.107142857143,4632.107142857143,4631.107142857143,4630.107142857143,4629.107142857143,4541.107142857143,4453.107142857143,4365.107142857143,4277.107142857143,4278.107142857143,4279.107142857143,4280.107142857143,4281.107142857143,4369.107142857143,4457.107142857143,4545.107142857143,4544.107142857143,4543.107142857143,4542.107142857143,4454.107142857143,4366.107142857143,4367.107142857143,4368.107142857143,4456.107142857143,4455.107142857143
+[cg:transition] f=0442 countdown-snake stage=snake tick=7 engorgement=no head=3/9 cell=49 levels=0,3,3,0 progress=0.306
+[cg:transition] f=0446 countdown-snake stage=snake tick=7 engorgement=no head=4/9 cell=50 levels=0,2,3,2,0 progress=0.414
+[cg:transition] f=0450 countdown-snake stage=snake tick=7 engorgement=no head=5/9 cell=51 levels=0,2,3,3,2,0 progress=0.529
+[cg:transition] f=0453 countdown-snake stage=snake tick=7 engorgement=no head=6/9 cell=52 levels=0,1,2,3,2,1,0 progress=0.614
+[cg:transition] f=0457 countdown-snake stage=snake tick=7 engorgement=no head=7/9 cell=41 levels=0,1,2,3,3,2,1,0 progress=0.720
+[cg:transition] f=0461 countdown-snake stage=snake tick=7 engorgement=no head=8/9 cell=42 levels=0,1,2,2,3,2,2,1,0 progress=0.813
+[cg:transition] f=0466 countdown-snake stage=snake tick=7 engorgement=no head=9/9 cell=43 levels=0,1,2,2,3,3,2,2,1,0 progress=0.904
+[cg:plan] f=0480 countdown-effect mode=snake tick=8 evolution=no evolutionTick=0 growthTick=8 engorgement=no seed=1 length=15 maximum=75 cellFrom=54 cellTo=67 from=65 to=56 textSafeCells=53,54 path=65,64,63,62,61,60,59,58,57,56
 [cg:transition] f=0480 countdown-intro tick=8 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0480 countdown-clock tick=8 mode=expanding size=8 visible=2/128 handoff=29 progress=0.001
+[cg:transition] f=0480 countdown-snake stage=snake tick=8 engorgement=no head=0/9 cell=65 levels=0 progress=0.001
 [cg:plan] f=0481 render=[countdownFramedGrid@1.00]
 [cg:transition] f=0483 countdown-intro tick=8 step=1 colors=[0,0,1,0,0]
-[cg:transition] f=0485 countdown-clock tick=8 mode=expanding size=8 visible=4/128 handoff=29 progress=0.020
 [cg:transition] f=0487 countdown-intro tick=8 step=2 colors=[0,1,2,1,0]
-[cg:transition] f=0487 countdown-clock tick=8 mode=expanding size=8 visible=6/128 handoff=29 progress=0.036
-[cg:transition] f=0489 countdown-clock tick=8 mode=expanding size=8 visible=8/128 handoff=29 progress=0.056
-[cg:transition] f=0490 countdown-clock tick=8 mode=expanding size=8 visible=10/128 handoff=29 progress=0.068
 [cg:transition] f=0491 countdown-intro tick=8 step=3 colors=[1,2,3,2,1]
-[cg:transition] f=0491 countdown-clock tick=8 mode=expanding size=8 visible=12/128 handoff=29 progress=0.082
-[cg:transition] f=0492 countdown-clock tick=8 mode=expanding size=8 visible=14/128 handoff=29 progress=0.096
-[cg:transition] f=0493 countdown-clock tick=8 mode=expanding size=8 visible=16/128 handoff=29 progress=0.112
-[cg:transition] f=0494 countdown-clock tick=8 mode=expanding size=8 visible=18/128 handoff=29 progress=0.129
+[cg:transition] f=0493 countdown-snake stage=snake tick=8 engorgement=no head=1/9 cell=64 levels=0,0 progress=0.112
 [cg:transition] f=0495 countdown-intro tick=8 step=4 colors=[2,3,3,3,2]
-[cg:transition] f=0495 countdown-clock tick=8 mode=expanding size=8 visible=20/128 handoff=29 progress=0.147
-[cg:transition] f=0496 countdown-clock tick=8 mode=expanding size=8 visible=22/128 handoff=29 progress=0.167
-[cg:transition] f=0497 countdown-clock tick=8 mode=expanding size=8 visible=24/128 handoff=29 progress=0.187
-[cg:transition] f=0498 countdown-clock tick=8 mode=expanding size=8 visible=28/128 handoff=29 progress=0.209
+[cg:transition] f=0498 countdown-snake stage=snake tick=8 engorgement=no head=2/9 cell=63 levels=0,3,0 progress=0.209
 [cg:transition] f=0499 countdown-intro tick=8 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0499 countdown-clock tick=8 mode=expanding size=8 visible=30/128 handoff=29 progress=0.232
-[cg:transition] f=0500 countdown-clock tick=8 mode=expanding size=8 visible=34/128 handoff=29 progress=0.255
-[cg:transition] f=0501 countdown-clock tick=8 mode=expanding size=8 visible=36/128 handoff=29 progress=0.280
-[cg:transition] f=0502 countdown-clock tick=8 mode=expanding size=8 visible=40/128 handoff=29 progress=0.306
-[cg:transition] f=0503 countdown-clock tick=8 mode=expanding size=8 visible=44/128 handoff=29 progress=0.332
-[cg:transition] f=0504 countdown-clock tick=8 mode=expanding size=8 visible=46/128 handoff=29 progress=0.359
-[cg:transition] f=0505 countdown-clock tick=8 mode=expanding size=8 visible=50/128 handoff=29 progress=0.386
-[cg:transition] f=0506 countdown-clock tick=8 mode=expanding size=8 visible=54/128 handoff=29 progress=0.414
-[cg:transition] f=0507 countdown-clock tick=8 mode=expanding size=8 visible=58/128 handoff=29 progress=0.443
-[cg:transition] f=0508 countdown-clock tick=8 mode=expanding size=8 visible=62/128 handoff=29 progress=0.471
-[cg:transition] f=0509 countdown-clock tick=8 mode=expanding size=8 visible=66/128 handoff=29 progress=0.500
-[cg:transition] f=0510 countdown-clock tick=8 mode=expanding size=8 visible=68/128 handoff=29 progress=0.529
-[cg:transition] f=0511 countdown-clock tick=8 mode=expanding size=8 visible=72/128 handoff=29 progress=0.557
-[cg:transition] f=0512 countdown-clock tick=8 mode=expanding size=8 visible=76/128 handoff=29 progress=0.586
-[cg:transition] f=0513 countdown-clock tick=8 mode=expanding size=8 visible=80/128 handoff=29 progress=0.614
-[cg:transition] f=0514 countdown-clock tick=8 mode=expanding size=8 visible=84/128 handoff=29 progress=0.641
-[cg:transition] f=0515 countdown-clock tick=8 mode=expanding size=8 visible=86/128 handoff=29 progress=0.668
-[cg:transition] f=0516 countdown-clock tick=8 mode=expanding size=8 visible=90/128 handoff=29 progress=0.694
-[cg:transition] f=0517 countdown-clock tick=8 mode=expanding size=8 visible=94/128 handoff=29 progress=0.720
-[cg:transition] f=0518 countdown-clock tick=8 mode=expanding size=8 visible=96/128 handoff=29 progress=0.745
-[cg:transition] f=0519 countdown-clock tick=8 mode=expanding size=8 visible=100/128 handoff=29 progress=0.768
-[cg:transition] f=0520 countdown-clock tick=8 mode=expanding size=8 visible=102/128 handoff=29 progress=0.791
-[cg:transition] f=0521 countdown-clock tick=8 mode=expanding size=8 visible=106/128 handoff=29 progress=0.813
-[cg:transition] f=0522 countdown-clock tick=8 mode=expanding size=8 visible=108/128 handoff=29 progress=0.833
-[cg:transition] f=0523 countdown-clock tick=8 mode=expanding size=8 visible=110/128 handoff=29 progress=0.853
-[cg:transition] f=0524 countdown-clock tick=8 mode=expanding size=8 visible=112/128 handoff=29 progress=0.871
-[cg:transition] f=0525 countdown-clock tick=8 mode=expanding size=8 visible=114/128 handoff=29 progress=0.888
-[cg:transition] f=0526 countdown-clock tick=8 mode=expanding size=8 visible=116/128 handoff=29 progress=0.904
-[cg:transition] f=0527 countdown-clock tick=8 mode=expanding size=8 visible=118/128 handoff=29 progress=0.918
-[cg:transition] f=0528 countdown-clock tick=8 mode=expanding size=8 visible=120/128 handoff=29 progress=0.932
-[cg:transition] f=0529 countdown-clock tick=8 mode=expanding size=8 visible=122/128 handoff=29 progress=0.944
-[cg:transition] f=0530 countdown-clock tick=8 mode=expanding size=8 visible=124/128 handoff=29 progress=0.955
-[cg:transition] f=0532 countdown-clock tick=8 mode=expanding size=8 visible=126/128 handoff=29 progress=0.973
-[cg:transition] f=0534 countdown-clock tick=8 mode=expanding size=8 visible=128/128 handoff=29 progress=0.986
-[cg:plan] f=0539 countdown-effect mode=clock tick=9 evolution=yes evolutionTick=4 seed=1 cell=67 mode=snake-origin size=1 handoff=29 squares=1 safeText=7:49:17:55 squareGap=1 reserveExpansion=origin motion=origin reservations=origin placements=59.5:19.5 dots=1856
+[cg:transition] f=0502 countdown-snake stage=snake tick=8 engorgement=no head=3/9 cell=62 levels=0,3,3,0 progress=0.306
+[cg:transition] f=0506 countdown-snake stage=snake tick=8 engorgement=no head=4/9 cell=61 levels=0,2,3,2,0 progress=0.414
+[cg:transition] f=0509 countdown-snake stage=snake tick=8 engorgement=no head=5/9 cell=60 levels=0,2,3,3,2,0 progress=0.500
+[cg:transition] f=0513 countdown-snake stage=snake tick=8 engorgement=no head=6/9 cell=59 levels=0,1,2,3,2,1,0 progress=0.614
+[cg:transition] f=0517 countdown-snake stage=snake tick=8 engorgement=no head=7/9 cell=58 levels=0,1,2,3,3,2,1,0 progress=0.720
+[cg:transition] f=0521 countdown-snake stage=snake tick=8 engorgement=no head=8/9 cell=57 levels=0,1,2,2,3,2,2,1,0 progress=0.813
+[cg:transition] f=0526 countdown-snake stage=snake tick=8 engorgement=no head=9/9 cell=56 levels=0,1,2,2,3,3,2,2,1,0 progress=0.904
+[cg:plan] f=0539 countdown-effect mode=snake tick=9 evolution=no evolutionTick=0 growthTick=9 engorgement=no seed=1 length=16 maximum=75 cellFrom=67 cellTo=40 from=56 to=51 textSafeCells=66,67,68 path=56,57,46,47,48,49,50,51
 [cg:transition] f=0539 countdown-intro tick=9 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0539 countdown-clock tick=9 mode=snake-origin size=1 visible=1/1 handoff=29 progress=0.000
+[cg:transition] f=0539 countdown-snake stage=snake tick=9 engorgement=no head=0/7 cell=56 levels=0 progress=0.000
 [cg:plan] f=0540 render=[countdownFramedGrid@1.00]
 [cg:transition] f=0543 countdown-intro tick=9 step=1 colors=[0,0,1,0,0]
 [cg:transition] f=0547 countdown-intro tick=9 step=2 colors=[0,1,2,1,0]
 [cg:transition] f=0551 countdown-intro tick=9 step=3 colors=[1,2,3,2,1]
+[cg:transition] f=0554 countdown-snake stage=snake tick=9 engorgement=no head=1/7 cell=57 levels=0,0 progress=0.129
 [cg:transition] f=0555 countdown-intro tick=9 step=4 colors=[2,3,3,3,2]
 [cg:transition] f=0559 countdown-intro tick=9 step=5 colors=[3,3,3,3,3]
-[cg:timeline] f=0599 composition-timeline composition=countdown-framed time=10.000 active=track:snake-main states=track:clock-main:off,connection:clock-snake:off,track:snake-main:on,connection:snake-bubbles:off,track:bubbles-main:off
-[cg:plan] f=0599 countdown-effect mode=snake tick=10 evolution=no evolutionTick=0 growthTick=0 merge=no mergeTick=0 seed=1 length=7 maximum=75 cellFrom=40 cellTo=14 from=29 to=25 textSafeCells=39,40,41 path=29,28,27,26,25
-[cg:transition] f=0599 countdown-connector id=clock-snake state=exit
-[cg:timeline] f=0599 countdown-track id=snake-main state=enter
-[cg:plan] f=0599 countdown-synth plan=rebuilt tracks=snake-main connectors=none layers=behind-timer:20:track:snake-main:snake-main:main
-[cg:timeline] f=0599 countdown-order stage=snake index=1/3 next=bubbles phase=stable evolution=no stageProgress=0.000 evolutionProgress=0.000
+[cg:transition] f=0560 countdown-snake stage=snake tick=9 engorgement=no head=2/7 cell=46 levels=0,3,0 progress=0.255
+[cg:transition] f=0565 countdown-snake stage=snake tick=9 engorgement=no head=3/7 cell=47 levels=0,3,3,0 progress=0.386
+[cg:transition] f=0569 countdown-snake stage=snake tick=9 engorgement=no head=4/7 cell=48 levels=0,2,3,2,0 progress=0.500
+[cg:transition] f=0574 countdown-snake stage=snake tick=9 engorgement=no head=5/7 cell=49 levels=0,2,3,3,2,0 progress=0.641
+[cg:transition] f=0579 countdown-snake stage=snake tick=9 engorgement=no head=6/7 cell=50 levels=0,1,2,3,2,1,0 progress=0.768
+[cg:transition] f=0585 countdown-snake stage=snake tick=9 engorgement=no head=7/7 cell=51 levels=0,1,2,3,3,2,1,0 progress=0.888
+[cg:plan] f=0599 countdown-effect mode=snake tick=10 evolution=no evolutionTick=0 growthTick=10 engorgement=no seed=1 length=17 maximum=75 cellFrom=40 cellTo=14 from=29 to=25 textSafeCells=39,40,41 path=29,28,27,26,25
 [cg:transition] f=0599 countdown-intro tick=10 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0599 countdown-snake stage=snake tick=10 merge=no head=0/4 cell=29 levels=0 progress=0.000
-[cg:timeline] f=0600 phase=core cycle=0 duration=30.000 paused=no
+[cg:transition] f=0599 countdown-snake stage=snake tick=10 engorgement=no head=0/4 cell=29 levels=0 progress=0.000
 [cg:plan] f=0600 render=[countdownFramedGrid@1.00]
 [cg:transition] f=0603 countdown-intro tick=10 step=1 colors=[0,0,1,0,0]
 [cg:transition] f=0607 countdown-intro tick=10 step=2 colors=[0,1,2,1,0]
 [cg:transition] f=0611 countdown-intro tick=10 step=3 colors=[1,2,3,2,1]
 [cg:transition] f=0615 countdown-intro tick=10 step=4 colors=[2,3,3,3,2]
-[cg:transition] f=0618 countdown-snake stage=snake tick=10 merge=no head=1/4 cell=28 levels=0,0 progress=0.209
+[cg:transition] f=0618 countdown-snake stage=snake tick=10 engorgement=no head=1/4 cell=28 levels=0,0 progress=0.209
 [cg:transition] f=0619 countdown-intro tick=10 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0626 countdown-snake stage=snake tick=10 merge=no head=2/4 cell=27 levels=0,3,0 progress=0.414
-[cg:transition] f=0633 countdown-snake stage=snake tick=10 merge=no head=3/4 cell=26 levels=0,3,3,0 progress=0.614
-[cg:transition] f=0641 countdown-snake stage=snake tick=10 merge=no head=4/4 cell=25 levels=0,2,3,2,0 progress=0.813
-[cg:plan] f=0659 countdown-effect mode=snake tick=11 evolution=no evolutionTick=0 growthTick=1 merge=no mergeTick=0 seed=1 length=8 maximum=75 cellFrom=14 cellTo=70 from=25 to=59 textSafeCells=13,14,15 path=25,26,37,48,59
+[cg:transition] f=0626 countdown-snake stage=snake tick=10 engorgement=no head=2/4 cell=27 levels=0,3,0 progress=0.414
+[cg:transition] f=0633 countdown-snake stage=snake tick=10 engorgement=no head=3/4 cell=26 levels=0,3,3,0 progress=0.614
+[cg:transition] f=0641 countdown-snake stage=snake tick=10 engorgement=no head=4/4 cell=25 levels=0,2,3,2,0 progress=0.813
+[cg:plan] f=0659 countdown-effect mode=snake tick=11 evolution=no evolutionTick=0 growthTick=11 engorgement=no seed=1 length=18 maximum=75 cellFrom=14 cellTo=70 from=25 to=59 textSafeCells=13,14,15 path=25,26,37,48,59
 [cg:transition] f=0659 countdown-intro tick=11 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0659 countdown-snake stage=snake tick=11 merge=no head=0/4 cell=25 levels=0 progress=0.000
+[cg:transition] f=0659 countdown-snake stage=snake tick=11 engorgement=no head=0/4 cell=25 levels=0 progress=0.000
 [cg:plan] f=0660 render=[countdownFramedGrid@1.00]
 [cg:transition] f=0663 countdown-intro tick=11 step=1 colors=[0,0,1,0,0]
 [cg:transition] f=0667 countdown-intro tick=11 step=2 colors=[0,1,2,1,0]
 [cg:transition] f=0671 countdown-intro tick=11 step=3 colors=[1,2,3,2,1]
 [cg:transition] f=0675 countdown-intro tick=11 step=4 colors=[2,3,3,3,2]
-[cg:transition] f=0678 countdown-snake stage=snake tick=11 merge=no head=1/4 cell=26 levels=0,0 progress=0.209
+[cg:transition] f=0678 countdown-snake stage=snake tick=11 engorgement=no head=1/4 cell=26 levels=0,0 progress=0.209
 [cg:transition] f=0679 countdown-intro tick=11 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0686 countdown-snake stage=snake tick=11 merge=no head=2/4 cell=37 levels=0,3,0 progress=0.414
-[cg:transition] f=0693 countdown-snake stage=snake tick=11 merge=no head=3/4 cell=48 levels=0,3,3,0 progress=0.614
-[cg:transition] f=0701 countdown-snake stage=snake tick=11 merge=no head=4/4 cell=59 levels=0,2,3,2,0 progress=0.813
-[cg:plan] f=0719 countdown-effect mode=snake tick=12 evolution=no evolutionTick=0 growthTick=2 merge=no mergeTick=0 seed=1 length=9 maximum=75 cellFrom=70 cellTo=3 from=59 to=14 textSafeCells=69,70,71 path=59,58,47,36,25,14
+[cg:transition] f=0686 countdown-snake stage=snake tick=11 engorgement=no head=2/4 cell=37 levels=0,3,0 progress=0.414
+[cg:transition] f=0693 countdown-snake stage=snake tick=11 engorgement=no head=3/4 cell=48 levels=0,3,3,0 progress=0.614
+[cg:transition] f=0701 countdown-snake stage=snake tick=11 engorgement=no head=4/4 cell=59 levels=0,2,3,2,0 progress=0.813
+[cg:plan] f=0719 countdown-effect mode=snake tick=12 evolution=no evolutionTick=0 growthTick=12 engorgement=no seed=1 length=19 maximum=75 cellFrom=70 cellTo=3 from=59 to=14 textSafeCells=69,70,71 path=59,58,47,36,25,14
 [cg:transition] f=0719 countdown-intro tick=12 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0719 countdown-snake stage=snake tick=12 merge=no head=0/5 cell=59 levels=0 progress=0.000
+[cg:transition] f=0719 countdown-snake stage=snake tick=12 engorgement=no head=0/5 cell=59 levels=0 progress=0.000
 [cg:plan] f=0720 render=[countdownFramedGrid@1.00]
 [cg:transition] f=0723 countdown-intro tick=12 step=1 colors=[0,0,1,0,0]
 [cg:transition] f=0727 countdown-intro tick=12 step=2 colors=[0,1,2,1,0]
 [cg:transition] f=0731 countdown-intro tick=12 step=3 colors=[1,2,3,2,1]
 [cg:transition] f=0735 countdown-intro tick=12 step=4 colors=[2,3,3,3,2]
-[cg:transition] f=0736 countdown-snake stage=snake tick=12 merge=no head=1/5 cell=58 levels=0,0 progress=0.167
+[cg:transition] f=0736 countdown-snake stage=snake tick=12 engorgement=no head=1/5 cell=58 levels=0,0 progress=0.167
 [cg:transition] f=0739 countdown-intro tick=12 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0744 countdown-snake stage=snake tick=12 merge=no head=2/5 cell=47 levels=0,3,0 progress=0.359
-[cg:transition] f=0749 countdown-snake stage=snake tick=12 merge=no head=3/5 cell=36 levels=0,3,3,0 progress=0.500
-[cg:transition] f=0755 countdown-snake stage=snake tick=12 merge=no head=4/5 cell=25 levels=0,2,3,2,0 progress=0.668
-[cg:transition] f=0763 countdown-snake stage=snake tick=12 merge=no head=5/5 cell=14 levels=0,2,3,3,2,0 progress=0.853
-[cg:plan] f=0779 countdown-effect mode=snake tick=13 evolution=no evolutionTick=0 growthTick=3 merge=no mergeTick=0 seed=1 length=10 maximum=75 cellFrom=3 cellTo=76 from=14 to=65 textSafeCells=2,3,4 path=14,15,16,17,18,29,40,41,42,43,54,65
+[cg:transition] f=0744 countdown-snake stage=snake tick=12 engorgement=no head=2/5 cell=47 levels=0,3,0 progress=0.359
+[cg:transition] f=0749 countdown-snake stage=snake tick=12 engorgement=no head=3/5 cell=36 levels=0,3,3,0 progress=0.500
+[cg:transition] f=0755 countdown-snake stage=snake tick=12 engorgement=no head=4/5 cell=25 levels=0,2,3,2,0 progress=0.668
+[cg:transition] f=0763 countdown-snake stage=snake tick=12 engorgement=no head=5/5 cell=14 levels=0,2,3,3,2,0 progress=0.853
+[cg:plan] f=0779 countdown-effect mode=snake tick=13 evolution=no evolutionTick=0 growthTick=13 engorgement=no seed=1 length=20 maximum=75 cellFrom=3 cellTo=76 from=14 to=65 textSafeCells=2,3,4 path=14,15,16,17,18,29,40,41,42,43,54,65
 [cg:transition] f=0779 countdown-intro tick=13 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0779 countdown-snake stage=snake tick=13 merge=no head=0/11 cell=14 levels=0 progress=0.000
+[cg:transition] f=0779 countdown-snake stage=snake tick=13 engorgement=no head=0/11 cell=14 levels=0 progress=0.000
 [cg:plan] f=0780 render=[countdownFramedGrid@1.00]
 [cg:transition] f=0783 countdown-intro tick=13 step=1 colors=[0,0,1,0,0]
 [cg:transition] f=0787 countdown-intro tick=13 step=2 colors=[0,1,2,1,0]
 [cg:transition] f=0791 countdown-intro tick=13 step=3 colors=[1,2,3,2,1]
-[cg:transition] f=0792 countdown-snake stage=snake tick=13 merge=no head=1/11 cell=15 levels=0,0 progress=0.096
+[cg:transition] f=0792 countdown-snake stage=snake tick=13 engorgement=no head=1/11 cell=15 levels=0,0 progress=0.096
 [cg:transition] f=0795 countdown-intro tick=13 step=4 colors=[2,3,3,3,2]
-[cg:transition] f=0796 countdown-snake stage=snake tick=13 merge=no head=2/11 cell=16 levels=0,3,0 progress=0.167
+[cg:transition] f=0796 countdown-snake stage=snake tick=13 engorgement=no head=2/11 cell=16 levels=0,3,0 progress=0.167
 [cg:transition] f=0799 countdown-intro tick=13 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0800 countdown-snake stage=snake tick=13 merge=no head=3/11 cell=17 levels=0,3,3,0 progress=0.255
-[cg:transition] f=0804 countdown-snake stage=snake tick=13 merge=no head=4/11 cell=18 levels=0,2,3,2,0 progress=0.359
-[cg:transition] f=0807 countdown-snake stage=snake tick=13 merge=no head=5/11 cell=29 levels=0,2,3,3,2,0 progress=0.443
-[cg:transition] f=0809 countdown-snake stage=snake tick=13 merge=no head=6/11 cell=40 levels=0,1,2,3,2,1,0 progress=0.500
-[cg:transition] f=0812 countdown-snake stage=snake tick=13 merge=no head=7/11 cell=41 levels=0,1,2,3,3,2,1,0 progress=0.586
-[cg:transition] f=0815 countdown-snake stage=snake tick=13 merge=no head=8/11 cell=42 levels=0,1,2,2,3,2,2,1,0 progress=0.668
-[cg:transition] f=0819 countdown-snake stage=snake tick=13 merge=no head=9/11 cell=43 levels=0,1,2,2,3,3,2,2,1,0 progress=0.768
-[cg:transition] f=0823 countdown-snake stage=snake tick=13 merge=no head=10/11 cell=54 levels=0,1,2,2,3,3,2,2,1,0 progress=0.853
-[cg:transition] f=0827 countdown-snake stage=snake tick=13 merge=no head=11/11 cell=65 levels=0,1,2,2,3,3,2,2,1,0 progress=0.918
-[cg:plan] f=0839 countdown-effect mode=snake tick=14 evolution=no evolutionTick=0 growthTick=4 merge=no mergeTick=0 seed=1 length=11 maximum=75 cellFrom=76 cellTo=26 from=65 to=37 textSafeCells=75,76 path=65,64,63,62,61,50,39,38,37
+[cg:transition] f=0800 countdown-snake stage=snake tick=13 engorgement=no head=3/11 cell=17 levels=0,3,3,0 progress=0.255
+[cg:transition] f=0804 countdown-snake stage=snake tick=13 engorgement=no head=4/11 cell=18 levels=0,2,3,2,0 progress=0.359
+[cg:transition] f=0807 countdown-snake stage=snake tick=13 engorgement=no head=5/11 cell=29 levels=0,2,3,3,2,0 progress=0.443
+[cg:transition] f=0809 countdown-snake stage=snake tick=13 engorgement=no head=6/11 cell=40 levels=0,1,2,3,2,1,0 progress=0.500
+[cg:transition] f=0812 countdown-snake stage=snake tick=13 engorgement=no head=7/11 cell=41 levels=0,1,2,3,3,2,1,0 progress=0.586
+[cg:transition] f=0815 countdown-snake stage=snake tick=13 engorgement=no head=8/11 cell=42 levels=0,1,2,2,3,2,2,1,0 progress=0.668
+[cg:transition] f=0819 countdown-snake stage=snake tick=13 engorgement=no head=9/11 cell=43 levels=0,1,2,2,3,3,2,2,1,0 progress=0.768
+[cg:transition] f=0823 countdown-snake stage=snake tick=13 engorgement=no head=10/11 cell=54 levels=0,1,1,2,2,3,2,2,1,1,0 progress=0.853
+[cg:transition] f=0827 countdown-snake stage=snake tick=13 engorgement=no head=11/11 cell=65 levels=0,1,1,2,2,3,3,2,2,1,1,0 progress=0.918
+[cg:plan] f=0839 countdown-effect mode=snake tick=14 evolution=no evolutionTick=0 growthTick=14 engorgement=no seed=1 length=21 maximum=75 cellFrom=76 cellTo=26 from=65 to=37 textSafeCells=75,76 path=65,64,63,62,61,50,39,38,37
 [cg:transition] f=0839 countdown-intro tick=14 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0839 countdown-snake stage=snake tick=14 merge=no head=0/8 cell=65 levels=0 progress=0.000
+[cg:transition] f=0839 countdown-snake stage=snake tick=14 engorgement=no head=0/8 cell=65 levels=0 progress=0.000
 [cg:plan] f=0840 render=[countdownFramedGrid@1.00]
 [cg:transition] f=0843 countdown-intro tick=14 step=1 colors=[0,0,1,0,0]
 [cg:transition] f=0847 countdown-intro tick=14 step=2 colors=[0,1,2,1,0]
 [cg:transition] f=0851 countdown-intro tick=14 step=3 colors=[1,2,3,2,1]
-[cg:transition] f=0853 countdown-snake stage=snake tick=14 merge=no head=1/8 cell=64 levels=0,0 progress=0.112
+[cg:transition] f=0853 countdown-snake stage=snake tick=14 engorgement=no head=1/8 cell=64 levels=0,0 progress=0.112
 [cg:transition] f=0855 countdown-intro tick=14 step=4 colors=[2,3,3,3,2]
 [cg:transition] f=0859 countdown-intro tick=14 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0859 countdown-snake stage=snake tick=14 merge=no head=2/8 cell=63 levels=0,3,0 progress=0.232
-[cg:transition] f=0864 countdown-snake stage=snake tick=14 merge=no head=3/8 cell=62 levels=0,3,3,0 progress=0.359
-[cg:transition] f=0868 countdown-snake stage=snake tick=14 merge=no head=4/8 cell=61 levels=0,2,3,2,0 progress=0.471
-[cg:transition] f=0871 countdown-snake stage=snake tick=14 merge=no head=5/8 cell=50 levels=0,2,3,3,2,0 progress=0.557
-[cg:transition] f=0875 countdown-snake stage=snake tick=14 merge=no head=6/8 cell=39 levels=0,1,2,3,2,1,0 progress=0.668
-[cg:transition] f=0880 countdown-snake stage=snake tick=14 merge=no head=7/8 cell=38 levels=0,1,2,3,3,2,1,0 progress=0.791
-[cg:transition] f=0886 countdown-snake stage=snake tick=14 merge=no head=8/8 cell=37 levels=0,1,2,2,3,2,2,1,0 progress=0.904
-[cg:plan] f=0899 countdown-effect mode=snake tick=15 evolution=no evolutionTick=0 growthTick=5 merge=no mergeTick=0 seed=1 length=12 maximum=75 cellFrom=26 cellTo=69 from=37 to=58 textSafeCells=25,26,27 path=37,36,47,58
+[cg:transition] f=0859 countdown-snake stage=snake tick=14 engorgement=no head=2/8 cell=63 levels=0,3,0 progress=0.232
+[cg:transition] f=0864 countdown-snake stage=snake tick=14 engorgement=no head=3/8 cell=62 levels=0,3,3,0 progress=0.359
+[cg:transition] f=0868 countdown-snake stage=snake tick=14 engorgement=no head=4/8 cell=61 levels=0,2,3,2,0 progress=0.471
+[cg:transition] f=0871 countdown-snake stage=snake tick=14 engorgement=no head=5/8 cell=50 levels=0,2,3,3,2,0 progress=0.557
+[cg:transition] f=0875 countdown-snake stage=snake tick=14 engorgement=no head=6/8 cell=39 levels=0,1,2,3,2,1,0 progress=0.668
+[cg:transition] f=0880 countdown-snake stage=snake tick=14 engorgement=no head=7/8 cell=38 levels=0,1,2,3,3,2,1,0 progress=0.791
+[cg:transition] f=0886 countdown-snake stage=snake tick=14 engorgement=no head=8/8 cell=37 levels=0,1,2,2,3,2,2,1,0 progress=0.904
+[cg:plan] f=0899 countdown-effect mode=snake tick=15 evolution=no evolutionTick=0 growthTick=15 engorgement=no seed=1 length=22 maximum=75 cellFrom=26 cellTo=69 from=37 to=58 textSafeCells=25,26,27 path=37,36,47,58
 [cg:transition] f=0899 countdown-intro tick=15 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0899 countdown-snake stage=snake tick=15 merge=no head=0/3 cell=37 levels=0 progress=0.000
+[cg:transition] f=0899 countdown-snake stage=snake tick=15 engorgement=no head=0/3 cell=37 levels=0 progress=0.000
 
 # draw volume
 blankFrames=0
 firstDrawnFrame=0
-totalFill=12222
+totalFill=3562

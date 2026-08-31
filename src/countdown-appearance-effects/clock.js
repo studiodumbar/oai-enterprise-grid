@@ -1,5 +1,8 @@
 import { resolveAutomaticDuration } from "../core/automatic-duration.js";
-import { normalizeBezierCurve } from "../core/cubic-bezier.js";
+import {
+  cubicBezierAt,
+  normalizeBezierCurve,
+} from "../core/cubic-bezier.js";
 import { hashUnit } from "../generators/grid-scene-strategies.js";
 import {
   clockwiseDotColors,
@@ -12,6 +15,13 @@ const CLOCK_COLUMN_SALT = 2203;
 const CLOCK_ROW_SALT = 2207;
 const CLOCK_CANDIDATE_SALT = 2213;
 const CLOCK_PAIR_SALT = 2219;
+const CLOCK_STAGGER_SALT = 2221;
+const CLOCK_WATERFALL_SALT = 2237;
+const CLOCK_FAR_SEPARATION_SALT = 2239;
+const CLOCK_FAR_POSITION_SALT = 2243;
+const CLOCK_RIPPLE_FLICKER_SALT = 2251;
+const CLOCK_RIPPLE_PRIMARY_GLYPH_SALT = 2267;
+const CLOCK_RIPPLE_ECHO_GLYPH_SALT = 2269;
 
 function requireObject(value, label) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -61,6 +71,29 @@ function clockRectangle(left, top, size) {
     top,
     right: left + size,
     bottom: top + size,
+  };
+}
+
+function clockTextSafeZoneAt(
+  cellIndex,
+  columns,
+  subdivisions,
+  widthInCells,
+  heightInCells,
+) {
+  const cellColumn = cellIndex % columns;
+  const cellRow = Math.floor(cellIndex / columns);
+  const centerColumn = cellColumn * subdivisions + subdivisions / 2;
+  const centerRow = cellRow * subdivisions + subdivisions / 2;
+  const width = widthInCells * subdivisions;
+  const height = heightInCells * subdivisions;
+  return {
+    left: centerColumn - width / 2,
+    top: centerRow - height / 2,
+    right: centerColumn + width / 2,
+    bottom: centerRow + height / 2,
+    widthInCells,
+    heightInCells,
   };
 }
 
@@ -178,12 +211,58 @@ function selectMovableClockReservation({
   return reservation;
 }
 
+function selectFarClockReservation({
+  other,
+  seed,
+  tick,
+  textSafeZone,
+  minimumSquareGap,
+  gridColumns,
+  gridRows,
+  size,
+}) {
+  let selected = null;
+  for (let top = 0; top <= gridRows - size; top += 1) {
+    for (let left = 0; left <= gridColumns - size; left += 1) {
+      const candidate = {
+        ...clockRectangle(left, top, size),
+        centerColumn: left + size / 2,
+        centerRow: top + size / 2,
+      };
+      if (
+        rectanglesOverlap(candidate, textSafeZone)
+        || rectanglesOverlap(candidate, other, minimumSquareGap)
+      ) continue;
+      const distance = (
+        (candidate.centerColumn - other.centerColumn) ** 2
+        + (candidate.centerRow - other.centerRow) ** 2
+      );
+      const candidateId = top * gridColumns + left;
+      const rank = hashUnit(
+        seed ^ Math.imul(tick + 1, CLOCK_FAR_POSITION_SALT),
+        candidateId,
+        CLOCK_FAR_SEPARATION_SALT,
+      );
+      if (
+        selected === null
+        || distance > selected.distance
+        || (distance === selected.distance && rank < selected.rank)
+      ) {
+        selected = { ...candidate, distance, rank };
+      }
+    }
+  }
+  if (selected === null) return null;
+  const { distance, rank, ...reservation } = selected;
+  return reservation;
+}
+
 function clockReservationCandidates({
   textCenterColumn,
   textCenterRow,
   gridColumns,
   gridRows,
-  maximumSquareSize,
+  squareSize,
   rangeX,
   rangeY,
   expansion,
@@ -192,19 +271,19 @@ function clockReservationCandidates({
   for (let offsetY = -rangeY - expansion; offsetY <= rangeY + expansion; offsetY += 1) {
     for (let offsetX = -rangeX - expansion; offsetX <= rangeX + expansion; offsetX += 1) {
       const left = Math.max(0, Math.min(
-        gridColumns - maximumSquareSize,
-        Math.round(textCenterColumn + offsetX - maximumSquareSize / 2),
+        gridColumns - squareSize,
+        Math.round(textCenterColumn + offsetX - squareSize / 2),
       ));
       const top = Math.max(0, Math.min(
-        gridRows - maximumSquareSize,
-        Math.round(textCenterRow + offsetY - maximumSquareSize / 2),
+        gridRows - squareSize,
+        Math.round(textCenterRow + offsetY - squareSize / 2),
       ));
       const key = `${left}:${top}`;
       if (!candidates.has(key)) {
         candidates.set(key, {
-          ...clockRectangle(left, top, maximumSquareSize),
-          centerColumn: left + maximumSquareSize / 2,
-          centerRow: top + maximumSquareSize / 2,
+          ...clockRectangle(left, top, squareSize),
+          centerColumn: left + squareSize / 2,
+          centerRow: top + squareSize / 2,
         });
       }
     }
@@ -220,7 +299,7 @@ function selectClockReservations({
   textSafeZone,
   gridColumns,
   gridRows,
-  maximumSquareSize,
+  squareSize,
   rangeX,
   rangeY,
   minimumSquareGap,
@@ -232,7 +311,7 @@ function selectClockReservations({
       textCenterRow,
       gridColumns,
       gridRows,
-      maximumSquareSize,
+      squareSize,
       rangeX,
       rangeY,
       expansion,
@@ -261,6 +340,10 @@ function selectClockReservations({
           secondId,
           CLOCK_PAIR_SALT,
         );
+        const anchorDistance = Math.min(
+          squaredDistanceToClockCenter(first, textCenterColumn, textCenterRow),
+          squaredDistanceToClockCenter(second, textCenterColumn, textCenterRow),
+        );
         const distance = (
           (first.centerColumn - textCenterColumn) ** 2
           + (first.centerRow - textCenterRow) ** 2
@@ -269,10 +352,15 @@ function selectClockReservations({
         );
         if (
           selected === null
-          || rank < selected.rank
-          || (rank === selected.rank && distance < selected.distance)
+          || anchorDistance < selected.anchorDistance
+          || (anchorDistance === selected.anchorDistance && rank < selected.rank)
+          || (
+            anchorDistance === selected.anchorDistance
+            && rank === selected.rank
+            && distance < selected.distance
+          )
         ) {
-          selected = { first, second, rank, distance };
+          selected = { first, second, anchorDistance, rank, distance };
         }
       }
     }
@@ -343,6 +431,162 @@ export function resolveCountdownClockSettings(appearance, beatSeconds) {
   if (dotsPerSquare !== 4) {
     throw new RangeError(
       "countdownFramed.appearance.effects.clock.dotsPerSquare must be four.",
+    );
+  }
+  const travelingSquareStaggerBeats = clock.travelingSquareStaggerBeats ?? 0;
+  if (
+    !Number.isFinite(travelingSquareStaggerBeats)
+    || travelingSquareStaggerBeats < 0
+    || travelingSquareStaggerBeats >= 1
+  ) {
+    throw new RangeError(
+      "countdownFramed.appearance.effects.clock.travelingSquareStaggerBeats "
+      + "must be from zero up to one.",
+    );
+  }
+  const authoredSizeWaterfall = clock.sizeWaterfall ?? {
+    enabled: false,
+    bothCells: false,
+    clockProbability: 0,
+  };
+  const sizeWaterfall = requireObject(
+    authoredSizeWaterfall,
+    "countdownFramed.appearance.effects.clock.sizeWaterfall",
+  );
+  if (typeof sizeWaterfall.enabled !== "boolean") {
+    throw new TypeError(
+      "countdownFramed.appearance.effects.clock.sizeWaterfall.enabled must be a boolean.",
+    );
+  }
+  if (typeof sizeWaterfall.bothCells !== "boolean") {
+    throw new TypeError(
+      "countdownFramed.appearance.effects.clock.sizeWaterfall.bothCells must be a boolean.",
+    );
+  }
+  if (
+    !Number.isFinite(sizeWaterfall.clockProbability)
+    || sizeWaterfall.clockProbability < 0
+    || sizeWaterfall.clockProbability > 1
+  ) {
+    throw new RangeError(
+      "countdownFramed.appearance.effects.clock.sizeWaterfall.clockProbability "
+      + "must be from zero to one.",
+    );
+  }
+  const authoredFarSeparation = clock.farSeparation ?? {
+    enabled: false,
+    probability: 0,
+  };
+  const farSeparation = requireObject(
+    authoredFarSeparation,
+    "countdownFramed.appearance.effects.clock.farSeparation",
+  );
+  if (typeof farSeparation.enabled !== "boolean") {
+    throw new TypeError(
+      "countdownFramed.appearance.effects.clock.farSeparation.enabled must be a boolean.",
+    );
+  }
+  if (
+    !Number.isFinite(farSeparation.probability)
+    || farSeparation.probability < 0
+    || farSeparation.probability > 1
+  ) {
+    throw new RangeError(
+      "countdownFramed.appearance.effects.clock.farSeparation.probability "
+      + "must be from zero to one.",
+    );
+  }
+  const authoredBirthRipple = clock.birthRipple ?? {
+    enabled: false,
+    startBeforeHandoffBeats: 1,
+    durationBeats: 4,
+    wakeDepthInCells: 1.35,
+    secondaryRadiusInCells: 2.5,
+    radialTimingCurve: [0.18, 0.42, 0.68, 0.86],
+    wakeFlicker: {
+      enabled: false,
+      probability: 0,
+      distanceDecayInCells: 5,
+      flashesPerBeat: 6,
+      minimumOpacity: 0.2,
+    },
+  };
+  const birthRipple = requireObject(
+    authoredBirthRipple,
+    "countdownFramed.appearance.effects.clock.birthRipple",
+  );
+  if (typeof birthRipple.enabled !== "boolean") {
+    throw new TypeError(
+      "countdownFramed.appearance.effects.clock.birthRipple.enabled must be a boolean.",
+    );
+  }
+  const durationBeats = requireFinitePositive(
+    birthRipple.durationBeats,
+    "countdownFramed.appearance.effects.clock.birthRipple.durationBeats",
+  );
+  const startBeforeHandoffBeats = requireFinitePositive(
+    birthRipple.startBeforeHandoffBeats ?? 1,
+    "countdownFramed.appearance.effects.clock.birthRipple."
+      + "startBeforeHandoffBeats",
+  );
+  if (durationBeats < startBeforeHandoffBeats) {
+    throw new RangeError(
+      "countdownFramed.appearance.effects.clock.birthRipple.durationBeats "
+      + "must be at least startBeforeHandoffBeats.",
+    );
+  }
+  const wakeDepthInCells = requireFinitePositive(
+    birthRipple.wakeDepthInCells,
+    "countdownFramed.appearance.effects.clock.birthRipple.wakeDepthInCells",
+  );
+  const secondaryRadiusInCells = requireFinitePositive(
+    birthRipple.secondaryRadiusInCells,
+    "countdownFramed.appearance.effects.clock.birthRipple.secondaryRadiusInCells",
+  );
+  const authoredWakeFlicker = birthRipple.wakeFlicker ?? {
+    enabled: false,
+    probability: 0,
+    distanceDecayInCells: 5,
+    flashesPerBeat: 6,
+    minimumOpacity: 0.2,
+  };
+  const wakeFlicker = requireObject(
+    authoredWakeFlicker,
+    "countdownFramed.appearance.effects.clock.birthRipple.wakeFlicker",
+  );
+  if (typeof wakeFlicker.enabled !== "boolean") {
+    throw new TypeError(
+      "countdownFramed.appearance.effects.clock.birthRipple.wakeFlicker.enabled "
+      + "must be a boolean.",
+    );
+  }
+  if (
+    !Number.isFinite(wakeFlicker.probability)
+    || wakeFlicker.probability < 0
+    || wakeFlicker.probability > 1
+  ) {
+    throw new RangeError(
+      "countdownFramed.appearance.effects.clock.birthRipple.wakeFlicker.probability "
+      + "must be from zero to one.",
+    );
+  }
+  const flickerDistanceDecayInCells = requireFinitePositive(
+    wakeFlicker.distanceDecayInCells,
+    "countdownFramed.appearance.effects.clock.birthRipple.wakeFlicker."
+      + "distanceDecayInCells",
+  );
+  const flickerFlashesPerBeat = requirePositiveInteger(
+    wakeFlicker.flashesPerBeat,
+    "countdownFramed.appearance.effects.clock.birthRipple.wakeFlicker.flashesPerBeat",
+  );
+  if (
+    !Number.isFinite(wakeFlicker.minimumOpacity)
+    || wakeFlicker.minimumOpacity < 0
+    || wakeFlicker.minimumOpacity > 1
+  ) {
+    throw new RangeError(
+      "countdownFramed.appearance.effects.clock.birthRipple.wakeFlicker.minimumOpacity "
+      + "must be from zero to one.",
     );
   }
   if (typeof clock.behindText !== "boolean") {
@@ -420,6 +664,34 @@ export function resolveCountdownClockSettings(appearance, beatSeconds) {
     subdivisionLevel,
     squareCount,
     dotsPerSquare,
+    travelingSquareStaggerBeats,
+    sizeWaterfall: Object.freeze({
+      enabled: sizeWaterfall.enabled,
+      bothCells: sizeWaterfall.bothCells,
+      clockProbability: sizeWaterfall.clockProbability,
+    }),
+    farSeparation: Object.freeze({
+      enabled: farSeparation.enabled,
+      probability: farSeparation.probability,
+    }),
+    birthRipple: Object.freeze({
+      enabled: birthRipple.enabled,
+      startBeforeHandoffBeats,
+      durationBeats,
+      wakeDepthInCells,
+      secondaryRadiusInCells,
+      radialTimingCurve: Object.freeze(normalizeBezierCurve(
+        birthRipple.radialTimingCurve,
+        "countdownFramed.appearance.effects.clock.birthRipple.radialTimingCurve",
+      )),
+      wakeFlicker: Object.freeze({
+        enabled: wakeFlicker.enabled,
+        probability: wakeFlicker.probability,
+        distanceDecayInCells: flickerDistanceDecayInCells,
+        flashesPerBeat: flickerFlashesPerBeat,
+        minimumOpacity: wakeFlicker.minimumOpacity,
+      }),
+    }),
     behindText: clock.behindText,
     evolutionSquareSizes: Object.freeze(evolutionSquareSizes),
     rangeInSubdivisions: Object.freeze({ x: rangeX, y: rangeY }),
@@ -480,10 +752,13 @@ export function countdownClockPlan({
   subdivisionLevel = 3,
   squareCount = 2,
   dotsPerSquare = 4,
+  travelingSquareStaggerBeats = 0,
+  farSeparationProbability = 0,
   evolutionSquareSizes = [3, 4, 8],
   evolutionEnabled = false,
   evolutionProgress = 0,
   handoffCellIndex = cellIndex,
+  birthRippleTextCellIndex = cellIndex,
   rangeInSubdivisions,
   textSafeZone = { widthInCells: 1.25, heightInCells: 0.75 },
   minimumSquareGapInSubdivisions = 1,
@@ -506,6 +781,15 @@ export function countdownClockPlan({
   if (snakeOriginCellIndex >= columns * rows) {
     throw new RangeError("Countdown clock handoff cell must be inside the parent grid.");
   }
+  const rippleTextCellIndex = requireNonNegativeInteger(
+    birthRippleTextCellIndex,
+    "Countdown clock birth ripple text cell",
+  );
+  if (rippleTextCellIndex >= columns * rows) {
+    throw new RangeError(
+      "Countdown clock birth ripple text cell must be inside the parent grid.",
+    );
+  }
   const level = requireNonNegativeInteger(
     subdivisionLevel,
     "Countdown clock subdivision level",
@@ -526,6 +810,24 @@ export function countdownClockPlan({
   );
   if (dotsRequested !== 4) {
     throw new RangeError("Countdown clock dots per square must be four.");
+  }
+  if (
+    !Number.isFinite(travelingSquareStaggerBeats)
+    || travelingSquareStaggerBeats < 0
+    || travelingSquareStaggerBeats >= 1
+  ) {
+    throw new RangeError(
+      "Countdown clock traveling-square stagger must be from zero up to one beat.",
+    );
+  }
+  if (
+    !Number.isFinite(farSeparationProbability)
+    || farSeparationProbability < 0
+    || farSeparationProbability > 1
+  ) {
+    throw new RangeError(
+      "Countdown clock far-separation probability must be from zero to one.",
+    );
   }
   const range = requireObject(rangeInSubdivisions, "Countdown clock range");
   const rangeX = requireNonNegativeInteger(range.x, "Countdown clock horizontal range");
@@ -559,20 +861,24 @@ export function countdownClockPlan({
       "Countdown clock maximum square size must fit inside the subdivision grid.",
     );
   }
-  const textCellColumn = textCellIndex % columns;
-  const textCellRow = Math.floor(textCellIndex / columns);
-  const textCenterColumn = textCellColumn * subdivisions + subdivisions / 2;
-  const textCenterRow = textCellRow * subdivisions + subdivisions / 2;
-  const safeZoneWidth = safeZoneWidthInCells * subdivisions;
-  const safeZoneHeight = safeZoneHeightInCells * subdivisions;
-  const resolvedTextSafeZone = {
-    left: textCenterColumn - safeZoneWidth / 2,
-    top: textCenterRow - safeZoneHeight / 2,
-    right: textCenterColumn + safeZoneWidth / 2,
-    bottom: textCenterRow + safeZoneHeight / 2,
-    widthInCells: safeZoneWidthInCells,
-    heightInCells: safeZoneHeightInCells,
-  };
+  const resolvedTextSafeZone = clockTextSafeZoneAt(
+    textCellIndex,
+    columns,
+    subdivisions,
+    safeZoneWidthInCells,
+    safeZoneHeightInCells,
+  );
+  const birthRippleTextSafeZone = clockTextSafeZoneAt(
+    rippleTextCellIndex,
+    columns,
+    subdivisions,
+    safeZoneWidthInCells,
+    safeZoneHeightInCells,
+  );
+  const textCenterColumn = (resolvedTextSafeZone.left
+    + resolvedTextSafeZone.right) / 2;
+  const textCenterRow = (resolvedTextSafeZone.top
+    + resolvedTextSafeZone.bottom) / 2;
   const evolution = countdownClockEvolutionAt(
     evolutionEnabled,
     evolutionProgress,
@@ -618,9 +924,13 @@ export function countdownClockPlan({
       gridRows,
       textCellIndex,
       textSafeZone: resolvedTextSafeZone,
+      birthRippleTextCellIndex: rippleTextCellIndex,
+      birthRippleTextSafeZone,
       minimumSquareGapInSubdivisions: minimumSquareGap,
       maximumSquareSize,
       reservationExpansion: null,
+      farSeparated: false,
+      separationDistanceInSubdivisions: 0,
       snakeOriginBounds,
       handoffCellIndex: snakeOriginCellIndex,
       evolutionMode: evolution.mode,
@@ -639,7 +949,7 @@ export function countdownClockPlan({
     textSafeZone: resolvedTextSafeZone,
     gridColumns,
     gridRows,
-    maximumSquareSize,
+    squareSize: evolution.squareSize,
     rangeX,
     rangeY,
     minimumSquareGap,
@@ -657,7 +967,7 @@ export function countdownClockPlan({
     textCenterRow,
     gridColumns,
     gridRows,
-    size: maximumSquareSize,
+    size: evolution.squareSize,
   };
   const travelGains = resolvedReservations.map(reservation => (
     clockReservationTravelGain(reservation, travelGeometry)
@@ -687,6 +997,46 @@ export function countdownClockPlan({
       travelingSquareIndex = anchorIndex;
     }
   }
+  const farSeparationSample = hashUnit(
+    planSeed,
+    appearanceTick,
+    CLOCK_FAR_SEPARATION_SALT,
+  );
+  const farSeparated = farSeparationProbability > 0
+    && farSeparationSample < farSeparationProbability;
+  const anchoredSquareIndex = 1 - travelingSquareIndex;
+  if (farSeparated) {
+    const farReservation = selectFarClockReservation({
+      other: resolvedReservations[anchoredSquareIndex],
+      seed: planSeed,
+      tick: appearanceTick,
+      textSafeZone: resolvedTextSafeZone,
+      minimumSquareGap,
+      ...travelGeometry,
+    });
+    if (farReservation === null) {
+      throw new RangeError(
+        "Countdown clock cannot place its traveling square far from its anchored square.",
+      );
+    }
+    resolvedReservations = resolvedReservations.map((reservation, squareIndex) => (
+      squareIndex === travelingSquareIndex ? farReservation : reservation
+    ));
+  }
+  const separationDistanceInSubdivisions = Math.hypot(
+    resolvedReservations[0].centerColumn - resolvedReservations[1].centerColumn,
+    resolvedReservations[0].centerRow - resolvedReservations[1].centerRow,
+  );
+  const staggerSample = hashUnit(
+    planSeed,
+    appearanceTick,
+    CLOCK_STAGGER_SALT,
+  ) * 2 - 1;
+  const travelingStaggerBeats = travelingSquareStaggerBeats === 0
+    ? 0
+    : Math.sign(staggerSample || 1)
+      * (0.5 + Math.abs(staggerSample) * 0.5)
+      * travelingSquareStaggerBeats;
   const squares = resolvedReservations.map((reservation, squareIndex) => {
     const resolvedReservation = evolution.mode === "expanding"
       && squareIndex === travelingSquareIndex
@@ -696,16 +1046,12 @@ export function countdownClockPlan({
         textCenterRow,
         gridColumns,
         gridRows,
-        size: maximumSquareSize,
+        size: evolution.squareSize,
         progress: evolution.progress,
       })
       : reservation;
-    const remainingSpace = maximumSquareSize - evolution.squareSize;
-    const inset = squareIndex % 2 === 0
-      ? Math.floor(remainingSpace / 2)
-      : Math.ceil(remainingSpace / 2);
-    const topLeftColumn = resolvedReservation.left + inset;
-    const topLeftRow = resolvedReservation.top + inset;
+    const topLeftColumn = resolvedReservation.left;
+    const topLeftRow = resolvedReservation.top;
     const clockDots = evolution.squareSize === 2
       ? clockwiseSquareDots(
         topLeftColumn,
@@ -723,6 +1069,10 @@ export function countdownClockPlan({
     return {
       squareIndex,
       motionRole: squareIndex === travelingSquareIndex ? "traveling" : "anchored",
+      farSeparated: farSeparated && squareIndex === travelingSquareIndex,
+      appearanceStaggerBeats: squareIndex === travelingSquareIndex
+        ? travelingStaggerBeats
+        : 0,
       offsetX: resolvedReservation.centerColumn - textCenterColumn,
       offsetY: resolvedReservation.centerRow - textCenterRow,
       topLeftColumn,
@@ -752,9 +1102,13 @@ export function countdownClockPlan({
     gridRows,
     textCellIndex,
     textSafeZone: resolvedTextSafeZone,
+    birthRippleTextCellIndex: rippleTextCellIndex,
+    birthRippleTextSafeZone,
     minimumSquareGapInSubdivisions: minimumSquareGap,
     maximumSquareSize,
     reservationExpansion: selection.expansion,
+    farSeparated,
+    separationDistanceInSubdivisions,
     snakeOriginBounds: null,
     handoffCellIndex: snakeOriginCellIndex,
     evolutionMode: evolution.mode,
@@ -771,23 +1125,36 @@ export function validateCountdownClockLayout(layout, settings) {
   if (!settings?.enabled) {
     return { checkedCellCount: 0, maximumSquareSize: 0 };
   }
+  const evolutionSamples = [
+    null,
+    ...settings.evolutionSquareSizes.map((_, index) => (
+      index / settings.evolutionSquareSizes.length
+    )),
+  ];
   for (let cellIndex = 0; cellIndex < columns * rows; cellIndex += 1) {
-    countdownClockPlan({
-      seed: settings.seed,
-      tick: cellIndex,
-      layout,
-      cellIndex,
-      subdivisionLevel: settings.subdivisionLevel,
-      squareCount: settings.squareCount,
-      dotsPerSquare: settings.dotsPerSquare,
-      evolutionSquareSizes: settings.evolutionSquareSizes,
-      evolutionEnabled: false,
-      handoffCellIndex: cellIndex,
-      rangeInSubdivisions: settings.rangeInSubdivisions,
-      textSafeZone: settings.textSafeZone,
-      minimumSquareGapInSubdivisions:
-        settings.minimumSquareGapInSubdivisions,
-    });
+    for (const evolutionProgress of evolutionSamples) {
+      countdownClockPlan({
+        seed: settings.seed,
+        tick: cellIndex,
+        layout,
+        cellIndex,
+        subdivisionLevel: settings.subdivisionLevel,
+        squareCount: settings.squareCount,
+        dotsPerSquare: settings.dotsPerSquare,
+        travelingSquareStaggerBeats: settings.travelingSquareStaggerBeats,
+        farSeparationProbability: settings.farSeparation.enabled
+          ? settings.farSeparation.probability
+          : 0,
+        evolutionSquareSizes: settings.evolutionSquareSizes,
+        evolutionEnabled: evolutionProgress !== null,
+        evolutionProgress: evolutionProgress ?? 0,
+        handoffCellIndex: cellIndex,
+        rangeInSubdivisions: settings.rangeInSubdivisions,
+        textSafeZone: settings.textSafeZone,
+        minimumSquareGapInSubdivisions:
+          settings.minimumSquareGapInSubdivisions,
+      });
+    }
   }
   return {
     checkedCellCount: columns * rows,
@@ -795,35 +1162,565 @@ export function validateCountdownClockLayout(layout, settings) {
   };
 }
 
-export function countdownClockFrame(plan, linearProgress, settings) {
+function countdownClockWaterfallProbability(squareProgress, plan, square, settings) {
+  if (settings.sizeWaterfall?.enabled !== true) return 0;
+  if (
+    settings.sizeWaterfall.bothCells !== true
+    && square.motionRole !== "traveling"
+  ) return 0;
+  const clockProbability = settings.sizeWaterfall.clockProbability;
+  const targetProbability = plan.evolutionMode === "expanding"
+    ? clockProbability
+      + (1 - clockProbability) * plan.evolutionProgress
+    : clockProbability;
+  return Math.max(0, Math.min(1, squareProgress * targetProbability));
+}
+
+function countdownClockWaterfallDots(plan, square, sourceDots, probability) {
+  if (probability <= 0 || sourceDots.length < 4) {
+    return sourceDots.map(dot => ({ ...dot }));
+  }
+  const clusters = new Map(sourceDots.map(dot => [
+    `${dot.column}:${dot.row}:1`,
+    {
+      left: dot.column,
+      top: dot.row,
+      size: 1,
+      dot: { ...dot, sourceDotCount: 1, waterfallLevel: 0 },
+    },
+  ]));
+  for (let size = 2; size <= plan.squareSize; size *= 2) {
+    const childSize = size / 2;
+    for (let offsetTop = 0; offsetTop + size <= plan.squareSize; offsetTop += size) {
+      for (let offsetLeft = 0; offsetLeft + size <= plan.squareSize; offsetLeft += size) {
+        const left = square.topLeftColumn + offsetLeft;
+        const top = square.topLeftRow + offsetTop;
+        if (left % size !== 0 || top % size !== 0) continue;
+        const childKeys = [
+          `${left}:${top}:${childSize}`,
+          `${left + childSize}:${top}:${childSize}`,
+          `${left}:${top + childSize}:${childSize}`,
+          `${left + childSize}:${top + childSize}:${childSize}`,
+        ];
+        const children = childKeys.map(key => clusters.get(key));
+        if (children.some(child => child === undefined)) continue;
+        const blockIndex = top * plan.gridColumns + left;
+        const threshold = hashUnit(
+          plan.seed ^ Math.imul(plan.tick + 1, CLOCK_WATERFALL_SALT),
+          blockIndex,
+          square.squareIndex * 16 + size,
+        );
+        if (probability < threshold) continue;
+        for (const key of childKeys) clusters.delete(key);
+        const childDots = children.map(child => child.dot);
+        clusters.set(`${left}:${top}:${size}`, {
+          left,
+          top,
+          size,
+          dot: {
+            ...childDots[0],
+            column: left + (size - 1) / 2,
+            row: top + (size - 1) / 2,
+            index: blockIndex,
+            clockwiseIndex: Math.max(...childDots.map(dot => dot.clockwiseIndex)),
+            palettePosition: childDots.reduce(
+              (sum, dot) => sum + dot.palettePosition,
+              0,
+            ) / childDots.length,
+            sizeInSubdivisions: size,
+            sourceDotCount: childDots.reduce(
+              (sum, dot) => sum + dot.sourceDotCount,
+              0,
+            ),
+            waterfallLevel: Math.log2(size),
+          },
+        });
+      }
+    }
+  }
+  return [...clusters.values()]
+    .sort((first, second) => (
+      first.dot.clockwiseIndex - second.dot.clockwiseIndex
+      || first.top - second.top
+      || first.left - second.left
+    ))
+    .map(cluster => cluster.dot);
+}
+
+function clockRippleCellLevel(wakeAge, wakeDepth, startingLevel = 0) {
+  if (wakeAge < 0 || wakeAge >= wakeDepth) return null;
+  const levelCount = 4 - startingLevel;
+  return Math.min(
+    3,
+    startingLevel + Math.floor(wakeAge / wakeDepth * levelCount),
+  );
+}
+
+function clockRippleGlyphState({
+  level,
+  wakeAgeInCells,
+  wakeDepthInCells,
+  startingLevel,
+  ripple,
+  seed,
+}) {
+  const wakeProgress = Math.max(0, Math.min(
+    1,
+    wakeAgeInCells / wakeDepthInCells,
+  ));
+  const levelCount = 4 - startingLevel;
+  const levelProgress = wakeProgress * levelCount - (level - startingLevel);
+  return {
+    wakeAgeInCells,
+    wakeProgress,
+    glyphShape: "circle",
+    glyphFill: level === 3
+      ? 1 - Math.max(0, Math.min(1, levelProgress))
+      : 1,
+    glyphSeed: (seed ^ (
+      ripple === "text-echo"
+        ? CLOCK_RIPPLE_ECHO_GLYPH_SALT
+        : CLOCK_RIPPLE_PRIMARY_GLYPH_SALT
+    )) >>> 0,
+  };
+}
+
+function clockRippleCells({
+  columns,
+  rows,
+  originCellIndex,
+  radiusInCells,
+  wakeDepthInCells,
+  startingLevel = 0,
+  ripple,
+  seed = 0,
+  holdOrigin = false,
+  maximumActivationRadiusInCells = Number.POSITIVE_INFINITY,
+}) {
+  const originColumn = originCellIndex % columns;
+  const originRow = Math.floor(originCellIndex / columns);
+  const cells = [];
+  for (let index = 0; index < columns * rows; index += 1) {
+    const column = index % columns;
+    const row = Math.floor(index / columns);
+    const distanceInCells = Math.hypot(
+      column - originColumn,
+      row - originRow,
+    );
+    if (holdOrigin && index === originCellIndex) {
+      cells.push({
+        index,
+        level: 0,
+        distanceInCells,
+        ripple,
+        held: true,
+        ...clockRippleGlyphState({
+          level: 0,
+          wakeAgeInCells: 0,
+          wakeDepthInCells,
+          startingLevel,
+          ripple,
+          seed,
+        }),
+      });
+      continue;
+    }
+    if (distanceInCells > maximumActivationRadiusInCells) continue;
+    const wakeAgeInCells = radiusInCells - distanceInCells;
+    const level = clockRippleCellLevel(
+      wakeAgeInCells,
+      wakeDepthInCells,
+      startingLevel,
+    );
+    if (level === null) continue;
+    cells.push({
+      index,
+      level,
+      distanceInCells,
+      ripple,
+      held: false,
+      ...clockRippleGlyphState({
+        level,
+        wakeAgeInCells,
+        wakeDepthInCells,
+        startingLevel,
+        ripple,
+        seed,
+      }),
+    });
+  }
+  return cells.sort((first, second) => (
+    first.distanceInCells - second.distanceInCells
+    || first.index - second.index
+  ));
+}
+
+function clockRippleCellsWithWakeFlicker(
+  cells,
+  linearProgress,
+  seed,
+  durationBeats,
+  settings,
+) {
+  const flicker = settings ?? { enabled: false };
+  const step = flicker.enabled
+    ? Math.floor(linearProgress * durationBeats * flicker.flashesPerBeat)
+    : 0;
+  return cells.map(cell => {
+    const eligible = flicker.enabled && cell.level >= 1 && !cell.held;
+    const distanceStrength = eligible
+      ? Math.exp(-cell.distanceInCells / flicker.distanceDecayInCells)
+      : 0;
+    const probability = eligible
+      ? flicker.probability * distanceStrength
+      : 0;
+    const triggered = eligible && hashUnit(
+      seed ^ CLOCK_RIPPLE_FLICKER_SALT,
+      cell.index,
+      step,
+    ) < probability;
+    return {
+      ...cell,
+      flickerEligible: eligible,
+      flickerTriggered: triggered,
+      flickerProbability: probability,
+      flickerStrength: distanceStrength,
+      flickerStep: step,
+      opacity: triggered
+        ? 1 - (1 - flicker.minimumOpacity) * distanceStrength
+        : 1,
+    };
+  });
+}
+
+function clockRippleTextSourceCell(plan, columns, rows, originCellIndex) {
+  const subdivisions = plan.subdivisions;
+  const textSafeZone = plan.birthRippleTextSafeZone ?? plan.textSafeZone;
+  const candidates = [];
+  for (let index = 0; index < columns * rows; index += 1) {
+    if (index === originCellIndex) continue;
+    const column = index % columns;
+    const row = Math.floor(index / columns);
+    const left = column * subdivisions;
+    const top = row * subdivisions;
+    if (
+      left >= textSafeZone.right
+      || left + subdivisions <= textSafeZone.left
+      || top >= textSafeZone.bottom
+      || top + subdivisions <= textSafeZone.top
+    ) continue;
+    candidates.push({
+      index,
+      column,
+      row,
+      distanceInCells: Math.hypot(
+        column - originCellIndex % columns,
+        row - Math.floor(originCellIndex / columns),
+      ),
+    });
+  }
+  return candidates.sort((first, second) => (
+    first.distanceInCells - second.distanceInCells
+    || first.index - second.index
+  ))[0] ?? null;
+}
+
+function mergeClockRippleCells(primaryCells, secondaryCells) {
+  const merged = new Map();
+  for (const cell of [...primaryCells, ...secondaryCells]) {
+    const previous = merged.get(cell.index);
+    if (previous === undefined) {
+      merged.set(cell.index, { ...cell, ripples: [cell.ripple] });
+      continue;
+    }
+    const replacesGlyphState = cell.level < previous.level
+      || (
+        cell.level === previous.level
+        && cell.glyphFill > previous.glyphFill
+      );
+    previous.level = Math.min(previous.level, cell.level);
+    if (replacesGlyphState) {
+      previous.wakeAgeInCells = cell.wakeAgeInCells;
+      previous.wakeProgress = cell.wakeProgress;
+      previous.glyphShape = cell.glyphShape;
+      previous.glyphFill = cell.glyphFill;
+      previous.glyphSeed = cell.glyphSeed;
+    }
+    previous.held ||= cell.held;
+    if (!previous.ripples.includes(cell.ripple)) previous.ripples.push(cell.ripple);
+  }
+  return [...merged.values()].sort((first, second) => first.index - second.index);
+}
+
+export function countdownClockBirthRippleAt(plan, linearProgress, settings) {
+  if (!plan || !Number.isSafeInteger(plan.handoffCellIndex)) {
+    throw new TypeError("Countdown clock birth ripple requires a handoff cell.");
+  }
+  const ripple = requireObject(
+    settings?.birthRipple,
+    "countdownFramed.appearance.effects.clock.birthRipple",
+  );
+  const subdivisions = requirePositiveInteger(
+    plan.subdivisions,
+    "Countdown clock birth ripple subdivisions",
+  );
+  const columns = requirePositiveInteger(
+    plan.gridColumns / subdivisions,
+    "Countdown clock birth ripple columns",
+  );
+  const rows = requirePositiveInteger(
+    plan.gridRows / subdivisions,
+    "Countdown clock birth ripple rows",
+  );
+  if (plan.handoffCellIndex < 0 || plan.handoffCellIndex >= columns * rows) {
+    throw new RangeError("Countdown clock birth ripple handoff cell is outside the grid.");
+  }
+  const wakeDepthInCells = requireFinitePositive(
+    ripple.wakeDepthInCells,
+    "Countdown clock birth ripple wake depth",
+  );
+  const secondaryMaximumRadiusInCells = requireFinitePositive(
+    ripple.secondaryRadiusInCells,
+    "Countdown clock birth ripple secondary radius",
+  );
+  const resolvedLinearProgress = Math.max(0, Math.min(
+    1,
+    Number(linearProgress) || 0,
+  ));
+  const progress = cubicBezierAt(
+    resolvedLinearProgress,
+    ripple.radialTimingCurve,
+  );
+  const handoffLinearProgress = Math.min(
+    1,
+    ripple.startBeforeHandoffBeats / ripple.durationBeats,
+  );
+  const holdingOrigin = resolvedLinearProgress < handoffLinearProgress;
+  const originCellIndex = plan.handoffCellIndex;
+  const originColumn = originCellIndex % columns;
+  const originRow = Math.floor(originCellIndex / columns);
+  const edgeCellDistances = [
+    [0, 0],
+    [columns - 1, 0],
+    [0, rows - 1],
+    [columns - 1, rows - 1],
+  ].map(([column, row]) => Math.hypot(
+    column - originColumn,
+    row - originRow,
+  ));
+  const edgeRadiusInCells = Math.max(...edgeCellDistances);
+  const maximumRadiusInCells = edgeRadiusInCells + wakeDepthInCells;
+  const radiusInCells = maximumRadiusInCells * progress
+    + (resolvedLinearProgress >= 1 ? 1e-9 : 0);
+  const primaryCells = clockRippleCellsWithWakeFlicker(
+    clockRippleCells({
+      columns,
+      rows,
+      originCellIndex,
+      radiusInCells,
+      wakeDepthInCells,
+      ripple: "primary",
+      seed: plan.seed ?? 0,
+      holdOrigin: holdingOrigin,
+      maximumActivationRadiusInCells: edgeRadiusInCells,
+    }),
+    resolvedLinearProgress,
+    plan.seed ?? 0,
+    ripple.durationBeats,
+    ripple.wakeFlicker,
+  );
+  const textSource = clockRippleTextSourceCell(
+    plan,
+    columns,
+    rows,
+    originCellIndex,
+  );
+  const secondaryStarted = textSource !== null
+    && radiusInCells >= textSource.distanceInCells;
+  const secondaryProgress = !secondaryStarted
+    ? 0
+    : (radiusInCells - textSource.distanceInCells)
+      / Math.max(1e-9, maximumRadiusInCells - textSource.distanceInCells);
+  const secondaryTravelRadiusInCells = secondaryMaximumRadiusInCells
+    + wakeDepthInCells;
+  const secondaryRadiusInCells = secondaryTravelRadiusInCells
+    * secondaryProgress;
+  const sourceLevel = secondaryStarted
+    ? clockRippleCellLevel(0, wakeDepthInCells) ?? 0
+    : null;
+  const secondaryCells = secondaryStarted
+    ? clockRippleCells({
+      columns,
+      rows,
+      originCellIndex: textSource.index,
+      radiusInCells: secondaryRadiusInCells,
+      wakeDepthInCells,
+      startingLevel: sourceLevel,
+      ripple: "text-echo",
+      seed: plan.seed ?? 0,
+      maximumActivationRadiusInCells: secondaryMaximumRadiusInCells,
+    })
+    : [];
+  const secondaryActive = secondaryCells.length > 0;
+  const cells = mergeClockRippleCells(primaryCells, secondaryCells);
+  const flickerEligibleCells = primaryCells.filter(cell => cell.flickerEligible);
+  const flickerTriggeredCells = primaryCells.filter(cell => cell.flickerTriggered);
+  return {
+    linearProgress: resolvedLinearProgress,
+    progress,
+    handoffLinearProgress,
+    holdingOrigin,
+    originCellIndex,
+    originColumn,
+    originRow,
+    primary: {
+      radiusInCells,
+      maximumRadiusInCells,
+      edgeRadiusInCells,
+      wakeDepthInCells,
+      activeCellCount: primaryCells.length,
+      flicker: {
+        enabled: ripple.wakeFlicker?.enabled === true,
+        step: primaryCells[0]?.flickerStep ?? 0,
+        eligibleCellCount: flickerEligibleCells.length,
+        triggeredCellIndices: flickerTriggeredCells.map(cell => cell.index),
+        maximumProbability: Math.max(
+          0,
+          ...flickerEligibleCells.map(cell => cell.flickerProbability),
+        ),
+      },
+      cells: primaryCells,
+    },
+    secondary: {
+      active: secondaryActive,
+      progress: secondaryProgress,
+      originCellIndex: textSource?.index ?? null,
+      originColumn: textSource?.column ?? null,
+      originRow: textSource?.row ?? null,
+      activationRadiusInCells: textSource?.distanceInCells ?? null,
+      sourceLevel,
+      radiusInCells: secondaryRadiusInCells,
+      maximumRadiusInCells: secondaryTravelRadiusInCells,
+      edgeRadiusInCells: secondaryMaximumRadiusInCells,
+      activeCellCount: secondaryCells.length,
+      cells: secondaryCells,
+    },
+    cells,
+  };
+}
+
+export function countdownClockFrame(
+  plan,
+  linearProgress,
+  settings,
+  birthRippleLinearProgress = null,
+) {
   const dotsPerSquare = plan?.squareSize * plan?.squareSize;
   const totalDotCount = plan?.squares?.length * dotsPerSquare;
   if (!plan || !Array.isArray(plan.dots) || plan.dots.length !== totalDotCount) {
     throw new TypeError("Countdown clock plan requires its configured dots.");
+  }
+  if (settings.birthRipple?.enabled === true && birthRippleLinearProgress !== null) {
+    const birthRipple = countdownClockBirthRippleAt(
+      plan,
+      birthRippleLinearProgress,
+      settings,
+    );
+    const cells = birthRipple.cells.map(cell => ({ ...cell }));
+    return {
+      linearProgress: birthRipple.linearProgress,
+      progress: birthRipple.progress,
+      visiblePerSquare: 0,
+      visibleCountsBySquare: [],
+      sourceVisibleCountsBySquare: [],
+      visibleCount: cells.length,
+      sourceVisibleCount: cells.length,
+      renderSignature: cells.map(cell => (
+        `${cell.index}:${cell.level}:${cell.ripples.join("+")}`
+      )).join(","),
+      totalDotCount: cells.length,
+      evolutionMode: plan.evolutionMode,
+      evolutionProgress: plan.evolutionProgress,
+      squareSize: plan.squareSize,
+      handoffCellIndex: plan.handoffCellIndex,
+      squares: [],
+      birthRipple,
+      cells,
+      dots: [],
+    };
   }
   const progress = clockwiseVisibleCountAt(
     linearProgress,
     dotsPerSquare,
     settings.timingCurve,
   );
+  const squareFrames = plan.squares.map(square => {
+    const stagger = square.appearanceStaggerBeats ?? 0;
+    const staggeredLinearProgress = stagger >= 0
+      ? (linearProgress - stagger) / (1 - stagger)
+      : linearProgress / (1 + stagger);
+    const squareProgress = clockwiseVisibleCountAt(
+      staggeredLinearProgress,
+      dotsPerSquare,
+      settings.timingCurve,
+    );
+    const sourceDots = square.dots.filter(
+      dot => dot.clockwiseIndex < squareProgress.visibleCount,
+    );
+    const waterfallProbability = countdownClockWaterfallProbability(
+      squareProgress.progress,
+      plan,
+      square,
+      settings,
+    );
+    const dots = countdownClockWaterfallDots(
+      plan,
+      square,
+      sourceDots,
+      waterfallProbability,
+    );
+    return {
+      square,
+      linearProgress: squareProgress.linearProgress,
+      progress: squareProgress.progress,
+      sourceVisibleCount: squareProgress.visibleCount,
+      visibleCount: dots.length,
+      waterfallProbability,
+      maximumDotSize: Math.max(0, ...dots.map(dot => dot.sizeInSubdivisions ?? 1)),
+      dots,
+    };
+  });
+  const dots = squareFrames.flatMap(square => square.dots.map(dot => ({ ...dot })));
   return {
     linearProgress: progress.linearProgress,
     progress: progress.progress,
     visiblePerSquare: progress.visibleCount,
-    visibleCount: progress.visibleCount * plan.squares.length,
+    visibleCountsBySquare: squareFrames.map(square => square.visibleCount),
+    sourceVisibleCountsBySquare: squareFrames.map(square => square.sourceVisibleCount),
+    visibleCount: squareFrames.reduce((sum, square) => sum + square.visibleCount, 0),
+    sourceVisibleCount: squareFrames.reduce(
+      (sum, square) => sum + square.sourceVisibleCount,
+      0,
+    ),
+    renderSignature: dots.map(dot => (
+      `${dot.squareIndex}:${dot.index}:${dot.sizeInSubdivisions ?? 1}`
+    )).join(","),
     totalDotCount,
     evolutionMode: plan.evolutionMode,
     evolutionProgress: plan.evolutionProgress,
     squareSize: plan.squareSize,
     handoffCellIndex: plan.handoffCellIndex,
-    squares: plan.squares.map(square => ({
+    birthRipple: null,
+    cells: [],
+    squares: squareFrames.map(({ square, dots, ...squareFrame }) => ({
       squareIndex: square.squareIndex,
+      motionRole: square.motionRole,
+      appearanceStaggerBeats: square.appearanceStaggerBeats ?? 0,
       topLeftColumn: square.topLeftColumn,
       topLeftRow: square.topLeftRow,
+      ...squareFrame,
     })),
-    dots: plan.dots
-      .filter(dot => dot.clockwiseIndex < progress.visibleCount)
-      .map(dot => ({ ...dot })),
+    dots,
   };
 }
 

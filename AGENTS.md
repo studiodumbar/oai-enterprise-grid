@@ -301,15 +301,19 @@ recipe's timing instead of declaring another root.
 
 **Countdown synth timing.** `appearance.synth.defaultTiming.merges` authors
 `startProgress` and `endProgress` for `clock-to-snake` and
-`snake-to-bubbles`, each normalized to the complete countdown. The resolver
-derives every shipped track, evolution, and connector window from those two
-ranges, so changing the shared `COUNT_FROM_SECONDS` constant stretches the
-whole effect sequence. The resolver produces one exclusive lane: clock track,
+`snake-to-bubbles`. Clock→snake is normalized to the complete countdown; the
+shipped snake→bubbles connector is explicitly three seconds and ends at the
+bubbles boundary. The resolver produces one exclusive lane: clock track,
 clock-to-snake connector, snake track, snake-to-bubbles connector, then bubbles
-track. The snake grows only from the end of clock ownership to the start of its
-bubbles merge. That final body freezes, loses its first level-0 tail dot at
-merge start, and is consumed tail-first through the connector window. At the
-connector end, the converted trail is committed into the bubbles track.
+track. Normal snake ownership continues until that connector begins. The
+connector follows one deterministic toroidal coverage cycle, wrapping at canvas
+edges and passing behind the timer while the snake fills the canvas. Crossing
+an occupied snake cell is legal and only increments collision telemetry. By the
+final half-beat the body occupies every parent cell except its reserved level-0
+meal; the meal appears, completes full canvas coverage, and pulses with the
+head while the registered `strobe-stack` flicker runs across the complete body. At the connector end, the
+meal joins the body and the complete death snapshot is atomically committed
+into the bubbles track's body-derived field.
 Numeric `startSeconds`, `durationSeconds`, and `evolution` remain
 explicit per-item overrides. `COUNTDOWN_SYNTH_TRACKS` is the visual timeline:
 one untimed entry fills the complete countdown, while any reduced or reordered

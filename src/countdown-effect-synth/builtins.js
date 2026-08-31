@@ -171,38 +171,29 @@ export function countdownSnakeToBubblesAt(time, connection) {
     throw new RangeError("Countdown snake-to-bubbles time must be non-negative.");
   }
   const connectorStartSeconds = connection?.startSeconds;
-  const mergeStartSeconds = connection?.evolution?.startSeconds;
-  const mergeEndSeconds = connection?.evolution?.endSeconds;
   const connectorEndSeconds = connection?.endSeconds;
   if (
     !Number.isFinite(connectorStartSeconds)
-    || !Number.isFinite(mergeStartSeconds)
-    || !Number.isFinite(mergeEndSeconds)
     || !Number.isFinite(connectorEndSeconds)
-    || connectorStartSeconds > mergeStartSeconds
-    || mergeStartSeconds > mergeEndSeconds
-    || mergeEndSeconds > connectorEndSeconds
+    || connectorStartSeconds >= connectorEndSeconds
   ) {
     throw new RangeError(
       "Countdown snake-to-bubbles connection requires ordered resolved windows.",
     );
   }
-  const mergeDurationSeconds = mergeEndSeconds - mergeStartSeconds;
+  const connectorDurationSeconds = connectorEndSeconds - connectorStartSeconds;
   const connectorActive = time >= connectorStartSeconds && time < connectorEndSeconds;
-  const mergeEnabled = connectorActive && time >= mergeStartSeconds;
-  const mergeProgress = mergeDurationSeconds <= 0
-    ? (mergeEnabled ? 1 : 0)
-    : Math.max(0, Math.min(1, (
-      time - mergeStartSeconds
-    ) / mergeDurationSeconds));
+  const connectorProgress = Math.max(0, Math.min(1, (
+    time - connectorStartSeconds
+  ) / connectorDurationSeconds));
   return {
     connectorActive,
-    mergeEnabled,
-    mergeProgress,
-    snakeVisible: connectorActive && time < mergeEndSeconds,
-    mergeStartSeconds,
-    mergeEndSeconds,
-    mergeDurationSeconds,
+    connectorProgress,
+    snakeVisible: connectorActive,
+    deathCommitted: time >= connectorEndSeconds,
+    connectorStartSeconds,
+    connectorEndSeconds,
+    connectorDurationSeconds,
   };
 }
 
@@ -249,37 +240,13 @@ export function createCountdownConnectorRegistry() {
       "snake",
       "bubbles",
       { from: ["cells", "tiles"], to: ["dots", "tiles", "masks"] },
-      ({ connection, time }) => {
-        const entering = time < connection.evolution.endSeconds;
-        const merge = countdownSnakeToBubblesAt(time, connection);
-        const bubbleLayer = entering
-          ? connectorLayer(
-            connection,
-            "bubbles-handoff",
-            connection.toTrack,
-            "bubbles-handoff",
-            connection.fromTrack.zIndex - 1,
-          )
-          : connectorLayer(
-            connection,
-            "bubbles",
-            connection.toTrack,
-            "bubbles",
-            connection.fromTrack.zIndex - 1,
-          );
-        return {
-          layers: merge.snakeVisible
-            ? [
-              bubbleLayer,
-              connectorLayer(
-                connection,
-                "snake",
-                connection.fromTrack,
-                "snake",
-              ),
-            ]
-            : [bubbleLayer],
-        };
-      },
+      ({ connection }) => ({
+        layers: [connectorLayer(
+          connection,
+          "snake-engorgement",
+          connection.fromTrack,
+          "snake",
+        )],
+      }),
     ));
 }

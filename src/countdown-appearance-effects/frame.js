@@ -4,6 +4,7 @@ import {
 } from "../core/cubic-bezier.js";
 import { hashUnit } from "../generators/grid-scene-strategies.js";
 import { noiseVisibilityFill } from "../noise-fields/visibility.js";
+import { resolveCountdownBubblesDebugSettings } from "./bubbles-debug.js";
 
 const FRAME_TARGET_SALT = 2203;
 const FRAME_DIRECTION_SALT = 2207;
@@ -147,6 +148,7 @@ export function resolveCountdownFrameSettings(appearance) {
 
   return Object.freeze({
     enabled: frame.enabled,
+    debug: resolveCountdownBubblesDebugSettings(frame.debug),
     palette: requireString(
       frame.palette,
       "countdownFramed.appearance.effects.frame.palette",

@@ -119,7 +119,7 @@ test("countdown synth default merges scale with the full countdown", () => {
   );
 });
 
-test("snake-to-bubbles consumes the snake inside its exclusive connector window", () => {
+test("snake-to-bubbles keeps the snake alive through its exclusive connector window", () => {
   const connection = {
     startSeconds: 20,
     endSeconds: 25,
@@ -127,29 +127,30 @@ test("snake-to-bubbles consumes the snake inside its exclusive connector window"
   };
   assert.deepEqual(countdownSnakeToBubblesAt(19.999, connection), {
     connectorActive: false,
-    mergeEnabled: false,
-    mergeProgress: 0,
+    connectorProgress: 0,
     snakeVisible: false,
-    mergeStartSeconds: 20,
-    mergeEndSeconds: 25,
-    mergeDurationSeconds: 5,
+    deathCommitted: false,
+    connectorStartSeconds: 20,
+    connectorEndSeconds: 25,
+    connectorDurationSeconds: 5,
   });
   assert.deepEqual(countdownSnakeToBubblesAt(20, connection), {
     connectorActive: true,
-    mergeEnabled: true,
-    mergeProgress: 0,
+    connectorProgress: 0,
     snakeVisible: true,
-    mergeStartSeconds: 20,
-    mergeEndSeconds: 25,
-    mergeDurationSeconds: 5,
+    deathCommitted: false,
+    connectorStartSeconds: 20,
+    connectorEndSeconds: 25,
+    connectorDurationSeconds: 5,
   });
-  assert.equal(countdownSnakeToBubblesAt(22.5, connection).mergeProgress, 0.5);
+  assert.equal(countdownSnakeToBubblesAt(22.5, connection).connectorProgress, 0.5);
   assert.equal(countdownSnakeToBubblesAt(24.999, connection).snakeVisible, true);
   assert.deepEqual({
     active: countdownSnakeToBubblesAt(25, connection).connectorActive,
-    progress: countdownSnakeToBubblesAt(25, connection).mergeProgress,
+    progress: countdownSnakeToBubblesAt(25, connection).connectorProgress,
     visible: countdownSnakeToBubblesAt(25, connection).snakeVisible,
-  }, { active: false, progress: 1, visible: false });
+    committed: countdownSnakeToBubblesAt(25, connection).deathCommitted,
+  }, { active: false, progress: 1, visible: false, committed: true });
 });
 
 test("a lone timeline track fills the countdown without canonical merge timing", () => {

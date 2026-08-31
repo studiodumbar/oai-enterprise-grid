@@ -58,16 +58,15 @@ function hasCompleteWindow(value) {
     && Object.hasOwn(value, "durationSeconds");
 }
 
-function windowAt(authored, label, outerWindow = null) {
+function windowAt(authored, label, outerWindow = null, allowZeroDuration = false) {
   const value = requireObject(authored, label);
   const startSeconds = requireFiniteNonNegative(
     value.startSeconds,
     `${label}.startSeconds`,
   );
-  const durationSeconds = requireFinitePositive(
-    value.durationSeconds,
-    `${label}.durationSeconds`,
-  );
+  const durationSeconds = allowZeroDuration
+    ? requireFiniteNonNegative(value.durationSeconds, `${label}.durationSeconds`)
+    : requireFinitePositive(value.durationSeconds, `${label}.durationSeconds`);
   const endSeconds = startSeconds + durationSeconds;
   if (
     outerWindow
@@ -226,7 +225,13 @@ function resolveDefaultTiming(authored, totalDurationSeconds, tracks, connection
   return Object.freeze({ trackWindows, connectionWindows });
 }
 
-function resolvedWindow(authored, label, outerWindow, defaultWindow) {
+function resolvedWindow(
+  authored,
+  label,
+  outerWindow,
+  defaultWindow,
+  allowZeroDuration = false,
+) {
   if (defaultWindow !== undefined) {
     return windowAt({
       startSeconds: Object.hasOwn(authored, "startSeconds")
@@ -235,9 +240,9 @@ function resolvedWindow(authored, label, outerWindow, defaultWindow) {
       durationSeconds: Object.hasOwn(authored, "durationSeconds")
         ? authored.durationSeconds
         : defaultWindow.durationSeconds,
-    }, label, outerWindow);
+    }, label, outerWindow, allowZeroDuration);
   }
-  return windowAt(authored, label, outerWindow);
+  return windowAt(authored, label, outerWindow, allowZeroDuration);
 }
 
 function resolvedEvolution(authored, label, ownerWindow, defaultWindow) {
@@ -327,12 +332,19 @@ export function resolveCountdownSynth(
     ids.add(id);
     const use = requireId(track.use, `${label}.use`);
     const descriptor = effectRegistry.descriptor(use);
+    const anchor = track.anchor === true;
+    if (track.anchor !== undefined && typeof track.anchor !== "boolean") {
+      throw new TypeError(`${label}.anchor must be a boolean.`);
+    }
     const defaultWindow = defaultTiming?.trackWindows[id]
       ?? defaultTiming?.trackWindows[use];
     const window = resolvedWindow(track, label, {
       startSeconds: 0,
       endSeconds: totalDurationSeconds,
-    }, defaultWindow);
+    }, defaultWindow, anchor);
+    if (anchor && window.durationSeconds !== 0) {
+      throw new RangeError(`${label}.durationSeconds must be zero for an anchor track.`);
+    }
     const evolution = resolvedEvolution(
       track.evolution,
       `${label}.evolution`,
@@ -354,6 +366,7 @@ export function resolveCountdownSynth(
       zIndex,
       settings: Object.freeze(settings),
       descriptor,
+      anchor,
       ...window,
       evolution,
     });
