@@ -338,11 +338,11 @@ WebM, and a numbered PNG sequence. Resolution and aspect presets update the
 authoritative width and height fields, and video dimensions are rounded down to
 even values when necessary.
 
-`GLOBAL_CONFIG.canvas.resizeWithWindow` controls the preview's logical canvas.
-When `false` (the default), composition geometry uses the requested export
-width and height; browser or DevTools resizing only CSS-fits that canvas on
-screen. Set it to `true` to make composition geometry follow the browser
-window instead.
+The preview's logical canvas always uses the requested export width and height.
+Browser or DevTools resizing only CSS-fits that canvas inside the checkerboard
+stage, so composition geometry and the exported frame stay identical. Set the
+initial frame with `GLOBAL_CONFIG.canvas.aspectRatio`; choosing another aspect
+or resolution in the Export panel updates the preview immediately.
 
 Motion export pauses the p5 loop, locks canvas/UI input, and advances a separate
 generator session on fixed 60 Hz simulation steps. Output frames are sampled at
@@ -668,6 +668,99 @@ once per frame, and draws in plan order. `opacity` on a plan entry is inherited
 Canvas draw alpha. Discrete circle-face state changes still use the blank hinge;
 they do not crossfade outgoing and incoming patterns. Generators that share a
 render plan should draw without clearing the main canvas themselves.
+
+## Countdown effect synth
+
+Read [the countdown timeline maintainer guide](docs/countdown-timeline.md)
+before changing its tracks, timings, effect order, or merge behavior. It is the
+authoritative editing workflow and includes copyable single-track, reordered,
+gap, and explicit exclusive-timeline recipes.
+
+`countdown-framed` keeps its timer and text in `CountdownFramedGenerator`, then
+layers registered `clock`, `snake`, and `bubbles` effect tracks around that text.
+Change `COUNT_FROM_SECONDS` once in
+`config/compositions/countdown-framed.js`; the composition body, beat count, and
+default synth schedule all use that same total.
+
+The shipped schedule authors two normalized merge ranges instead of fixed
+seconds:
+
+```js
+synth: {
+  defaultTiming: {
+    merges: {
+      "clock-to-snake": {
+        startProgress: 1 / 6,
+        endProgress: 1 / 3,
+      },
+      "snake-to-bubbles": {
+        startProgress: 2 / 3,
+        endProgress: 5 / 6,
+      },
+    },
+  },
+  tracks: [
+    { id: "clock-main", use: "clock", zIndex: 10, settings: clockSettings },
+    { id: "snake-main", use: "snake", zIndex: 20, settings: snakeSettings },
+    { id: "bubbles-main", use: "bubbles", zIndex: 30, settings: bubblesSettings },
+  ],
+  connections: [
+    { id: "clock-snake", from: "clock-main", to: "snake-main", use: "auto" },
+    { id: "snake-bubbles", from: "snake-main", to: "bubbles-main", use: "auto" },
+  ],
+}
+```
+
+Progress is measured against the complete countdown: `0` is its first frame and
+`1` is its end. For a total duration `T`, the defaults resolve clock→snake to
+`[T/6, T/3)` and snake→bubbles evolution to `[2T/3, 5T/6)`. The snake grows only
+on `[T/3, 2T/3)`, freezes at full length, then is consumed tail-first by the
+second connector. The converted trail is committed into the bubbles track at
+`5T/6` and persists through `T`.
+
+The resolved lane is exclusive: clock `[0, T/6)`, clock→snake `[T/6, T/3)`,
+snake `[T/3, 2T/3)`, snake→bubbles `[2T/3, 5T/6)`, then bubbles `[5T/6, T)`.
+At most one track or connector is active; a custom gap may intentionally leave
+only the timer.
+
+During the clock→snake evolution, both clock grids grow through their configured
+sizes. One keeps its seeded reservation near the timer while the other moves
+progressively outward toward the canvas edge, then the pair resolves to the
+snake-origin dot.
+
+To make a custom schedule, author numeric `startSeconds`, `durationSeconds`, and
+`evolution` on a track or connection. Explicit seconds override that item's
+default. All windows are validated at startup as half-open ranges `[start, end)`
+inside the total. Timeline items may not overlap, and every connector must start
+at its source track's end and finish at its destination track's start.
+
+`COUNTDOWN_SYNTH_TRACKS` is the authoritative visual timeline:
+
+- One untimed track fills `[0, countFromSeconds)`. Set `COUNT_FROM_SECONDS` to
+  `N` to play only that visual for an `N`-second countdown.
+- Two or more untimed tracks without connections divide the full countdown into
+  equal consecutive slices in array order. Reorder the array to reorder the
+  visuals; remove entries to render only the remaining visuals.
+- The shipped `clock > snake > bubbles` array automatically enables its two
+  handcrafted merge connectors and normalized merge timing. Any other array
+  shape uses consecutive hard cuts unless exclusive connector windows are
+  explicitly authored.
+
+For example, this is a clock-only countdown of any configured length:
+
+```js
+const COUNTDOWN_SYNTH_TRACKS = Object.freeze([
+  Object.freeze({
+    id: "clock-main",
+    use: "clock",
+    zIndex: 10,
+    settings: CLOCK_SETTINGS,
+  }),
+]);
+```
+
+To show one visual for only the first `N` seconds of a longer countdown, add
+`durationSeconds: N`; the remaining interval is an intentional timer-only gap.
 
 ## Flicker modes
 

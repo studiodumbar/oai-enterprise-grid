@@ -172,6 +172,13 @@ src/transitions/      The shared arrangement pool. index.js is the registry:
                       This pool is the intended home for all arrangement work,
                       but two older settings resolvers and four
                       applyPresentation copies still live outside it — see §8.
+src/countdown-effect-synth/  Countdown-only track scheduler plus effect and
+                      connector registries. It resolves total-relative default
+                      merge timing or explicit second windows, then produces
+                      stable layers around one timer-text draw.
+docs/countdown-timeline.md  Authoritative countdown editing guide: timing
+                      modes, recipes, connector ownership, debugging, tests,
+                      and migration traps.
 src/export/           PNG / MP4 / SVG / ZIP export, project-state snapshot and
                       restore, the `cg` console CLI. Deterministic by design.
 
@@ -274,6 +281,7 @@ at startup.
 | cell-transition `durationSeconds` | shortest state hold |
 | start/end endpoint `durationSeconds` | matching resolved intro/outro |
 | interactive color-transition `durationSeconds` | `beatSeconds`, one palette step |
+| countdown synth default merges | complete `countFromSeconds` duration |
 
 Explicit numbers bypass automatic resolution. The fields above require positive
 values except text `visibleSeconds`, which also accepts zero and caps any request
@@ -290,6 +298,29 @@ director's core/export duration still comes from the active generator's legacy
 `flipSeconds`, `staggerSeconds`, and `blendSeconds` stay explicit unless that
 exact field documents automatic syntax. Alias recipes inherit their canonical
 recipe's timing instead of declaring another root.
+
+**Countdown synth timing.** `appearance.synth.defaultTiming.merges` authors
+`startProgress` and `endProgress` for `clock-to-snake` and
+`snake-to-bubbles`, each normalized to the complete countdown. The resolver
+derives every shipped track, evolution, and connector window from those two
+ranges, so changing the shared `COUNT_FROM_SECONDS` constant stretches the
+whole effect sequence. The resolver produces one exclusive lane: clock track,
+clock-to-snake connector, snake track, snake-to-bubbles connector, then bubbles
+track. The snake grows only from the end of clock ownership to the start of its
+bubbles merge. That final body freezes, loses its first level-0 tail dot at
+merge start, and is consumed tail-first through the connector window. At the
+connector end, the converted trail is committed into the bubbles track.
+Numeric `startSeconds`, `durationSeconds`, and `evolution` remain
+explicit per-item overrides. `COUNTDOWN_SYNTH_TRACKS` is the visual timeline:
+one untimed entry fills the complete countdown, while any reduced or reordered
+untimed list without connections receives equal consecutive slices in array
+order. Only the exact shipped `clock > snake > bubbles` preset derives the two
+handcrafted connections; editing its track list makes `connections` empty and
+therefore produces hard cuts. An explicit short track may leave a gap, during
+which only the timer renders. All windows are half-open `[start, end)`; overlaps
+are startup errors, and a connector must exactly bridge its source track's end
+to its destination track's start. Read `docs/countdown-timeline.md` before
+changing this subsystem; it is the authoritative maintainer workflow.
 
 ## 7. House rules
 
@@ -448,10 +479,13 @@ viewport, not a generator layout: it takes its cell size from the composition's
 blocks, import it in `config.js`. Reuse an existing generator type where
 possible; a new generator type is a much larger commitment.
 
-**Change timing** → use `src/timeline/timeline-settings.js` for recipe roots and
-config-level automatic fields. A deliberately supported mode-local field reuses
-`src/core/automatic-duration.js`; never add another clock or fallback chain.
-§8 explains why the loop length still comes from the active generator, and what
+**Change timing** → for the countdown's internal effect tracks and connectors,
+follow `docs/countdown-timeline.md`; that countdown-only synth does not use the
+composition sequence as its visual timeline. For recipe roots and other
+config-level automatic fields, use `src/timeline/timeline-settings.js`. A
+deliberately supported mode-local field reuses
+`src/core/automatic-duration.js`; never add another clock or fallback chain. §8
+explains why the loop length still comes from the active generator, and what
 would break that.
 
 **Debug a visual glitch** → enable the relevant channels, run the headless

@@ -1,16 +1,30 @@
 
 [ === tbd== ]
 
-[] fractal
+[] snake to always be the full size
+[] throw errors by design if a setting is picked which was not ported for the composition
+
+
 
 [ === wip === ]
 
-[] snake to always be the full size
+[] margins top bottom
+
+## clock
+[] more diverse, not sync, not always next to the timer
+[] more complex composition in there
+[] more out of sync // tool for compositions to be inspiration 
+
+## snake -> bubbles
+[] adjust decay transition
 
 
 [ === arc === ]
 
-[[] More organic feel, less computer
+[x] WYSIWYG preview on canvas
+[x] adjust the snake merging, disappearing of the one big dot
+[x] palette updates
+[] More organic feel, less computer
     [x] night sky
     [] water ripples
     [x] autora

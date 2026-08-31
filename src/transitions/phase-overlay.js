@@ -80,19 +80,6 @@ export class PhaseOverlay {
     return plan === null ? null : { ...descriptor, plan };
   }
 
-  effects(endpoint) {
-    const descriptor = this.phaseDescriptorAt(endpoint);
-    if (!descriptor) return null;
-    if (typeof descriptor.entry.mode.phaseEffectsFor === "function") {
-      return descriptor.entry.mode.phaseEffectsFor(descriptor);
-    }
-    if (typeof descriptor.entry.mode.phaseEffectsAt !== "function") return null;
-    const plan = this.planFor(descriptor.phase, descriptor.durationSeconds);
-    return plan === null
-      ? null
-      : descriptor.entry.mode.phaseEffectsAt(plan, descriptor.progress);
-  }
-
   draw(endpoint, context) {
     const phase = endpoint?.phase === "start"
       ? "intro"

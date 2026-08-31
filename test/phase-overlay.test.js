@@ -152,38 +152,6 @@ test("the overlay draws the intro forward and the outro backward", () => {
   assert.deepEqual([resized.dots[0].x, resized.dots[0].y], [300, 150]);
 });
 
-test("text ramps noise visibility out for its hold and restores it before disappearing", () => {
-  const overlay = createPhaseOverlay({
-    intro: TEXT_PHASE,
-    modeRegistry: createArrangementModeRegistry(),
-    longSideCells: 6,
-    palettes: PALETTES,
-    background: "#000000",
-  });
-  overlay.resize(VIEWPORT);
-  const amountAt = progress => overlay.effects(endpointAt("start", progress))
-    .noiseVisibility.amount;
-
-  assert.equal(amountAt(0), 0);
-  assert.equal(amountAt(0.1875), 0);
-  assert.equal(amountAt(0.28125), 0.5);
-  assert.equal(amountAt(0.375), 1);
-  assert.equal(amountAt(0.6), 1);
-  assert.equal(amountAt(0.71875), 0.5);
-  assert.equal(amountAt(0.8125), 0);
-  assert.equal(amountAt(1), 0);
-  assert.deepEqual(overlay.effects(endpointAt("start", 0.6)).noiseVisibility, {
-    amount: 1,
-    threshold: 1,
-    contrast: 0.01,
-    softness: 0,
-  });
-  assert.equal(
-    overlay.effects(endpointAt("end", 1 - 0.28125)).noiseVisibility.amount,
-    0.5,
-  );
-});
-
 test("a text intro cascades, reveals, and hands the screen to the composition", async () => {
   const settings = structuredClone(SETTINGS);
   settings.composition = {

@@ -297,11 +297,18 @@ function rgbColorFromHex(color) {
   return `rgb(${red} ${green} ${blue})`;
 }
 
-export function createCircleGridSceneLayout(viewport, longSideCells = 9) {
+export function createCircleGridSceneLayout(
+  viewport,
+  longSideCells = 9,
+  { shortSideParity = "odd" } = {},
+) {
   const width = Number(viewport?.width);
   const height = Number(viewport?.height);
   requireFinitePositive(width, "viewport width");
   requireFinitePositive(height, "viewport height");
+  if (!["odd", "any"].includes(shortSideParity)) {
+    throw new RangeError('shortSideParity must be either "odd" or "any".');
+  }
 
   const requested = Math.max(3, Math.round(longSideCells));
   const longCells = requested % 2 === 0 ? requested - 1 : requested;
@@ -310,12 +317,14 @@ export function createCircleGridSceneLayout(viewport, longSideCells = 9) {
     Math.max(width, height) / longCells,
     Math.min(width, height) / minimumShortCells,
   );
-  const fitOdd = size => {
+  const fitShortSide = size => {
     const count = Math.max(1, Math.floor(size / cellSize));
-    return count % 2 === 0 ? Math.max(1, count - 1) : count;
+    return shortSideParity === "odd" && count % 2 === 0
+      ? Math.max(1, count - 1)
+      : count;
   };
-  const columns = width >= height ? longCells : fitOdd(width);
-  const rows = width >= height ? fitOdd(height) : longCells;
+  const columns = width >= height ? longCells : fitShortSide(width);
+  const rows = width >= height ? fitShortSide(height) : longCells;
   const patternWidth = columns * cellSize;
   const patternHeight = rows * cellSize;
 

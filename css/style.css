@@ -14,6 +14,9 @@
     --flight-chalk: #edf5f0;
     --flight-muted: #9aaba1;
     --flight-mono: "SFMono-Regular", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+    --preview-stage-dark: #090c0b;
+    --preview-stage-light: #0e1310;
+    --preview-stage-inset: clamp(14px, 2.25vw, 28px);
 }
 
 @font-face {
@@ -68,17 +71,26 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    box-sizing: border-box;
     width: 100%;
     height: 100%;
+    padding: var(--preview-stage-inset);
+    background-color: var(--preview-stage-dark);
+    background-image:
+        linear-gradient(45deg, var(--preview-stage-light) 25%, transparent 25%),
+        linear-gradient(-45deg, var(--preview-stage-light) 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, var(--preview-stage-light) 75%),
+        linear-gradient(-45deg, transparent 75%, var(--preview-stage-light) 75%);
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+    background-size: 16px 16px;
 }
 
 canvas {
     display: block;
-    touch-action: none;
-}
-
-canvas.fixed-spec-canvas {
     flex: none;
+    outline: 1px solid rgba(237, 245, 240, 0.16);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.42);
+    touch-action: none;
 }
 
 .panel-workspace {

@@ -29,6 +29,27 @@ test("a fresh export state ships the default delivery format", () => {
   });
 });
 
+test("an authored initial aspect derives the preview and export frame", () => {
+  assert.deepEqual(
+    createExportState({ aspect: "9:16" }),
+    {
+      mode: "motion",
+      exportFormat: "mp4",
+      aspect: "9:16",
+      resolution: 1920,
+      resW: 1080,
+      resH: 1920,
+      fps: 30,
+      transparentBg: false,
+      embedProjectState: true,
+    },
+  );
+  assert.throws(
+    () => createExportState({ aspect: "5:7" }),
+    /Initial export aspect must be one of/,
+  );
+});
+
 test("export state constrains formats by workflow and exposes contextual controls", () => {
   const state = createExportState({ mode: "motion", exportFormat: "svg" });
   assert.equal(state.exportFormat, "mp4");

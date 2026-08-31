@@ -14,27 +14,14 @@ function positiveDimension(value, label) {
  * CSS-scaled, but this viewport is the coordinate system captured by export.
  */
 export function resolveCanvasViewport({
-  resizeWithWindow,
-  windowViewport,
   requestedViewport,
 } = {}) {
-  if (typeof resizeWithWindow !== "boolean") {
-    debug.config(
-      "canvas viewport failed field=resizeWithWindow value=%j",
-      resizeWithWindow,
-    );
-    throw new TypeError("GLOBAL_CONFIG.canvas.resizeWithWindow must be a boolean.");
-  }
-
-  const mode = resizeWithWindow ? "window" : "requested";
-  const source = resizeWithWindow ? windowViewport : requestedViewport;
   const viewport = {
-    width: positiveDimension(source?.width, `${mode} viewport width`),
-    height: positiveDimension(source?.height, `${mode} viewport height`),
+    width: positiveDimension(requestedViewport?.width, "requested viewport width"),
+    height: positiveDimension(requestedViewport?.height, "requested viewport height"),
   };
   debug.config(
-    "canvas viewport resolved mode=%s width=%d height=%d",
-    mode,
+    "canvas viewport resolved mode=requested width=%d height=%d",
     viewport.width,
     viewport.height,
   );

@@ -43,7 +43,6 @@ new window.p5(p => {
   let exportPanelVisible = false;
   let consoleCommands = null;
   let history = null;
-  let pendingWindowResize = false;
   let resetPreviewDelta = false;
   let noisePreviewPanel = null;
   let flockPreviewPanel = null;
@@ -54,7 +53,9 @@ new window.p5(p => {
   let compositionTimingOverrides = new Map();
   let projectSeed = createProjectSeed();
   const pointer = { active: false, x: 0, y: 0 };
-  const exportState = createExportState();
+  const exportState = createExportState({
+    aspect: GLOBAL_CONFIG.canvas.aspectRatio,
+  });
 
   const runtime = {
     p5: p,
@@ -188,27 +189,29 @@ new window.p5(p => {
 
   function configuredCanvasViewport() {
     return resolveCanvasViewport({
-      resizeWithWindow: GLOBAL_CONFIG.canvas.resizeWithWindow,
-      windowViewport: { width: p.windowWidth, height: p.windowHeight },
       requestedViewport: { width: exportState.resW, height: exportState.resH },
     });
   }
 
-  // A fixed-spec canvas keeps its logical/export pixels while its CSS size
-  // follows the available browser area. DevTools can therefore change only
-  // the preview scale, never the generator layout.
+  function availableCanvasDisplayViewport() {
+    const host = canvasElement?.parentElement;
+    if (!host) return { width: p.windowWidth, height: p.windowHeight };
+    const style = window.getComputedStyle(host);
+    const horizontalPadding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+    const verticalPadding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+    return {
+      width: Math.max(1, host.clientWidth - horizontalPadding),
+      height: Math.max(1, host.clientHeight - verticalPadding),
+    };
+  }
+
+  // The logical canvas always matches the export spec. Only its CSS footprint
+  // fits the checkerboard stage, so the preview is the exported frame.
   function fitCanvasDisplay() {
     if (!canvasElement) return;
-    const fixed = !GLOBAL_CONFIG.canvas.resizeWithWindow;
-    canvasElement.classList.toggle("fixed-spec-canvas", fixed);
-    if (!fixed) {
-      canvasElement.style.width = "";
-      canvasElement.style.height = "";
-      return;
-    }
     const display = fitCanvasDisplaySize(
       { width: p.width, height: p.height },
-      { width: p.windowWidth, height: p.windowHeight },
+      availableCanvasDisplayViewport(),
     );
     canvasElement.style.width = `${display.width}px`;
     canvasElement.style.height = `${display.height}px`;
@@ -534,10 +537,7 @@ new window.p5(p => {
       }
     });
     window.addEventListener("blur", deactivatePointer);
-    p.pixelDensity(Math.min(
-      GLOBAL_CONFIG.canvas.resizeWithWindow ? window.devicePixelRatio || 1 : 1,
-      GLOBAL_CONFIG.canvas.maxPixelDensity,
-    ));
+    p.pixelDensity(1);
     fitCanvasDisplay();
     p.frameRate(GLOBAL_CONFIG.canvas.frameRate);
     p.noiseSeed?.(projectSeed);
@@ -614,10 +614,6 @@ new window.p5(p => {
       resumePreview: wasLooping => {
         document.body.classList.remove("exporting");
         resetPreviewDelta = true;
-        if (pendingWindowResize) {
-          pendingWindowResize = false;
-          syncCanvasViewport("window");
-        }
         try {
           renderPreview();
         } finally {
@@ -758,15 +754,7 @@ new window.p5(p => {
   };
 
   p.windowResized = () => {
-    if (!GLOBAL_CONFIG.canvas.resizeWithWindow) {
-      fitCanvasDisplay();
-      return;
-    }
-    if (exportController?.exporting) {
-      pendingWindowResize = true;
-      return;
-    }
-    syncCanvasViewport("window");
+    fitCanvasDisplay();
   };
 
   function installProjectDropRestore() {

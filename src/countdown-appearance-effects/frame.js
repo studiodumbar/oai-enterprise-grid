@@ -431,9 +431,9 @@ export function countdownSnakeBubbleExclusionCircles({
       cell?.level,
       "Countdown snake-bubble exclusion cell level",
     );
-    if (cellLevel < 1 || cellLevel > level) {
+    if (cellLevel > level) {
       throw new RangeError(
-        "Countdown snake-bubble exclusion cell level must be from one to three.",
+        "Countdown snake-bubble exclusion cell level must be from zero to three.",
       );
     }
     const cellColumn = cellIndex % columns;

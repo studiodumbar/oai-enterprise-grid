@@ -10,8 +10,13 @@ import {
   parseDebugChannels,
   resolveDebugChannels,
 } from "../src/debug/index.js";
+import { CompositionTimelineDebug } from "../src/debug/composition-timeline.js";
 import { diffPlainState, toPlainState } from "../src/debug/plain.js";
-import { runFrames, createHeadlessDirector } from "../src/debug/headless.js";
+import {
+  createCountingContext,
+  createHeadlessDirector,
+  runFrames,
+} from "../src/debug/headless.js";
 
 test("channel selectors accept lists and reject typos", () => {
   assert.deepEqual(parseDebugChannels(""), []);
@@ -86,6 +91,63 @@ test("disabled channels cost nothing and capture restores the previous sink", ()
   });
   assert.deepEqual(lines, ["[cg:plan] f=0000 render=[grid]"]);
   assert.deepEqual(debug.channels(), before);
+});
+
+test("composition timeline debug mirrors active canvas states to the timeline channel", () => {
+  const timeline = new CompositionTimelineDebug({
+    compositionId: "countdown-framed",
+    items: [
+      { id: "track:clock", label: "CLOCK" },
+      { id: "connection:clock-snake", label: "CLOCK→SNAKE" },
+      { id: "track:snake", label: "SNAKE" },
+    ],
+  });
+  const context = createCountingContext();
+  const labels = [];
+  context.fillText = text => labels.push(text);
+
+  const lines = captureDebug(["timeline"], () => {
+    timeline.update({ activeIds: ["track:clock"], elapsedSeconds: 0 });
+    assert.equal(timeline.draw(context, { width: 640, height: 480 }), true);
+    timeline.update({ activeIds: ["track:clock"], elapsedSeconds: 0.5 });
+    timeline.update({
+      activeIds: ["track:clock", "connection:clock-snake", "track:snake"],
+      elapsedSeconds: 5,
+    });
+  });
+
+  assert.deepEqual(labels, ["CLOCK", "·", "CLOCK→SNAKE", "·", "SNAKE"]);
+  assert.equal(lines.length, 2, "elapsed time alone must not flood the change-only channel");
+  assert.match(lines[0], /active=track:clock states=track:clock:on/);
+  assert.match(
+    lines[1],
+    /active=track:clock,connection:clock-snake,track:snake/,
+  );
+  assert.deepEqual(
+    timeline.inspect().items.map(item => [item.id, item.active]),
+    [
+      ["track:clock", true],
+      ["connection:clock-snake", true],
+      ["track:snake", true],
+    ],
+  );
+});
+
+test("composition timeline debug stays off-canvas when disabled or exporting", () => {
+  const timeline = new CompositionTimelineDebug({
+    compositionId: "countdown-framed",
+    items: [{ id: "clock", label: "CLOCK" }],
+  });
+  const context = createCountingContext();
+  assert.equal(timeline.draw(context, { width: 640, height: 480 }), false);
+  captureDebug(["timeline"], () => {
+    timeline.update({ activeIds: ["clock"], elapsedSeconds: 0 });
+    assert.equal(
+      timeline.draw(context, { width: 640, height: 480 }, { exporting: true }),
+      false,
+    );
+  });
+  assert.equal(context.counts.save, 0);
 });
 
 test("inspection state is copied, not aliased, so frames can be diffed", () => {

@@ -12,6 +12,7 @@ import {
   COMPOSITION_CONFIGS,
   createRuntimeConfig,
 } from "../config.js";
+import { populatePalettes } from "../config/palettes.js";
 import { createCatalog } from "../src/catalog.js";
 import { resolveCompositionEndpointSettings } from "../src/composition-endpoints/index.js";
 import { CompositionDirector } from "../src/core/composition-director.js";
@@ -683,6 +684,30 @@ test("config facade preserves explicit global, shared, and bundle ownership", ()
   assert.ok(
     Object.hasOwn(PALETTES, GLOBAL_CONFIG.palette),
     `The app-wide palette "${GLOBAL_CONFIG.palette}" is missing from PALETTES.`,
+  );
+});
+
+test("effect palettes follow one selected five-color family", () => {
+  const families = {
+    blue: ["b0", "b1", "b2", "b3", "b4"],
+    orange: ["o0", "o1", "o2", "o3", "o4"],
+  };
+  const palettes = populatePalettes(families, "orange");
+
+  assert.deepEqual(palettes.flicker, ["o1", "o4", "o2", "o3", "o0"]);
+  assert.deepEqual(palettes.snake, ["o2", "o3", "o4"]);
+  assert.deepEqual(palettes.countdown, ["o1", "o2", "o4", "#ffffff"]);
+  assert.deepEqual(palettes.blue, families.blue);
+  assert.notStrictEqual(palettes.blue, families.blue);
+  assert.throws(
+    () => populatePalettes({ mono: ["m0", "m1", "m2", "m3"] }, "mono"),
+    /exactly five colors/,
+  );
+  assert.equal(PALETTES.blue.length, 5);
+  assert.equal(PALETTES.orange.length, 5);
+  assert.deepEqual(
+    PALETTES.mono,
+    ["#303030", "#666666", "#aaaaaa", "#d5d5d5", "#ffffff"],
   );
 });
 

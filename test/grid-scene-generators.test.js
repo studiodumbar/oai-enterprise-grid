@@ -331,6 +331,32 @@ test("scene layout keeps every possible circle on a fixed subdivision grid", () 
   assert.equal(wide.patternHeight, 400);
 });
 
+test("scene layout can spend combined short-side margins on one more row", () => {
+  const viewport = { width: 1920, height: 1080 };
+  const centered = createCircleGridSceneLayout(viewport, 12);
+  const packed = createCircleGridSceneLayout(
+    viewport,
+    12,
+    { shortSideParity: "any" },
+  );
+
+  assert.deepEqual(
+    { columns: centered.columns, rows: centered.rows },
+    { columns: 11, rows: 5 },
+  );
+  assert.deepEqual(
+    { columns: packed.columns, rows: packed.rows },
+    { columns: 11, rows: 6 },
+  );
+  assert.ok(viewport.height - centered.patternHeight >= centered.cellSize);
+  assert.ok(viewport.height - packed.patternHeight < packed.cellSize);
+  assert.ok(packed.offsetY >= 0);
+  assert.throws(
+    () => createCircleGridSceneLayout(viewport, 12, { shortSideParity: "even" }),
+    /shortSideParity must be either/,
+  );
+});
+
 test("flip faces pass through a blank hinge and never overlap", () => {
   assert.deepEqual(
     [0, 0.25, 0.5, 0.75, 1].map(progress => (

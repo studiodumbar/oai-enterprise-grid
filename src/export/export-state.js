@@ -1,4 +1,8 @@
-import { ASPECT_RATIO_PRESETS, LONG_EDGE_PRESETS } from "./resolution.js";
+import {
+  ASPECT_RATIO_PRESETS,
+  LONG_EDGE_PRESETS,
+  sizeFromAspect,
+} from "./resolution.js";
 
 export const EXPORT_MODES = Object.freeze({
   STATIC: "static",
@@ -30,10 +34,27 @@ function boundedInteger(value, fallback, minimum = 1, maximum = Number.MAX_SAFE_
 }
 
 export function createExportState(overrides = {}) {
+  if (
+    Object.hasOwn(overrides, "aspect")
+    && !ASPECT_RATIO_PRESETS.includes(overrides.aspect)
+  ) {
+    throw new RangeError(
+      `Initial export aspect must be one of: ${ASPECT_RATIO_PRESETS.join(", ")}.`,
+    );
+  }
   const state = {
     ...EXPORT_STATE_DEFAULTS,
     ...overrides,
   };
+  if (
+    (Object.hasOwn(overrides, "aspect") || Object.hasOwn(overrides, "resolution"))
+    && !Object.hasOwn(overrides, "resW")
+    && !Object.hasOwn(overrides, "resH")
+  ) {
+    const size = sizeFromAspect(state.aspect, state.resolution);
+    state.resW = size.width;
+    state.resH = size.height;
+  }
   normalizeExportState(state);
   return state;
 }

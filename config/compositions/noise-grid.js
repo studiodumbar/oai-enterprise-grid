@@ -2,8 +2,7 @@ export const NOISE_GRID_CONFIG = {
   settings: {
     noiseGrid: {
       ui: {
-          noisePreview: false,
-        // noisePreview: false,
+          noisePreview: true ,
       },
       longSideCells: 5, //3..31
       frameMargin: 0, // 0..10 half-cell padding steps
@@ -74,6 +73,24 @@ export const NOISE_GRID_CONFIG = {
         smoothing: 0.5,
         hysteresis: 0.03,
       },
+      // This phase transition is intentionally supported only by noise-grid.
+      // It runs independently from the configured intro/outro arrangement.
+      noiseVisibilityTransition: {
+        enabled: true,
+        holdSeconds: 6,
+        // Caps the clear hold so the surrounding ramps always have phase time.
+        maximumHoldShare: 0.01,
+        // Relative shares of the time left after the hold; values are normalized.
+        edgeWeights: {
+          idleBefore: 2,
+          rampOut: 1000,
+          rampBack: 1000,
+          idleAfter: 0.1,
+        },
+        threshold: 1,
+        contrast: 0.01,
+        softness: 0,
+      },
       debugGrid: false,
     },
   },
@@ -83,7 +100,7 @@ export const NOISE_GRID_CONFIG = {
   compositionDefinitions: {
     "noise-grid": {
       rule: "sequence",
-      timing: { bodyDurationSeconds: 30, beatCount: 4 },
+      timing: { bodyDurationSeconds: 6, beatCount: 4 },
       steps: [{ use: "noiseGrid" }],
     },
   },

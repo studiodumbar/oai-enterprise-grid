@@ -64,6 +64,120 @@ function clockRectangle(left, top, size) {
   };
 }
 
+function squaredDistanceToClockCenter(rectangle, column, row) {
+  const centerColumn = (rectangle.left + rectangle.right) / 2;
+  const centerRow = (rectangle.top + rectangle.bottom) / 2;
+  return (centerColumn - column) ** 2 + (centerRow - row) ** 2;
+}
+
+function travelingClockReservation({
+  reservation,
+  textCenterColumn,
+  textCenterRow,
+  gridColumns,
+  gridRows,
+  size,
+  progress,
+}) {
+  const centerColumn = (reservation.left + reservation.right) / 2;
+  const centerRow = (reservation.top + reservation.bottom) / 2;
+  const directionColumn = centerColumn - textCenterColumn;
+  const directionRow = centerRow - textCenterRow;
+  const minimumCenter = size / 2;
+  const maximumCenterColumn = gridColumns - minimumCenter;
+  const maximumCenterRow = gridRows - minimumCenter;
+  const edgeScales = [];
+  if (directionColumn > 0) {
+    edgeScales.push((maximumCenterColumn - textCenterColumn) / directionColumn);
+  } else if (directionColumn < 0) {
+    edgeScales.push((minimumCenter - textCenterColumn) / directionColumn);
+  }
+  if (directionRow > 0) {
+    edgeScales.push((maximumCenterRow - textCenterRow) / directionRow);
+  } else if (directionRow < 0) {
+    edgeScales.push((minimumCenter - textCenterRow) / directionRow);
+  }
+  const edgeScale = Math.max(1, Math.min(
+    ...edgeScales.filter(scale => Number.isFinite(scale) && scale >= 1),
+  ));
+  const destinationCenterColumn = textCenterColumn + directionColumn * edgeScale;
+  const destinationCenterRow = textCenterRow + directionRow * edgeScale;
+  const travelProgress = Math.max(0, Math.min(1, progress));
+  const resolvedCenterColumn = centerColumn
+    + (destinationCenterColumn - centerColumn) * travelProgress;
+  const resolvedCenterRow = centerRow
+    + (destinationCenterRow - centerRow) * travelProgress;
+  return {
+    ...clockRectangle(
+      resolvedCenterColumn - minimumCenter,
+      resolvedCenterRow - minimumCenter,
+      size,
+    ),
+    centerColumn: resolvedCenterColumn,
+    centerRow: resolvedCenterRow,
+  };
+}
+
+function clockReservationTravelGain(reservation, geometry) {
+  return squaredDistanceToClockCenter(
+    travelingClockReservation({ ...geometry, reservation, progress: 1 }),
+    geometry.textCenterColumn,
+    geometry.textCenterRow,
+  ) - squaredDistanceToClockCenter(
+    reservation,
+    geometry.textCenterColumn,
+    geometry.textCenterRow,
+  );
+}
+
+function selectMovableClockReservation({
+  anchor,
+  seed,
+  tick,
+  textSafeZone,
+  minimumSquareGap,
+  ...geometry
+}) {
+  let selected = null;
+  for (let top = 0; top <= geometry.gridRows - geometry.size; top += 1) {
+    for (let left = 0; left <= geometry.gridColumns - geometry.size; left += 1) {
+      const candidate = {
+        ...clockRectangle(left, top, geometry.size),
+        centerColumn: left + geometry.size / 2,
+        centerRow: top + geometry.size / 2,
+      };
+      if (
+        rectanglesOverlap(candidate, textSafeZone)
+        || rectanglesOverlap(candidate, anchor, minimumSquareGap)
+        || clockReservationTravelGain(candidate, geometry) <= 1e-9
+      ) {
+        continue;
+      }
+      const distance = squaredDistanceToClockCenter(
+        candidate,
+        geometry.textCenterColumn,
+        geometry.textCenterRow,
+      );
+      const candidateId = top * geometry.gridColumns + left;
+      const rank = hashUnit(
+        seed ^ Math.imul(tick + 1, CLOCK_COLUMN_SALT),
+        candidateId,
+        CLOCK_CANDIDATE_SALT,
+      );
+      if (
+        selected === null
+        || distance < selected.distance
+        || (distance === selected.distance && rank < selected.rank)
+      ) {
+        selected = { ...candidate, distance, rank };
+      }
+    }
+  }
+  if (selected === null) return null;
+  const { distance, rank, ...reservation } = selected;
+  return reservation;
+}
+
 function clockReservationCandidates({
   textCenterColumn,
   textCenterRow,
@@ -357,7 +471,7 @@ export function countdownClockEvolutionAt(
   };
 }
 
-/** Two seeded grids inside disjoint maximum-size reservations near the timer. */
+/** Two seeded grids: one stays near the timer while its partner travels outward. */
 export function countdownClockPlan({
   seed,
   tick,
@@ -530,13 +644,68 @@ export function countdownClockPlan({
     rangeY,
     minimumSquareGap,
   });
-  const squares = selection.reservations.map((reservation, squareIndex) => {
+  let resolvedReservations = selection.reservations;
+  const reservationDistances = resolvedReservations.map(reservation => (
+    squaredDistanceToClockCenter(
+      reservation,
+      textCenterColumn,
+      textCenterRow,
+    )
+  ));
+  const travelGeometry = {
+    textCenterColumn,
+    textCenterRow,
+    gridColumns,
+    gridRows,
+    size: maximumSquareSize,
+  };
+  const travelGains = resolvedReservations.map(reservation => (
+    clockReservationTravelGain(reservation, travelGeometry)
+  ));
+  const preferredAnchorIndex = reservationDistances[0] <= reservationDistances[1]
+    ? 0
+    : 1;
+  let travelingSquareIndex = 1 - preferredAnchorIndex;
+  if (
+    evolution.mode === "expanding"
+    && travelGains[travelingSquareIndex] <= 1e-9
+  ) {
+    const anchorIndex = preferredAnchorIndex;
+    const anchor = resolvedReservations[anchorIndex];
+    const traveling = selectMovableClockReservation({
+      anchor,
+      seed: planSeed,
+      tick: appearanceTick,
+      textSafeZone: resolvedTextSafeZone,
+      minimumSquareGap,
+      ...travelGeometry,
+    });
+    if (traveling !== null) {
+      resolvedReservations = [anchor, traveling];
+      travelingSquareIndex = 1;
+    } else if (travelGains[anchorIndex] > 1e-9) {
+      travelingSquareIndex = anchorIndex;
+    }
+  }
+  const squares = resolvedReservations.map((reservation, squareIndex) => {
+    const resolvedReservation = evolution.mode === "expanding"
+      && squareIndex === travelingSquareIndex
+      ? travelingClockReservation({
+        reservation,
+        textCenterColumn,
+        textCenterRow,
+        gridColumns,
+        gridRows,
+        size: maximumSquareSize,
+        progress: evolution.progress,
+      })
+      : reservation;
     const remainingSpace = maximumSquareSize - evolution.squareSize;
     const inset = squareIndex % 2 === 0
       ? Math.floor(remainingSpace / 2)
       : Math.ceil(remainingSpace / 2);
-    const topLeftColumn = reservation.left + inset;
-    const topLeftRow = reservation.top + inset;
+    const topLeftColumn = resolvedReservation.left + inset;
+    const topLeftRow = resolvedReservation.top + inset;
     const clockDots = evolution.squareSize === 2
       ? clockwiseSquareDots(
         topLeftColumn,
@@ -553,11 +722,18 @@ export function countdownClockPlan({
       );
     return {
       squareIndex,
-      offsetX: reservation.centerColumn - textCenterColumn,
-      offsetY: reservation.centerRow - textCenterRow,
+      motionRole: squareIndex === travelingSquareIndex ? "traveling" : "anchored",
+      offsetX: resolvedReservation.centerColumn - textCenterColumn,
+      offsetY: resolvedReservation.centerRow - textCenterRow,
       topLeftColumn,
       topLeftRow,
       reservation: {
+        left: resolvedReservation.left,
+        top: resolvedReservation.top,
+        right: resolvedReservation.right,
+        bottom: resolvedReservation.bottom,
+      },
+      originReservation: {
         left: reservation.left,
         top: reservation.top,
         right: reservation.right,

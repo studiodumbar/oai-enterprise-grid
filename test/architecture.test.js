@@ -134,6 +134,7 @@ test("composition director switches generators through lifecycle contracts", () 
     // No arrangement registry was passed, so no intro/outro mode can draw
     // content of its own here.
     phaseOverlay: null,
+    noiseVisibilityTransition: null,
     generators: {
       first: {
         generatorInstanceId: "first",

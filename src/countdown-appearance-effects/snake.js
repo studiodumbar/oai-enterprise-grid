@@ -397,23 +397,42 @@ export function countdownSnakeFrame(plan, linearProgress, settings) {
   };
 }
 
-/** During the bubble merge, the largest level-0 dots split into level 1. */
-export function countdownSnakeMergeFrame(frame) {
+/** Consume the frozen snake tail-first, splitting each level-0 cell into bubbles. */
+export function countdownSnakeMergeFrame(frame, linearProgress = 0) {
   if (!frame || !Array.isArray(frame.cells)) {
     throw new TypeError("Countdown snake merge requires a snake frame.");
   }
+  const mergeProgress = Math.max(0, Math.min(1, Number(linearProgress) || 0));
+  const consumedCellCount = frame.cells.length === 0
+    ? 0
+    : (
+      mergeProgress >= 1
+        ? frame.cells.length
+        : Math.min(
+          frame.cells.length,
+          1 + Math.floor(mergeProgress * (frame.cells.length - 1)),
+        )
+    );
+  const normalizedCell = cell => {
+    const level = requireNonNegativeInteger(
+      cell?.level,
+      "Countdown snake merge cell level",
+    );
+    if (level > 3) {
+      throw new RangeError("Countdown snake merge cell level cannot exceed three.");
+    }
+    return { ...cell, level };
+  };
+  const cells = frame.cells.map(normalizedCell);
   return {
     ...frame,
-    cells: frame.cells.map(cell => {
-      const level = requireNonNegativeInteger(
-        cell?.level,
-        "Countdown snake merge cell level",
-      );
-      if (level > 3) {
-        throw new RangeError("Countdown snake merge cell level cannot exceed three.");
-      }
-      return { ...cell, level: Math.max(1, level) };
-    }),
+    mergeProgress,
+    consumedCellCount,
+    consumedCells: cells.slice(0, consumedCellCount).map(cell => ({
+      ...cell,
+      level: Math.max(1, cell.level),
+    })),
+    cells: cells.slice(consumedCellCount),
   };
 }
 

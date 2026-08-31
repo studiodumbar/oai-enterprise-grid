@@ -3,6 +3,7 @@ import {
   circleEndpointTimelineAt,
 } from "../compositions/circle-endpoints.js";
 import { createPhaseOverlay } from "../transitions/phase-overlay.js";
+import { createNoiseVisibilityTransition } from "../transitions/noise-visibility.js";
 import { debug } from "../debug/index.js";
 import { resolveCompositionEndpointSettings } from "../composition-endpoints/index.js";
 import {
@@ -186,6 +187,7 @@ export class CompositionDirector {
     this.currentCompositionName = null;
     this.currentRule = null;
     this.phaseOverlay = null;
+    this.noiseVisibilityTransition = null;
     this.ruleTimelineSignature = null;
     this.renderPlan = [];
     this.viewport = null;
@@ -264,6 +266,10 @@ export class CompositionDirector {
       definition,
       nextCompositionEndpoints.timeline,
     );
+    const nextNoiseVisibilityTransition = createNoiseVisibilityTransition({
+      compositionId: name,
+      settings: nextPhaseSettings?.noiseVisibilityTransition,
+    });
 
     for (const id of this.activeGeneratorIds) {
       const entries = this.renderPlan.filter(entry => entry.use === id);
@@ -282,6 +288,7 @@ export class CompositionDirector {
     this.compositionEndpoints = nextCompositionEndpoints;
     this.circleEndpoints = nextCompositionEndpoints.timeline;
     this.endpointDurations = nextEndpointDurations;
+    this.noiseVisibilityTransition = nextNoiseVisibilityTransition;
     this.endpointElapsed = 0;
     this.endpointCoreElapsed = 0;
     this.endpointState = circleEndpointTimelineAt(
@@ -473,7 +480,7 @@ export class CompositionDirector {
     return true;
   }
 
-  phaseOverlayEndpoint(endpoint) {
+  nativePhaseEndpoint(endpoint) {
     const direction = endpoint?.phase === "start"
       ? "start"
       : (endpoint?.phase === "end" ? "end" : null);
@@ -575,7 +582,7 @@ export class CompositionDirector {
     // Native endpoints and overlays can share a phase. A custom endpoint owns
     // its phase exclusively because it supplies the complete rendered frame.
     this.phaseOverlay?.draw(
-      this.phaseOverlayEndpoint(drawFrame.compositionEndpoint),
+      this.nativePhaseEndpoint(drawFrame.compositionEndpoint),
       context,
     );
   }
@@ -598,7 +605,7 @@ export class CompositionDirector {
     const endpoint = endpointState.phase === "start" || endpointState.phase === "end"
       ? { ...endpointState }
       : null;
-    const overlayEndpoint = this.phaseOverlayEndpoint(endpoint);
+    const nativeEndpoint = this.nativePhaseEndpoint(endpoint);
     return {
       ...frame,
       dt: Math.min(coreDt, Number.isFinite(frame?.dt) ? frame.dt : coreDt),
@@ -607,7 +614,7 @@ export class CompositionDirector {
       time: endpointState.coreTime,
       timelineTime: this.endpointElapsed,
       compositionEndpoint: endpoint,
-      phaseEffects: this.phaseOverlay?.effects?.(overlayEndpoint) ?? null,
+      phaseEffects: this.noiseVisibilityTransition?.effects(nativeEndpoint) ?? null,
     };
   }
 
@@ -719,6 +726,8 @@ export class CompositionDirector {
     this.renderPlan = [];
     this.currentRule = null;
     this.currentCompositionName = null;
+    this.phaseOverlay = null;
+    this.noiseVisibilityTransition = null;
     this.disposed = true;
     if (firstError) throw firstError;
   }
@@ -743,6 +752,7 @@ export class CompositionDirector {
       renderPlan: this.renderPlan.map(entry => ({ ...entry })),
       generators,
       phaseOverlay: this.phaseOverlay?.inspect() ?? null,
+      noiseVisibilityTransition: this.noiseVisibilityTransition?.inspect() ?? null,
       // The endpoint state drives how the intro and outro render and was
       // previously computed every frame and readable by nobody.
       timeline: {

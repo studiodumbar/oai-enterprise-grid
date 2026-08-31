@@ -1,4 +1,5 @@
 import { debug } from "../debug/index.js";
+import { CompositionTimelineDebug } from "../debug/composition-timeline.js";
 import { resolveAutomaticDuration } from "../core/automatic-duration.js";
 import {
   countdownClockDotColors,
@@ -9,10 +10,16 @@ import {
   validateCountdownClockLayout,
 } from "../countdown-appearance-effects/clock.js";
 import {
-  countdownAppearanceEffectTicks,
-  countdownAppearanceStageAt,
-  resolveCountdownAppearanceOrder,
-} from "../countdown-appearance-effects/order.js";
+  countdownSynthAt,
+  countdownSynthEffectTicks,
+  countdownSynthSeed,
+  countdownSynthStageAt,
+  countdownSnakeToBubblesAt,
+  createCountdownConnectorRegistry,
+  createCountdownEffectRegistry,
+  resolveCountdownSynth,
+  sortCountdownRenderLayers,
+} from "../countdown-effect-synth/index.js";
 import {
   countdownFrameAt,
   countdownFrameAvoidanceEnvelopesAt,
@@ -56,6 +63,13 @@ import { manhattanGridDistance } from "./pathfinding-strategies.js";
 
 const CELL_SELECTION_SALT = 1879;
 
+function requireObject(value, label) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new TypeError(`${label} must be an object.`);
+  }
+  return value;
+}
+
 function requireFinitePositive(value, label) {
   if (!Number.isFinite(value) || value <= 0) {
     throw new RangeError(`${label} must be a finite positive number.`);
@@ -95,6 +109,22 @@ function boundedHashIndex(seed, tick, count) {
   return Math.min(count - 1, Math.floor(hashUnit(seed, tick, CELL_SELECTION_SALT) * count));
 }
 
+function countdownTimelineDebugItems(synthSettings) {
+  const connectionsBySource = new Map();
+  for (const connection of synthSettings.connections) {
+    const connections = connectionsBySource.get(connection.from) ?? [];
+    connections.push(connection);
+    connectionsBySource.set(connection.from, connections);
+  }
+  return synthSettings.tracks.flatMap(track => [
+    { id: `track:${track.id}`, label: track.use.toUpperCase() },
+    ...(connectionsBySource.get(track.id) ?? []).map(connection => ({
+      id: `connection:${connection.id}`,
+      label: `${connection.fromTrack.use.toUpperCase()}→${connection.toTrack.use.toUpperCase()}`,
+    })),
+  ]);
+}
+
 export function formatCountdown(totalSeconds) {
   const seconds = requireNonNegativeInteger(totalSeconds, "Countdown seconds");
   const minutes = Math.floor(seconds / 60);
@@ -123,7 +153,7 @@ export function countdownCellIndex(
   }
   if (cycleLength !== null) {
     requireNonNegativeInteger(cycleLength, "Countdown cycle length");
-    if (cycleLength <= 1 || targetTick >= cycleLength) {
+    if (cycleLength === 0 || targetTick >= cycleLength) {
       throw new RangeError("Countdown cycle length must contain the requested tick.");
     }
   }
@@ -248,10 +278,37 @@ export class CountdownFramedGenerator {
       options.timing.bodyDurationSeconds,
       "countdownFramed.timing.bodyDurationSeconds",
     );
-    this.appearanceOrderSettings = resolveCountdownAppearanceOrder(
-      options.appearance,
-      this.durationSeconds,
+    this.effectRegistry = createCountdownEffectRegistry();
+    this.connectorRegistry = createCountdownConnectorRegistry();
+    try {
+      this.synthSettings = resolveCountdownSynth(
+        options.appearance,
+        this.durationSeconds,
+        {
+          effectRegistry: this.effectRegistry,
+          connectorRegistry: this.connectorRegistry,
+        },
+      );
+    } catch (error) {
+      debug.config(
+        "countdown-synth resolution=failed error=%s",
+        error?.message ?? "unknown",
+      );
+      throw error;
+    }
+    this.synthEffectUses = new Set(
+      this.synthSettings.tracks.map(track => track.use),
     );
+    this.hasClockTrack = this.synthEffectUses.has("clock");
+    this.hasSnakeTrack = this.synthEffectUses.has("snake");
+    this.hasBubblesTrack = this.synthEffectUses.has("bubbles");
+    this.hasClockSnakeConnector = this.synthSettings.connections.some(
+      connection => connection.use === "clock-to-snake",
+    );
+    this.snakeBubblesConnection = this.synthSettings.connections.find(
+      connection => connection.use === "snake-to-bubbles",
+    ) ?? null;
+    this.hasSnakeBubblesConnector = this.snakeBubblesConnection !== null;
     const expectedBeatCount = this.countFromSeconds;
     if (options.timing.beatCount !== expectedBeatCount) {
       throw new Error(
@@ -268,6 +325,12 @@ export class CountdownFramedGenerator {
       options.longSideCells,
       "countdownFramed.longSideCells",
     );
+    this.shortSideParity = options.shortSideParity ?? "odd";
+    if (!["odd", "any"].includes(this.shortSideParity)) {
+      throw new RangeError(
+        'countdownFramed.shortSideParity must be either "odd" or "any".',
+      );
+    }
     this.fontFamily = requireString(options.fontFamily, "countdownFramed.fontFamily");
     this.fontWeight = requireFinitePositive(
       options.fontWeight,
@@ -278,76 +341,138 @@ export class CountdownFramedGenerator {
       "countdownFramed.fontSizeInCells",
     );
     this.palette = countdownPalette(options, palettes);
-    this.snakeSettings = resolveCountdownSnakeSettings(
-      options.appearance,
-      this.tickSeconds,
+    const sharedAppearance = requireObject(
+      this.synthSettings.shared,
+      "countdownFramed.appearance.shared",
     );
-    this.snakePalette = countdownPalette(
-      { palette: this.snakeSettings.palette },
-      palettes,
-    );
-    this.clockSettings = resolveCountdownClockSettings(
-      options.appearance,
-      this.tickSeconds,
-    );
-    this.clockPalette = countdownPalette(
-      { palette: this.clockSettings.palette },
-      palettes,
-    );
-    this.clockFlicker = createFlicker({
-      palette: this.clockPalette,
-      settings: options.flicker,
-      noiseFunction: typeof runtime.p5?.noise === "function"
-        ? runtime.p5.noise.bind(runtime.p5)
-        : undefined,
-      autoCycleSeconds: this.tickSeconds,
-    });
-    this.frameSettings = resolveCountdownFrameSettings(options.appearance);
-    const authoredFrameNoise = options.appearance?.effects?.frame?.noiseFields;
-    if (
-      !authoredFrameNoise
-      || typeof authoredFrameNoise !== "object"
-      || Array.isArray(authoredFrameNoise)
-    ) {
-      throw new TypeError(
-        "countdownFramed.appearance.effects.frame.noiseFields must be an object.",
-      );
+    this.appearanceSeed = requireNonNegativeInteger(
+      sharedAppearance.seed,
+      "countdownFramed.appearance.shared.seed",
+    ) >>> 0;
+    if (typeof sharedAppearance.evolveSeed !== "boolean") {
+      throw new TypeError("countdownFramed.appearance.shared.evolveSeed must be a boolean.");
     }
-    this.frameNoiseEdgeWidth = requireNonNegativeInteger(
-      authoredFrameNoise.edgeWidthInSquares,
-      "countdownFramed.appearance.effects.frame.noiseFields.edgeWidthInSquares",
+    this.appearanceEvolveSeed = sharedAppearance.evolveSeed;
+    this.minimumCellDistance = requireNonNegativeInteger(
+      sharedAppearance.minimumCellDistance,
+      "countdownFramed.appearance.shared.minimumCellDistance",
     );
-    if (this.frameNoiseEdgeWidth === 0) {
+    if (this.minimumCellDistance < 3) {
       throw new RangeError(
-        "countdownFramed.appearance.effects.frame.noiseFields.edgeWidthInSquares must be positive.",
+        "countdownFramed.appearance.shared.minimumCellDistance must be at least three.",
       );
     }
-    this.frameNoiseModes = noiseFieldModes ?? createNoiseFieldRegistry();
-    this.frameNoiseSettings = resolveNoiseFieldSettings(
-      settings?.noiseFields ?? {},
-      authoredFrameNoise,
-      { modeRegistry: this.frameNoiseModes, timing: options.timing },
+    const sharedTextSafeZone = requireObject(
+      sharedAppearance.textSafeZone,
+      "countdownFramed.appearance.shared.textSafeZone",
     );
-    if (this.frameNoiseSettings.layers.visibility.holdSeconds !== 0) {
-      throw new RangeError(
-        "countdownFramed frame visibility noise requires holdSeconds to be zero.",
+    this.textSafeZone = Object.freeze({
+      widthInCells: requireFinitePositive(
+        sharedTextSafeZone.widthInCells,
+        "countdownFramed.appearance.shared.textSafeZone.widthInCells",
+      ),
+      heightInCells: requireFinitePositive(
+        sharedTextSafeZone.heightInCells,
+        "countdownFramed.appearance.shared.textSafeZone.heightInCells",
+      ),
+    });
+    const authoredTracksByUse = new Map(
+      options.appearance.synth.tracks.map(track => [track.use, track]),
+    );
+    const effectSettings = (use, legacyKey) => {
+      const track = authoredTracksByUse.get(use);
+      return track && Object.hasOwn(track, "settings")
+        ? track.settings
+        : options.appearance?.effects?.[legacyKey];
+    };
+    const effectAppearance = (use, legacyKey) => ({
+      ...sharedAppearance,
+      effects: { [legacyKey]: effectSettings(use, legacyKey) },
+    });
+    const noiseFunction = typeof runtime.p5?.noise === "function"
+      ? runtime.p5.noise.bind(runtime.p5)
+      : undefined;
+
+    this.snakeSettings = this.hasSnakeTrack
+      ? resolveCountdownSnakeSettings(
+        effectAppearance("snake", "snake"),
+        this.tickSeconds,
+      )
+      : null;
+    this.snakePalette = this.snakeSettings === null
+      ? null
+      : countdownPalette({ palette: this.snakeSettings.palette }, palettes);
+    this.clockSettings = this.hasClockTrack
+      ? resolveCountdownClockSettings(
+        effectAppearance("clock", "clock"),
+        this.tickSeconds,
+      )
+      : null;
+    this.clockPalette = this.clockSettings === null
+      ? null
+      : countdownPalette({ palette: this.clockSettings.palette }, palettes);
+    this.clockFlicker = this.clockSettings === null
+      ? null
+      : createFlicker({
+        palette: this.clockPalette,
+        settings: options.flicker,
+        noiseFunction,
+        autoCycleSeconds: this.tickSeconds,
+      });
+    this.frameSettings = this.hasBubblesTrack
+      ? resolveCountdownFrameSettings(effectAppearance("bubbles", "frame"))
+      : null;
+    this.frameNoiseEdgeWidth = 0;
+    this.frameNoiseModes = null;
+    this.frameNoiseSettings = null;
+    this.frameNoiseSampler = null;
+    this.framePalette = null;
+    this.frameFlicker = null;
+    if (this.frameSettings !== null) {
+      const authoredFrameNoise = effectSettings("bubbles", "frame")?.noiseFields;
+      if (
+        !authoredFrameNoise
+        || typeof authoredFrameNoise !== "object"
+        || Array.isArray(authoredFrameNoise)
+      ) {
+        throw new TypeError(
+          "countdownFramed.appearance.effects.frame.noiseFields must be an object.",
+        );
+      }
+      this.frameNoiseEdgeWidth = requireNonNegativeInteger(
+        authoredFrameNoise.edgeWidthInSquares,
+        "countdownFramed.appearance.effects.frame.noiseFields.edgeWidthInSquares",
       );
+      if (this.frameNoiseEdgeWidth === 0) {
+        throw new RangeError(
+          "countdownFramed.appearance.effects.frame.noiseFields.edgeWidthInSquares must be positive.",
+        );
+      }
+      this.frameNoiseModes = noiseFieldModes ?? createNoiseFieldRegistry();
+      this.frameNoiseSettings = resolveNoiseFieldSettings(
+        settings?.noiseFields ?? {},
+        authoredFrameNoise,
+        { modeRegistry: this.frameNoiseModes, timing: options.timing },
+      );
+      if (this.frameNoiseSettings.layers.visibility.holdSeconds !== 0) {
+        throw new RangeError(
+          "Countdown framed frame visibility noise requires holdSeconds to be zero.",
+        );
+      }
+      this.frameNoiseSampler = new NoiseFieldSampler({
+        modeRegistry: this.frameNoiseModes,
+      });
+      this.framePalette = countdownPalette(
+        { palette: this.frameSettings.palette },
+        palettes,
+      );
+      this.frameFlicker = createFlicker({
+        palette: this.framePalette,
+        settings: options.flicker,
+        noiseFunction,
+        autoCycleSeconds: this.tickSeconds,
+      });
     }
-    this.frameNoiseSampler = new NoiseFieldSampler({
-      modeRegistry: this.frameNoiseModes,
-    });
-    this.framePalette = countdownPalette(
-      { palette: this.frameSettings.palette },
-      palettes,
-    );
-    this.frameFlicker = createFlicker({
-      palette: this.framePalette,
-      settings: options.flicker,
-      noiseFunction: typeof runtime.p5?.noise === "function"
-        ? runtime.p5.noise.bind(runtime.p5)
-        : undefined,
-      autoCycleSeconds: this.tickSeconds,
-    });
     const initialGlyphs = [...formatCountdown(this.countFromSeconds)];
     const centerGlyphIndex = initialGlyphs.indexOf(":");
     this.maximumGlyphDistance = Math.max(
@@ -365,94 +490,133 @@ export class CountdownFramedGenerator {
       this.revealStepSeconds,
     );
     debug.config(
-      "countdown-order stages=%s stageDuration=%.3f",
-      this.appearanceOrderSettings.stageDefinitions
-        .map(stage => `${stage.effect}:${stage.evolutionStartsAt}`)
+      "countdown-synth tracks=%s connections=%s",
+      this.synthSettings.tracks
+        .map(track => `${track.id}:${track.use}@${track.startSeconds}+${track.durationSeconds}`)
         .join(","),
-      this.appearanceOrderSettings.stageDurationSeconds,
+      this.synthSettings.connections
+        .map(connection => `${connection.id}:${connection.use}`)
+        .join(","),
     );
     const authoredSeed = Number(runtime.projectSeed?.() ?? 0);
     this.projectSeed = Number.isInteger(authoredSeed) && authoredSeed >= 0
       ? authoredSeed >>> 0
       : 0;
+    this.effectInstances = new Map(this.synthSettings.tracks.map(track => [
+      track.id,
+      this.effectRegistry.create(track.use, {
+        host: this,
+        track,
+        seed: countdownSynthSeed(
+          this.projectSeed,
+          track.id,
+          track.descriptor.seedSalt,
+        ),
+      }),
+    ]));
+    this.connectorInstances = new Map(this.synthSettings.connections.map(connection => [
+      connection.id,
+      this.connectorRegistry.create(connection.use, {
+        host: this,
+        connection,
+      }),
+    ]));
     debug.config(
-      "countdown-effect mode=snake enabled=%s seed=%d evolve=%s distance=%d palette=%s duration=%.3f cells=%d grow=%s mergeBubbles=%s bubbleClearanceCells=%.3f curve=%j",
-      this.snakeSettings.enabled ? "yes" : "no",
-      this.snakeSettings.seed,
-      this.snakeSettings.evolveSeed ? "yes" : "no",
-      this.snakeSettings.minimumCellDistance,
-      this.snakeSettings.palette,
-      this.snakeSettings.duration.seconds,
-      this.snakeSettings.lengthCells,
-      this.snakeSettings.growAfterEachTick ? "yes" : "no",
-      this.snakeSettings.mergeIntoBubbles ? "yes" : "no",
-      this.snakeSettings.bubbleClearanceInCells,
-      this.snakeSettings.timingCurve,
+      "countdown-synth resolution=ok tracks=%d connections=%d duration=%.3f",
+      this.synthSettings.tracks.length,
+      this.synthSettings.connections.length,
+      this.synthSettings.totalDurationSeconds,
     );
-    debug.config(
-      "countdown-effect mode=clock enabled=%s seed=%d evolveSeed=%s palette=%s duration=%.3f level=%d squares=%d dotsPerSquare=%d behindText=%s evolutionSizes=%j rangeX=%d rangeY=%d safeWidthCells=%.3f safeHeightCells=%.3f squareGap=%d curve=%j",
-      this.clockSettings.enabled ? "yes" : "no",
-      this.clockSettings.seed,
-      this.clockSettings.evolveSeed ? "yes" : "no",
-      this.clockSettings.palette,
-      this.clockSettings.duration.seconds,
-      this.clockSettings.subdivisionLevel,
-      this.clockSettings.squareCount,
-      this.clockSettings.dotsPerSquare,
-      this.clockSettings.behindText ? "yes" : "no",
-      this.clockSettings.evolutionSquareSizes,
-      this.clockSettings.rangeInSubdivisions.x,
-      this.clockSettings.rangeInSubdivisions.y,
-      this.clockSettings.textSafeZone.widthInCells,
-      this.clockSettings.textSafeZone.heightInCells,
-      this.clockSettings.minimumSquareGapInSubdivisions,
-      this.clockSettings.timingCurve,
-    );
-    debug.config(
-      "countdown-effect mode=bubbles enabled=%s seed=%d evolveSeed=%s evolveSquares=%s palette=%s level=%d squares=%d dotsPerSquare=%d avoidanceRadiusStartCells=%.3f avoidanceRadiusEndCells=%.3f avoidanceBeats=%.3f numberSpacing=%.3f grow=%s avoidanceCurve=%j avoidanceRadiusCurve=%j growthCurve=%j",
-      this.frameSettings.enabled ? "yes" : "no",
-      this.snakeSettings.seed,
-      this.snakeSettings.evolveSeed ? "yes" : "no",
-      this.frameSettings.evolveSquareCount ? "yes" : "no",
-      this.frameSettings.palette,
-      this.frameSettings.subdivisionLevel,
-      this.frameSettings.squareCount,
-      this.frameSettings.dotsPerSquare,
-      this.frameSettings.avoidance.radiusInCells,
-      this.frameSettings.avoidance.radiusAtEndInCells,
-      this.frameSettings.avoidance.durationBeats,
-      this.frameSettings.numberSpacingInSubdivisions,
-      this.frameSettings.growTowardZero ? "yes" : "no",
-      this.frameSettings.avoidance.timingCurve,
-      this.frameSettings.avoidance.radiusGrowthTimingCurve,
-      this.frameSettings.growthTimingCurve,
-    );
-    debug.config(
-      "countdown-effect mode=bubbles-noise-motion beatWiggleDistance=%.3f curve=%j",
-      this.frameSettings.visibilityNoiseMotion.beatWiggleDistance,
-      this.frameSettings.visibilityNoiseMotion.timingCurve,
-    );
-    const frameFlicker = this.frameFlicker.inspect();
-    debug.config(
-      "countdown-effect mode=bubbles-flicker enabled=%s field=%s scope=%s amount=%.3f speed=%.3f spatialScale=%.3f",
-      frameFlicker.enabled ? "yes" : "no",
-      frameFlicker.mode,
-      frameFlicker.scope,
-      frameFlicker.amount,
-      frameFlicker.modeSettings.speed,
-      frameFlicker.modeSettings.spatialScale,
-    );
-    const visibilityNoise = this.frameNoiseSettings.layers.visibility;
-    debug.config(
-      "countdown-effect mode=bubbles-visibility-noise enabled=%s field=%s edgeWidth=%d scale=%.3f threshold=%.3f softness=%.3f seed=%d",
-      this.frameNoiseSettings.enabled ? "yes" : "no",
-      visibilityNoise.mode,
-      this.frameNoiseEdgeWidth,
-      visibilityNoise.scale,
-      visibilityNoise.threshold,
-      visibilityNoise.softness,
-      visibilityNoise.seed,
-    );
+    if (this.snakeSettings !== null) {
+      debug.config(
+        "countdown-effect mode=snake enabled=%s seed=%d evolve=%s distance=%d palette=%s duration=%.3f cells=%d grow=%s mergeBubbles=%s bubbleClearanceCells=%.3f curve=%j",
+        this.snakeSettings.enabled ? "yes" : "no",
+        this.snakeSettings.seed,
+        this.snakeSettings.evolveSeed ? "yes" : "no",
+        this.snakeSettings.minimumCellDistance,
+        this.snakeSettings.palette,
+        this.snakeSettings.duration.seconds,
+        this.snakeSettings.lengthCells,
+        this.snakeSettings.growAfterEachTick ? "yes" : "no",
+        this.snakeSettings.mergeIntoBubbles ? "yes" : "no",
+        this.snakeSettings.bubbleClearanceInCells,
+        this.snakeSettings.timingCurve,
+      );
+    } else {
+      debug.config("countdown-effect mode=snake enabled=no reason=no-track");
+    }
+    if (this.clockSettings !== null) {
+      debug.config(
+        "countdown-effect mode=clock enabled=%s seed=%d evolveSeed=%s palette=%s duration=%.3f level=%d squares=%d dotsPerSquare=%d behindText=%s evolutionSizes=%j rangeX=%d rangeY=%d safeWidthCells=%.3f safeHeightCells=%.3f squareGap=%d curve=%j",
+        this.clockSettings.enabled ? "yes" : "no",
+        this.clockSettings.seed,
+        this.clockSettings.evolveSeed ? "yes" : "no",
+        this.clockSettings.palette,
+        this.clockSettings.duration.seconds,
+        this.clockSettings.subdivisionLevel,
+        this.clockSettings.squareCount,
+        this.clockSettings.dotsPerSquare,
+        this.clockSettings.behindText ? "yes" : "no",
+        this.clockSettings.evolutionSquareSizes,
+        this.clockSettings.rangeInSubdivisions.x,
+        this.clockSettings.rangeInSubdivisions.y,
+        this.clockSettings.textSafeZone.widthInCells,
+        this.clockSettings.textSafeZone.heightInCells,
+        this.clockSettings.minimumSquareGapInSubdivisions,
+        this.clockSettings.timingCurve,
+      );
+    } else {
+      debug.config("countdown-effect mode=clock enabled=no reason=no-track");
+    }
+    if (this.frameSettings !== null) {
+      debug.config(
+        "countdown-effect mode=bubbles enabled=%s seed=%d evolveSeed=%s evolveSquares=%s palette=%s level=%d squares=%d dotsPerSquare=%d avoidanceRadiusStartCells=%.3f avoidanceRadiusEndCells=%.3f avoidanceBeats=%.3f numberSpacing=%.3f grow=%s avoidanceCurve=%j avoidanceRadiusCurve=%j growthCurve=%j",
+        this.frameSettings.enabled ? "yes" : "no",
+        this.appearanceSeed,
+        this.appearanceEvolveSeed ? "yes" : "no",
+        this.frameSettings.evolveSquareCount ? "yes" : "no",
+        this.frameSettings.palette,
+        this.frameSettings.subdivisionLevel,
+        this.frameSettings.squareCount,
+        this.frameSettings.dotsPerSquare,
+        this.frameSettings.avoidance.radiusInCells,
+        this.frameSettings.avoidance.radiusAtEndInCells,
+        this.frameSettings.avoidance.durationBeats,
+        this.frameSettings.numberSpacingInSubdivisions,
+        this.frameSettings.growTowardZero ? "yes" : "no",
+        this.frameSettings.avoidance.timingCurve,
+        this.frameSettings.avoidance.radiusGrowthTimingCurve,
+        this.frameSettings.growthTimingCurve,
+      );
+      debug.config(
+        "countdown-effect mode=bubbles-noise-motion beatWiggleDistance=%.3f curve=%j",
+        this.frameSettings.visibilityNoiseMotion.beatWiggleDistance,
+        this.frameSettings.visibilityNoiseMotion.timingCurve,
+      );
+      const frameFlicker = this.frameFlicker.inspect();
+      debug.config(
+        "countdown-effect mode=bubbles-flicker enabled=%s field=%s scope=%s amount=%.3f speed=%.3f spatialScale=%.3f",
+        frameFlicker.enabled ? "yes" : "no",
+        frameFlicker.mode,
+        frameFlicker.scope,
+        frameFlicker.amount,
+        frameFlicker.modeSettings.speed,
+        frameFlicker.modeSettings.spatialScale,
+      );
+      const visibilityNoise = this.frameNoiseSettings.layers.visibility;
+      debug.config(
+        "countdown-effect mode=bubbles-visibility-noise enabled=%s field=%s edgeWidth=%d scale=%.3f threshold=%.3f softness=%.3f seed=%d",
+        this.frameNoiseSettings.enabled ? "yes" : "no",
+        visibilityNoise.mode,
+        this.frameNoiseEdgeWidth,
+        visibilityNoise.scale,
+        visibilityNoise.threshold,
+        visibilityNoise.softness,
+        visibilityNoise.seed,
+      );
+    } else {
+      debug.config("countdown-effect mode=bubbles enabled=no reason=no-track");
+    }
 
     this.active = false;
     this.disposed = false;
@@ -463,16 +627,25 @@ export class CountdownFramedGenerator {
     this.remainingSeconds = this.countFromSeconds;
     this.label = formatCountdown(this.remainingSeconds);
     this.cellIndex = 0;
-    this.appearanceStage = countdownAppearanceStageAt(
-      0,
-      this.appearanceOrderSettings,
-    );
+    this.appearanceStage = countdownSynthStageAt(0, this.synthSettings);
+    this.synthState = countdownSynthAt(0, this.synthSettings);
+    this.timelineDebug = new CompositionTimelineDebug({
+      compositionId: "countdown-framed",
+      items: countdownTimelineDebugItems(this.synthSettings),
+      accentColor: this.palette.at(-2) ?? this.palette.at(-1),
+    });
+    this.renderLayers = [];
+    this.previousActiveTrackIds = new Set();
+    this.previousActiveConnectionIds = new Set();
+    this.renderLayerSignature = "";
     this.snakePlan = null;
     this.snakeFrame = null;
     this.snakeRenderFrame = null;
     this.snakeFrameSettings = null;
     this.snakeMergeActive = false;
     this.snakeMergeTick = 0;
+    this.snakeGrowthTick = 0;
+    this.snakeBubbleMergeProgress = 0;
     this.clockSnakeHandoff = null;
     this.snakeHandoff = null;
     this.snakeBubblePlan = null;
@@ -487,7 +660,7 @@ export class CountdownFramedGenerator {
     this.frameAvoidanceBubbles = [];
     this.frameAvoidanceCircles = [];
     this.frameTextSafeRectangle = null;
-    this.frameAvoidanceRadiusInCells = this.frameSettings.avoidance.radiusInCells;
+    this.frameAvoidanceRadiusInCells = this.frameSettings?.avoidance.radiusInCells ?? 0;
     this.frameVisibilityPlane = null;
     this.frameNoiseTemporalOffset = 0;
     this.frameNoiseWigglePhase = "out";
@@ -496,146 +669,240 @@ export class CountdownFramedGenerator {
   }
 
   resize(viewport) {
-    this.layout = createCircleGridSceneLayout(viewport, this.longSideCells);
-    let clockLayout;
-    try {
-      clockLayout = validateCountdownClockLayout(
-        this.layout,
-        this.clockSettings,
-      );
-    } catch (error) {
+    this.layout = createCircleGridSceneLayout(
+      viewport,
+      this.longSideCells,
+      { shortSideParity: this.shortSideParity },
+    );
+    if (this.hasClockTrack) {
+      let clockLayout;
+      try {
+        clockLayout = validateCountdownClockLayout(
+          this.layout,
+          this.clockSettings,
+        );
+      } catch (error) {
+        debug.config(
+          "countdown-clock-layout columns=%d rows=%d safe=invalid error=%s",
+          this.layout.columns,
+          this.layout.rows,
+          error?.message ?? "unknown",
+        );
+        throw error;
+      }
       debug.config(
-        "countdown-clock-layout columns=%d rows=%d safe=invalid error=%s",
+        "countdown-clock-layout columns=%d rows=%d checkedCells=%d maximumSize=%d safe=valid",
         this.layout.columns,
         this.layout.rows,
-        error?.message ?? "unknown",
+        clockLayout.checkedCellCount,
+        clockLayout.maximumSquareSize,
       );
-      throw error;
+    } else {
+      debug.config(
+        "countdown-clock-layout columns=%d rows=%d safe=skipped reason=no-track",
+        this.layout.columns,
+        this.layout.rows,
+      );
     }
-    debug.config(
-      "countdown-clock-layout columns=%d rows=%d checkedCells=%d maximumSize=%d safe=valid",
-      this.layout.columns,
-      this.layout.rows,
-      clockLayout.checkedCellCount,
-      clockLayout.maximumSquareSize,
-    );
     this.availableSnakeCellCount = Math.max(
       1,
       this.layout.columns * this.layout.rows - 2,
     );
-    let maximumSafePathLength = 0;
-    try {
-      for (let tick = 0; tick < this.countFromSeconds; tick += 1) {
-        maximumSafePathLength = Math.max(
-          maximumSafePathLength,
-          this.snakeStateAt(tick).plan.path.length,
+    if (this.hasSnakeTrack) {
+      let maximumSafePathLength = 0;
+      try {
+        for (let tick = 0; tick < this.countFromSeconds; tick += 1) {
+          maximumSafePathLength = Math.max(
+            maximumSafePathLength,
+            this.snakeStateAt(tick).plan.path.length,
+          );
+        }
+      } catch (error) {
+        debug.config(
+          "countdown-snake-layout columns=%d rows=%d checkedTicks=%d safe=invalid error=%s",
+          this.layout.columns,
+          this.layout.rows,
+          this.countFromSeconds,
+          error?.message ?? "unknown",
         );
+        throw error;
       }
-    } catch (error) {
       debug.config(
-        "countdown-snake-layout columns=%d rows=%d checkedTicks=%d safe=invalid error=%s",
+        "countdown-snake-layout columns=%d rows=%d checkedTicks=%d maximumPath=%d safe=valid",
         this.layout.columns,
         this.layout.rows,
         this.countFromSeconds,
-        error?.message ?? "unknown",
+        maximumSafePathLength,
       );
-      throw error;
+      this.prepareSnakeHandoff();
+    } else {
+      this.clockSnakeHandoff = null;
+      this.snakeHandoff = null;
+      debug.config(
+        "countdown-snake-layout columns=%d rows=%d checkedTicks=0 safe=skipped reason=no-track",
+        this.layout.columns,
+        this.layout.rows,
+      );
     }
-    debug.config(
-      "countdown-snake-layout columns=%d rows=%d checkedTicks=%d maximumPath=%d safe=valid",
-      this.layout.columns,
-      this.layout.rows,
-      this.countFromSeconds,
-      maximumSafePathLength,
-    );
-    this.prepareSnakeHandoff();
-    this.clockFlicker.resize({
-      columns: this.layout.columns,
-      rows: this.layout.rows,
-      cellSize: this.layout.cellSize,
-      dotsPerCellAxis: 1 << this.clockSettings.subdivisionLevel,
-    });
-    this.frameFlicker.resize({
-      columns: this.layout.columns,
-      rows: this.layout.rows,
-      cellSize: this.layout.cellSize,
-      dotsPerCellAxis: 1 << this.frameSettings.subdivisionLevel,
-    });
+    if (this.clockFlicker !== null) {
+      this.clockFlicker.resize({
+        columns: this.layout.columns,
+        rows: this.layout.rows,
+        cellSize: this.layout.cellSize,
+        dotsPerCellAxis: 1 << this.clockSettings.subdivisionLevel,
+      });
+    }
+    if (this.frameFlicker !== null) {
+      this.frameFlicker.resize({
+        columns: this.layout.columns,
+        rows: this.layout.rows,
+        cellSize: this.layout.cellSize,
+        dotsPerCellAxis: 1 << this.frameSettings.subdivisionLevel,
+      });
+    }
+    for (const instance of this.effectInstances.values()) instance.resize(viewport);
+    for (const instance of this.connectorInstances.values()) instance.resize(viewport);
     this.cellIndex = countdownCellIndex(
       this.projectSeed,
       Math.max(0, this.tick),
       this.layout,
-      this.snakeSettings.minimumCellDistance,
+      this.minimumCellDistance,
       this.countFromSeconds,
     );
     if (this.tick >= 0) {
-      this.prepareSnakePlan(this.tick, false);
-      this.snakeFrame = countdownSnakeFrame(
-        this.snakePlan,
-        this.snakeFrame?.linearProgress ?? 0,
-        this.snakeFrameSettings,
-      );
-      this.snakeRenderFrame = this.snakeMergeActive
-        ? countdownSnakeMergeFrame(this.snakeFrame)
-        : this.snakeFrame;
-      this.prepareClockPlan(this.tick, false);
-      this.clockFrame = countdownClockFrame(
-        this.clockPlan,
-        this.clockFrame?.linearProgress ?? 0,
-        this.clockSettings,
-      );
-      this.prepareFramePlan(this.tick, false, true);
       const localTime = this.elapsed % this.durationSeconds;
-      this.prepareFrameAvoidance(
-        this.tick,
-        localTime - this.tick * this.tickSeconds,
-      );
-      this.sampleFrameVisibility(this.elapsed);
-      this.prepareSnakeBubbleRenderPlan();
-      this.frameFrame = countdownFrameAt(
-        this.frameRenderPlan,
-        this.frameFrame?.linearProgress ?? 0,
-        this.frameSettings,
-        this.frameAvoidanceCircles,
-        this.frameVisibilityPlane,
-        this.snakeBubbleExclusionCircles,
-      );
+      if (this.hasSnakeTrack) {
+        this.prepareSnakePlan(this.tick, false);
+        this.snakeFrame = countdownSnakeFrame(
+          this.snakePlan,
+          this.snakeFrame?.linearProgress ?? 0,
+          this.snakeFrameSettings,
+        );
+        const mergedIntoBubbles = this.hasSnakeBubblesConnector
+          && this.appearanceStage.trackId === this.snakeBubblesConnection.to
+          && localTime >= this.snakeBubblesConnection.evolution.endSeconds;
+        this.snakeBubbleMergeProgress = mergedIntoBubbles
+          ? 1
+          : (this.snakeMergeActive
+            ? this.snakeBubbleMergeAt(localTime).mergeProgress
+            : 0);
+        this.snakeRenderFrame = mergedIntoBubbles
+          ? this.snakeMergeRenderFrameAt(1)
+          : (this.snakeMergeActive
+            ? this.snakeMergeRenderFrameAt(this.snakeBubbleMergeProgress)
+            : this.snakeFrame);
+      }
+      if (this.hasClockTrack) {
+        this.prepareClockPlan(this.tick, false);
+        this.clockFrame = countdownClockFrame(
+          this.clockPlan,
+          this.clockFrame?.linearProgress ?? 0,
+          this.clockSettings,
+        );
+      }
+      if (this.hasBubblesTrack) {
+        this.prepareFramePlan(this.tick, false, true);
+        this.prepareFrameAvoidance(
+          this.tick,
+          localTime - this.tick * this.tickSeconds,
+        );
+        this.sampleFrameVisibility(this.elapsed);
+        this.prepareSnakeBubbleRenderPlan();
+        this.frameFrame = countdownFrameAt(
+          this.frameRenderPlan,
+          this.frameFrame?.linearProgress ?? 0,
+          this.frameSettings,
+          this.frameAvoidanceCircles,
+          this.frameVisibilityPlane,
+          this.snakeBubbleExclusionCircles,
+        );
+      }
+      this.rebuildCountdownRenderPlan(true);
     }
   }
 
-  snakeStateAt(tick) {
-    const evolution = countdownAppearanceEffectTicks(
-      "snake",
+  effectTicks(effect, tick) {
+    const matchingTracks = this.synthSettings.tracks.filter(
+      track => track.use === effect,
+    );
+    let selector = effect;
+    if (matchingTracks.length > 1) {
+      const stage = countdownSynthStageAt(
+        tick * this.tickSeconds,
+        this.synthSettings,
+      );
+      selector = matchingTracks.some(track => track.id === stage.trackId)
+        ? stage.trackId
+        : matchingTracks[0].id;
+    }
+    return countdownSynthEffectTicks(
+      selector,
       tick,
       this.tickSeconds,
       this.countFromSeconds,
-      this.appearanceOrderSettings,
+      this.synthSettings,
     );
-    const mergeActive = tick >= evolution.evolutionStartTick;
+  }
+
+  connectorActiveAt(use, time) {
+    return countdownSynthAt(time, this.synthSettings).activeConnections.some(
+      state => state.connection.use === use,
+    );
+  }
+
+  snakeBubbleMergeAt(time) {
+    if (this.snakeBubblesConnection === null) {
+      return {
+        connectorActive: false,
+        mergeEnabled: false,
+        mergeProgress: 0,
+        snakeVisible: false,
+      };
+    }
+    return countdownSnakeToBubblesAt(time, this.snakeBubblesConnection);
+  }
+
+  snakeStateAt(tick) {
+    const evolution = this.effectTicks("snake", tick);
+    const merge = this.snakeBubbleMergeAt(tick * this.tickSeconds);
+    const mergeActive = this.snakeSettings.mergeIntoBubbles
+      && merge.mergeEnabled
+      && tick >= evolution.evolutionStartTick;
     const mergeTick = mergeActive
       ? Math.min(tick, evolution.endTick) - evolution.evolutionStartTick
       : 0;
+    const growthEndTick = this.hasSnakeBubblesConnector
+      ? Math.max(evolution.startTick, evolution.evolutionStartTick - 1)
+      : evolution.endTick;
+    const growthTick = Math.max(
+      0,
+      Math.min(tick, growthEndTick) - evolution.startTick,
+    );
     const sourceCellIndex = countdownCellIndex(
       this.projectSeed,
       tick,
       this.layout,
-      this.snakeSettings.minimumCellDistance,
+      this.minimumCellDistance,
       this.countFromSeconds,
     );
     const lengthCells = countdownSnakeLengthAt(
       this.snakeSettings.lengthCells,
-      mergeTick,
-      this.snakeSettings.growAfterEachTick && mergeActive,
+      growthTick,
+      this.snakeSettings.growAfterEachTick && tick >= evolution.startTick,
       this.availableSnakeCellCount,
     );
     const frameSettings = { ...this.snakeSettings, lengthCells };
-    const destinationTick = (tick + 1) % this.countFromSeconds;
+    // A one-second loop still needs a distinct snake destination even though
+    // its only authored countdown tick loops back to itself.
+    const destinationTick = this.countFromSeconds === 1
+      ? 1
+      : (tick + 1) % this.countFromSeconds;
     const targetCellIndex = countdownCellIndex(
       this.projectSeed,
       destinationTick,
       this.layout,
-      this.snakeSettings.minimumCellDistance,
-      this.countFromSeconds,
+      this.minimumCellDistance,
+      this.countFromSeconds === 1 ? null : this.countFromSeconds,
     );
     const seed = countdownAppearanceSeed(
       this.projectSeed,
@@ -646,7 +913,7 @@ export class CountdownFramedGenerator {
     const textSafeCellIndices = countdownSnakeTextSafeCells(
       this.layout,
       sourceCellIndex,
-      this.clockSettings.textSafeZone,
+      this.textSafeZone,
     );
     const pathBetweenCells = countdownSnakePath(
       this.layout,
@@ -660,6 +927,7 @@ export class CountdownFramedGenerator {
       : pathBetweenCells.slice(1, -1);
     return {
       evolution,
+      growthTick,
       mergeActive,
       mergeTick,
       frameSettings,
@@ -676,25 +944,20 @@ export class CountdownFramedGenerator {
   }
 
   prepareSnakeHandoff() {
-    const snakeTicks = countdownAppearanceEffectTicks(
-      "snake",
-      0,
-      this.tickSeconds,
-      this.countFromSeconds,
-      this.appearanceOrderSettings,
-    );
+    const snakeTicks = this.effectTicks("snake", 0);
     const startState = this.snakeStateAt(snakeTicks.startTick);
     this.clockSnakeHandoff = {
       tick: snakeTicks.startTick,
       plan: startState.plan,
     };
-    const state = this.snakeStateAt(snakeTicks.endTick);
-    const snakeWindow = this.appearanceOrderSettings.windows.find(
-      window => window.effect === "snake",
-    );
+    const handoffTick = this.hasSnakeBubblesConnector
+      ? Math.max(snakeTicks.startTick, snakeTicks.evolutionStartTick - 1)
+      : snakeTicks.endTick;
+    const state = this.snakeStateAt(handoffTick);
+    const snakeWindowEndSeconds = (handoffTick + 1) * this.tickSeconds;
     const boundaryProgress = Math.max(0, Math.min(
       1,
-      (snakeWindow.endSeconds - snakeTicks.endTick * this.tickSeconds)
+      (snakeWindowEndSeconds - handoffTick * this.tickSeconds)
         / this.snakeSettings.duration.seconds,
     ));
     const frame = countdownSnakeFrame(
@@ -703,11 +966,23 @@ export class CountdownFramedGenerator {
       state.frameSettings,
     );
     this.snakeHandoff = {
-      tick: snakeTicks.endTick,
+      tick: handoffTick,
       boundaryProgress,
       plan: state.plan,
       frameSettings: state.frameSettings,
       frame,
+    };
+  }
+
+  snakeMergeRenderFrameAt(progress) {
+    const frame = countdownSnakeMergeFrame(
+      this.snakeHandoff?.frame ?? this.snakeFrame,
+      progress,
+    );
+    const textSafeCells = new Set(this.snakePlan.textSafeCellIndices);
+    return {
+      ...frame,
+      cells: frame.cells.filter(cell => !textSafeCells.has(cell.index)),
     };
   }
 
@@ -717,6 +992,7 @@ export class CountdownFramedGenerator {
     this.snakeMergeActive = this.snakeSettings.mergeIntoBubbles
       && state.mergeActive;
     this.snakeMergeTick = state.mergeTick;
+    this.snakeGrowthTick = state.growthTick;
     this.snakePlan = state.plan;
     if (
       emitDebug
@@ -728,10 +1004,11 @@ export class CountdownFramedGenerator {
       )
     ) {
       debug.plan(
-        "countdown-effect mode=snake tick=%d evolution=%s evolutionTick=%d merge=%s mergeTick=%d seed=%d length=%d maximum=%d cellFrom=%d cellTo=%d from=%d to=%d textSafeCells=%s path=%s",
+        "countdown-effect mode=snake tick=%d evolution=%s evolutionTick=%d growthTick=%d merge=%s mergeTick=%d seed=%d length=%d maximum=%d cellFrom=%d cellTo=%d from=%d to=%d textSafeCells=%s path=%s",
         tick,
         state.evolution.evolutionEnabled ? "yes" : "no",
         state.evolution.evolutionTick,
+        this.snakeGrowthTick,
         this.snakeMergeActive ? "yes" : "no",
         this.snakeMergeTick,
         state.plan.seed,
@@ -748,19 +1025,23 @@ export class CountdownFramedGenerator {
   }
 
   prepareClockPlan(tick, emitDebug = true) {
-    const evolution = countdownAppearanceEffectTicks(
-      "clock",
-      tick,
-      this.tickSeconds,
-      this.countFromSeconds,
-      this.appearanceOrderSettings,
-    );
+    const evolution = this.effectTicks("clock", tick);
+    const connectorEvolutionEnabled = this.hasClockSnakeConnector
+      && this.connectorActiveAt("clock-to-snake", tick * this.tickSeconds)
+      && evolution.evolutionEnabled;
     const seed = countdownAppearanceSeed(
       this.projectSeed,
       this.clockSettings.seed,
       evolution.evolutionTick,
-      this.clockSettings.evolveSeed && evolution.evolutionEnabled,
+      this.clockSettings.evolveSeed && connectorEvolutionEnabled,
     );
+    const handoffCellIndex = this.clockSnakeHandoff?.plan.sourceIndex
+      ?? countdownCellIndex(
+        this.projectSeed,
+        tick + 1,
+        this.layout,
+        this.minimumCellDistance,
+      );
     this.clockPlan = countdownClockPlan({
       seed,
       tick,
@@ -770,11 +1051,11 @@ export class CountdownFramedGenerator {
       squareCount: this.clockSettings.squareCount,
       dotsPerSquare: this.clockSettings.dotsPerSquare,
       evolutionSquareSizes: this.clockSettings.evolutionSquareSizes,
-      evolutionEnabled: evolution.evolutionEnabled,
+      evolutionEnabled: connectorEvolutionEnabled,
       evolutionProgress: evolution.evolutionProgress,
-      handoffCellIndex: this.clockSnakeHandoff.plan.sourceIndex,
+      handoffCellIndex,
       rangeInSubdivisions: this.clockSettings.rangeInSubdivisions,
-      textSafeZone: this.clockSettings.textSafeZone,
+      textSafeZone: this.textSafeZone,
       minimumSquareGapInSubdivisions:
         this.clockSettings.minimumSquareGapInSubdivisions,
     });
@@ -784,9 +1065,9 @@ export class CountdownFramedGenerator {
       && this.appearanceStage.effect === "clock"
     ) {
       debug.plan(
-        "countdown-effect mode=clock tick=%d evolution=%s evolutionTick=%d seed=%d cell=%d mode=%s size=%d handoff=%d squares=%d safeText=%s squareGap=%d reserveExpansion=%s reservations=%s placements=%s dots=%s",
+        "countdown-effect mode=clock tick=%d evolution=%s evolutionTick=%d seed=%d cell=%d mode=%s size=%d handoff=%d squares=%d safeText=%s squareGap=%d reserveExpansion=%s motion=%s reservations=%s placements=%s dots=%s",
         tick,
-        evolution.evolutionEnabled ? "yes" : "no",
+        connectorEvolutionEnabled ? "yes" : "no",
         evolution.evolutionTick,
         seed,
         this.cellIndex,
@@ -802,6 +1083,7 @@ export class CountdownFramedGenerator {
         ].join(":"),
         this.clockPlan.minimumSquareGapInSubdivisions,
         this.clockPlan.reservationExpansion ?? "origin",
+        this.clockPlan.squares.map(square => square.motionRole ?? "origin").join(","),
         this.clockPlan.squares.map(square => square.reservation
           ? `${square.reservation.left}:${square.reservation.top}`
           : "origin").join(","),
@@ -814,18 +1096,12 @@ export class CountdownFramedGenerator {
   }
 
   appendFramePlan(tick, retainedPlan = null) {
-    const evolution = countdownAppearanceEffectTicks(
-      "bubbles",
-      tick,
-      this.tickSeconds,
-      this.countFromSeconds,
-      this.appearanceOrderSettings,
-    );
+    const evolution = this.effectTicks("bubbles", tick);
     const seed = countdownAppearanceSeed(
       this.projectSeed,
-      this.snakeSettings.seed,
+      this.appearanceSeed,
       evolution.evolutionTick,
-      this.snakeSettings.evolveSeed && evolution.evolutionEnabled,
+      this.appearanceEvolveSeed && evolution.evolutionEnabled,
     );
     const maximumSquareCount = countdownFrameSquareCapacity(
       this.layout,
@@ -843,7 +1119,7 @@ export class CountdownFramedGenerator {
       this.projectSeed,
       tick,
       this.layout,
-      this.snakeSettings.minimumCellDistance,
+      this.minimumCellDistance,
       this.countFromSeconds,
     );
     const additions = countdownFramePlan({
@@ -879,13 +1155,7 @@ export class CountdownFramedGenerator {
   }
 
   prepareFramePlan(tick, emitDebug = true, forceRebuild = false) {
-    const effectTicks = countdownAppearanceEffectTicks(
-      "bubbles",
-      tick,
-      this.tickSeconds,
-      this.countFromSeconds,
-      this.appearanceOrderSettings,
-    );
+    const effectTicks = this.effectTicks("bubbles", tick);
     const planStartTick = tick >= effectTicks.startTick
       ? effectTicks.startTick
       : tick;
@@ -952,12 +1222,19 @@ export class CountdownFramedGenerator {
   }
 
   prepareSnakeBubbleRenderPlan() {
-    const snakeEnteringBubbles = this.snakeSettings.mergeIntoBubbles
-      && this.appearanceStage.effect === "snake"
+    const connectorActive = this.hasSnakeBubblesConnector
+      && this.synthState.activeConnections.some(
+        state => state.connection.id === this.snakeBubblesConnection.id,
+      );
+    const snakeEnteringBubbles = connectorActive
+      && this.snakeSettings.mergeIntoBubbles
+      && this.appearanceStage.trackId === this.snakeBubblesConnection.from
       && this.appearanceStage.evolutionEnabled;
-    const snakeRoamingInBubbles = this.snakeSettings.mergeIntoBubbles
-      && this.appearanceStage.effect === "bubbles";
-    if (!snakeEnteringBubbles && !snakeRoamingInBubbles) {
+    const bubblesAfterMerge = this.hasSnakeBubblesConnector
+      && this.snakeSettings.mergeIntoBubbles
+      && this.appearanceStage.trackId === this.snakeBubblesConnection.to
+      && this.synthState.localTime >= this.snakeBubblesConnection.evolution.endSeconds;
+    if (!snakeEnteringBubbles && !bubblesAfterMerge) {
       this.snakeBubblePlan = null;
       this.snakeBubbleFrame = null;
       this.snakeBubbleExclusionCircles = [];
@@ -965,15 +1242,14 @@ export class CountdownFramedGenerator {
       this.frameRenderPlan = this.framePlan;
       return;
     }
-    const progress = snakeEnteringBubbles
-      ? this.appearanceStage.evolutionProgress
-      : 1;
-    const sourceFrame = this.snakeRenderFrame;
-    const sourceTick = this.tick;
+    const sourceFrame = bubblesAfterMerge
+      ? this.snakeMergeRenderFrameAt(1)
+      : this.snakeRenderFrame;
+    const sourceTick = this.snakeHandoff?.tick ?? this.tick;
     this.snakeBubblePlan = countdownSnakeBubblePlan({
       layout: this.layout,
-      cells: sourceFrame.cells,
-      progress,
+      cells: sourceFrame.consumedCells ?? [],
+      progress: 1,
       appearanceTick: sourceTick,
       subdivisionLevel: this.frameSettings.subdivisionLevel,
     });
@@ -988,7 +1264,7 @@ export class CountdownFramedGenerator {
       this.framePlan,
       this.snakeBubblePlan,
     );
-    if (snakeRoamingInBubbles) {
+    if (bubblesAfterMerge) {
       this.snakeBubbleFrame = null;
       this.frameTextSafeRectangle = null;
       return;
@@ -997,7 +1273,7 @@ export class CountdownFramedGenerator {
       layout: this.layout,
       cellIndex: this.cellIndex,
       subdivisionLevel: this.frameSettings.subdivisionLevel,
-      textSafeZone: this.clockSettings.textSafeZone,
+      textSafeZone: this.textSafeZone,
     });
     this.snakeBubbleFrame = countdownFrameAt(
       this.frameRenderPlan,
@@ -1011,18 +1287,12 @@ export class CountdownFramedGenerator {
   }
 
   prepareFrameAvoidance(tick, beatElapsed) {
-    if (this.appearanceStage.effect !== "bubbles") {
+    const effectTicks = this.effectTicks("bubbles", tick);
+    if (!effectTicks.owned) {
       this.frameAvoidanceBubbles = [];
       this.frameAvoidanceCircles = [];
       return;
     }
-    const effectTicks = countdownAppearanceEffectTicks(
-      "bubbles",
-      tick,
-      this.tickSeconds,
-      this.countFromSeconds,
-      this.appearanceOrderSettings,
-    );
     const beatFraction = Math.max(
       0,
       Math.min(1, beatElapsed / this.tickSeconds),
@@ -1039,16 +1309,10 @@ export class CountdownFramedGenerator {
         this.projectSeed,
         sourceTick,
         this.layout,
-        this.snakeSettings.minimumCellDistance,
+        this.minimumCellDistance,
         this.countFromSeconds,
       );
-      const sourceEvolution = countdownAppearanceEffectTicks(
-        "bubbles",
-        sourceTick,
-        this.tickSeconds,
-        this.countFromSeconds,
-        this.appearanceOrderSettings,
-      );
+      const sourceEvolution = this.effectTicks("bubbles", sourceTick);
       const radiusInCells = countdownFrameAvoidanceRadiusAt(
         sourceEvolution.evolutionProgress,
         this.frameSettings.avoidance,
@@ -1129,46 +1393,54 @@ export class CountdownFramedGenerator {
     }
     this.elapsed = time;
     const localTime = time % this.durationSeconds;
+    this.synthState = countdownSynthAt(localTime, this.synthSettings);
+    this.timelineDebug.update({
+      elapsedSeconds: localTime,
+      activeIds: [
+        ...this.synthState.activeTracks.map(state => `track:${state.track.id}`),
+        ...this.synthState.activeConnections.map(
+          state => `connection:${state.connection.id}`,
+        ),
+      ],
+    });
     const previousStage = this.appearanceStage;
-    const nextStage = countdownAppearanceStageAt(
-      localTime,
-      this.appearanceOrderSettings,
-    );
+    const nextStage = countdownSynthStageAt(localTime, this.synthSettings);
     const orderChanged = nextStage.effect !== previousStage.effect
       || nextStage.phase !== previousStage.phase;
     this.appearanceStage = nextStage;
-    const bubblesEvolution = countdownAppearanceEffectTicks(
-      "bubbles",
-      Math.min(
-        this.countFromSeconds - 1,
-        Math.floor(localTime / this.tickSeconds),
-      ),
-      this.tickSeconds,
-      this.countFromSeconds,
-      this.appearanceOrderSettings,
-    );
-    this.frameGrowthProgress = countdownFrameGrowthAt(
-      this.appearanceStage.effect === "bubbles"
-        ? bubblesEvolution.evolutionProgress
-        : 0,
-      this.frameSettings,
-    );
     const nextTick = Math.min(
       this.countFromSeconds - 1,
       Math.floor(localTime / this.tickSeconds),
     );
-    this.frameAvoidanceRadiusInCells = countdownFrameAvoidanceRadiusAt(
-      bubblesEvolution.evolutionProgress,
-      this.frameSettings.avoidance,
-    );
+    const bubblesEvolution = this.hasBubblesTrack
+      ? this.effectTicks("bubbles", nextTick)
+      : null;
+    this.frameGrowthProgress = this.frameSettings === null
+      ? 0
+      : countdownFrameGrowthAt(
+        bubblesEvolution.owned
+          ? bubblesEvolution.evolutionProgress
+          : 0,
+        this.frameSettings,
+      );
+    this.frameAvoidanceRadiusInCells = this.frameSettings === null
+      ? 0
+      : countdownFrameAvoidanceRadiusAt(
+        bubblesEvolution.evolutionProgress,
+        this.frameSettings.avoidance,
+      );
     const beatElapsed = localTime - nextTick * this.tickSeconds;
     const beatProgress = beatElapsed / this.tickSeconds;
     const previousNoiseWigglePhase = this.frameNoiseWigglePhase;
-    this.frameNoiseWigglePhase = beatProgress < 0.5 ? "out" : "back";
-    this.frameNoiseTemporalOffset = countdownFrameNoiseBeatOffsetAt(
-      beatProgress,
-      this.frameSettings.visibilityNoiseMotion,
-    );
+    this.frameNoiseWigglePhase = this.frameSettings === null
+      ? "out"
+      : (beatProgress < 0.5 ? "out" : "back");
+    this.frameNoiseTemporalOffset = this.frameSettings === null
+      ? 0
+      : countdownFrameNoiseBeatOffsetAt(
+        beatProgress,
+        this.frameSettings.visibilityNoiseMotion,
+      );
     const noiseWiggleChanged = this.frameNoiseWigglePhase
       !== previousNoiseWigglePhase;
     const nextRevealStep = Math.min(
@@ -1186,7 +1458,7 @@ export class CountdownFramedGenerator {
         this.projectSeed,
         nextTick,
         this.layout,
-        this.snakeSettings.minimumCellDistance,
+        this.minimumCellDistance,
         this.countFromSeconds,
       );
       debug.cells(
@@ -1195,64 +1467,90 @@ export class CountdownFramedGenerator {
         this.label,
         this.cellIndex,
       );
-      this.prepareSnakePlan(nextTick);
-      this.prepareClockPlan(nextTick);
-      this.prepareFramePlan(
-        nextTick,
-        true,
-        orderChanged && this.appearanceStage.effect === "bubbles",
-      );
+      if (this.hasSnakeTrack) this.prepareSnakePlan(nextTick);
+      if (this.hasClockTrack) this.prepareClockPlan(nextTick);
+      if (this.hasBubblesTrack) {
+        this.prepareFramePlan(
+          nextTick,
+          true,
+          orderChanged && this.appearanceStage.effect === "bubbles",
+        );
+      }
     } else if (orderChanged) {
       if (this.appearanceStage.effect === "clock") {
         this.prepareClockPlan(nextTick);
       } else if (this.appearanceStage.effect === "snake") {
         this.prepareSnakePlan(nextTick);
-      } else {
+      } else if (this.appearanceStage.effect === "bubbles") {
         this.prepareFramePlan(nextTick, true, true);
       }
     }
     const previousSnakeHead = this.snakeFrame?.headStep ?? -1;
-    const nextSnakeFrame = countdownSnakeFrame(
-      this.snakePlan,
-      beatElapsed / this.snakeSettings.duration.seconds,
-      this.snakeFrameSettings,
-    );
-    this.snakeFrame = nextSnakeFrame;
-    const nextSnakeRenderFrame = this.snakeMergeActive
-      ? countdownSnakeMergeFrame(nextSnakeFrame)
-      : nextSnakeFrame;
-    this.snakeRenderFrame = nextSnakeRenderFrame;
-    const snakeChanged = nextSnakeFrame.headStep !== previousSnakeHead;
+    const previousSnakeRenderedCellCount = this.snakeRenderFrame?.cells.length ?? -1;
+    let nextSnakeFrame = null;
+    let nextSnakeRenderFrame = null;
+    let snakeChanged = false;
+    if (this.hasSnakeTrack) {
+      nextSnakeFrame = countdownSnakeFrame(
+        this.snakePlan,
+        beatElapsed / this.snakeSettings.duration.seconds,
+        this.snakeFrameSettings,
+      );
+      this.snakeFrame = nextSnakeFrame;
+      const snakeBubbleMerge = this.snakeBubbleMergeAt(localTime);
+      this.snakeBubbleMergeProgress = snakeBubbleMerge.mergeProgress;
+      const mergedIntoBubbles = this.hasSnakeBubblesConnector
+        && this.appearanceStage.trackId === this.snakeBubblesConnection.to
+        && localTime >= this.snakeBubblesConnection.evolution.endSeconds;
+      nextSnakeRenderFrame = mergedIntoBubbles
+        ? this.snakeMergeRenderFrameAt(1)
+        : (this.snakeMergeActive
+          ? this.snakeMergeRenderFrameAt(this.snakeBubbleMergeProgress)
+          : nextSnakeFrame);
+      this.snakeRenderFrame = nextSnakeRenderFrame;
+      snakeChanged = nextSnakeFrame.headStep !== previousSnakeHead
+        || nextSnakeRenderFrame.cells.length !== previousSnakeRenderedCellCount;
+    }
     const previousSnakeBubbleCount = this.snakeBubblePlan?.squares.length ?? 0;
     const previousClockVisible = this.clockFrame?.visibleCount ?? -1;
-    const nextClockFrame = countdownClockFrame(
-      this.clockPlan,
-      beatElapsed / this.clockSettings.duration.seconds,
-      this.clockSettings,
-    );
-    this.clockFrame = nextClockFrame;
-    const clockChanged = nextClockFrame.visibleCount !== previousClockVisible;
+    let nextClockFrame = null;
+    let clockChanged = false;
+    if (this.hasClockTrack) {
+      nextClockFrame = countdownClockFrame(
+        this.clockPlan,
+        beatElapsed / this.clockSettings.duration.seconds,
+        this.clockSettings,
+      );
+      this.clockFrame = nextClockFrame;
+      clockChanged = nextClockFrame.visibleCount !== previousClockVisible;
+    }
     const previousAvoidancePhases = this.frameAvoidanceBubbles
       .map(bubble => `${bubble.sourceTick}:${bubble.phase}`)
       .join(",");
-    this.prepareFrameAvoidance(nextTick, beatElapsed);
+    if (this.hasBubblesTrack) this.prepareFrameAvoidance(nextTick, beatElapsed);
     const avoidancePhases = this.frameAvoidanceBubbles
       .map(bubble => `${bubble.sourceTick}:${bubble.phase}`)
       .join(",");
     const avoidanceChanged = avoidancePhases !== previousAvoidancePhases;
-    this.sampleFrameVisibility(time);
-    this.prepareSnakeBubbleRenderPlan();
+    if (this.hasBubblesTrack) {
+      this.sampleFrameVisibility(time);
+      this.prepareSnakeBubbleRenderPlan();
+    }
     const snakeBubbleChanged = (this.snakeBubblePlan?.squares.length ?? 0)
       !== previousSnakeBubbleCount;
-    const nextFrameFrame = countdownFrameAt(
-      this.frameRenderPlan,
-      beatElapsed / this.tickSeconds,
-      this.frameSettings,
-      this.frameAvoidanceCircles,
-      this.frameVisibilityPlane,
-      this.snakeBubbleExclusionCircles,
-    );
-    this.frameFrame = nextFrameFrame;
+    let nextFrameFrame = null;
+    if (this.hasBubblesTrack) {
+      nextFrameFrame = countdownFrameAt(
+        this.frameRenderPlan,
+        beatElapsed / this.tickSeconds,
+        this.frameSettings,
+        this.frameAvoidanceCircles,
+        this.frameVisibilityPlane,
+        this.snakeBubbleExclusionCircles,
+      );
+      this.frameFrame = nextFrameFrame;
+    }
+    this.rebuildCountdownRenderPlan(force);
     if (
       !force
       && !tickChanged
@@ -1268,9 +1566,10 @@ export class CountdownFramedGenerator {
     this.revealStep = nextRevealStep;
     if (force || orderChanged) {
       debug.timeline(
-        "countdown-order stage=%s index=%d/3 next=%s phase=%s evolution=%s stageProgress=%.3f evolutionProgress=%.3f",
+        "countdown-order stage=%s index=%d/%d next=%s phase=%s evolution=%s stageProgress=%.3f evolutionProgress=%.3f",
         this.appearanceStage.effect,
         this.appearanceStage.index,
+        this.synthSettings.tracks.length,
         this.appearanceStage.nextEffect,
         this.appearanceStage.phase,
         this.appearanceStage.evolutionEnabled ? "yes" : "no",
@@ -1292,7 +1591,8 @@ export class CountdownFramedGenerator {
       );
     }
     if (
-      (
+      this.hasSnakeTrack
+      && (
         this.appearanceStage.effect === "snake"
         || (this.snakeSettings.mergeIntoBubbles
           && this.appearanceStage.effect === "bubbles")
@@ -1307,22 +1607,21 @@ export class CountdownFramedGenerator {
         this.snakeMergeActive ? "yes" : "no",
         nextSnakeFrame.headStep,
         this.snakePlan.path.length - 1,
-        this.snakePlan.path[nextSnakeFrame.headStep],
+        nextSnakeRenderFrame.cells.at(-1)?.index ?? -1,
         nextSnakeRenderFrame.cells.map(cell => cell.level).join(","),
         nextSnakeFrame.progress,
       );
     }
     if (
-      this.snakeSettings.mergeIntoBubbles
-      && (this.appearanceStage.effect === "snake" || this.appearanceStage.effect === "bubbles")
+      this.hasSnakeBubblesConnector
+      && this.snakeSettings.mergeIntoBubbles
+      && this.snakeMergeActive
       && (force || orderChanged || tickChanged || snakeChanged || snakeBubbleChanged)
     ) {
       debug.transition(
         "countdown-merge from=snake to=bubbles phase=%s progress=%.3f sourceTick=%d headCell=%d levels=%s trailSquares=%d mergedSquares=%d overlap=%d exclusionCircles=%d hiddenDots=%d textSafeHiddenSquares=%d",
-        this.appearanceStage.effect === "snake" ? "entering" : "roaming",
-        this.appearanceStage.effect === "snake"
-          ? this.appearanceStage.evolutionProgress
-          : 1,
+        this.snakeBubbleMergeProgress < 1 ? "merging" : "merged",
+        this.snakeBubbleMergeProgress,
         this.snakeBubblePlan?.tick ?? -1,
         nextSnakeRenderFrame.cells.at(-1)?.index ?? -1,
         nextSnakeRenderFrame.cells.map(cell => cell.level).join(","),
@@ -1335,7 +1634,8 @@ export class CountdownFramedGenerator {
       );
     }
     if (
-      this.appearanceStage.effect === "clock"
+      this.hasClockTrack
+      && this.appearanceStage.effect === "clock"
       && this.clockSettings.enabled
       && (force || orderChanged || tickChanged || clockChanged)
     ) {
@@ -1351,7 +1651,8 @@ export class CountdownFramedGenerator {
       );
     }
     if (
-      this.frameSettings.enabled
+      this.hasBubblesTrack
+      && this.frameSettings.enabled
       && this.appearanceStage.effect === "bubbles"
       && (
         force
@@ -1389,6 +1690,210 @@ export class CountdownFramedGenerator {
     }
   }
 
+  countdownEffectLayers(track) {
+    const enabled = track.use === "clock"
+      ? this.clockSettings.enabled
+      : (track.use === "snake" ? this.snakeSettings.enabled : this.frameSettings.enabled);
+    if (!enabled) return [];
+    return [{
+      id: `${track.id}:main`,
+      band: track.use === "clock" && !this.clockSettings.behindText
+        ? "above-timer"
+        : "behind-timer",
+      zIndex: track.zIndex,
+      trackIndex: track.index,
+      ownerType: "track",
+      ownerId: track.id,
+      trackId: track.id,
+      drawKey: track.use,
+    }];
+  }
+
+  countdownEffectSignal(track, time, state, seed) {
+    const common = {
+      id: track.id,
+      use: track.use,
+      seed,
+      time,
+      progress: state.progress,
+      evolutionProgress: state.evolutionProgress,
+      ports: Object.keys(track.descriptor.ports),
+    };
+    if (track.use === "clock") {
+      return {
+        ...common,
+        anchors: this.clockPlan === null ? [] : [{
+          cellIndex: this.clockPlan.handoffCellIndex,
+          role: "snake-origin",
+        }],
+        dots: this.clockFrame?.dots.map(dot => ({ ...dot })) ?? [],
+        masks: this.clockPlan === null ? [] : [{ ...this.clockPlan.textSafeZone }],
+      };
+    }
+    if (track.use === "snake") {
+      return {
+        ...common,
+        anchors: this.snakePlan === null ? [] : [
+          { cellIndex: this.snakePlan.sourceIndex, role: "source" },
+          { cellIndex: this.snakePlan.targetIndex, role: "target" },
+        ],
+        cells: this.snakeRenderFrame?.cells.map(cell => ({ ...cell })) ?? [],
+        tiles: this.snakeBubblePlan?.squares.map(square => ({
+          tileIndex: square.tileIndex,
+          sourceCellIndex: square.sourceCellIndex,
+          sourceLevel: square.sourceLevel,
+        })) ?? [],
+        masks: this.snakeBubbleExclusionCircles.map(circle => ({ ...circle })),
+      };
+    }
+    return {
+      ...common,
+      dots: this.frameFrame?.dots.map(dot => ({ ...dot })) ?? [],
+      tiles: this.frameRenderPlan?.squares.map(square => ({
+        tileIndex: square.tileIndex,
+        appearanceTick: square.appearanceTick,
+      })) ?? [],
+      masks: this.frameAvoidanceCircles.map(circle => ({ ...circle })),
+    };
+  }
+
+  rebuildCountdownRenderPlan(force = false) {
+    const nextTrackIds = new Set(
+      this.synthState.activeTracks.map(state => state.track.id),
+    );
+    const nextConnectionIds = new Set(
+      this.synthState.activeConnections.map(state => state.connection.id),
+    );
+    for (const id of this.previousActiveTrackIds) {
+      if (!nextTrackIds.has(id)) debug.timeline("countdown-track id=%s state=exit", id);
+    }
+    for (const id of this.previousActiveConnectionIds) {
+      if (!nextConnectionIds.has(id)) {
+        debug.transition("countdown-connector id=%s state=exit", id);
+      }
+    }
+    for (const id of nextTrackIds) {
+      if (!this.previousActiveTrackIds.has(id)) {
+        debug.timeline("countdown-track id=%s state=enter", id);
+      }
+    }
+    for (const state of this.synthState.activeConnections) {
+      if (!this.previousActiveConnectionIds.has(state.connection.id)) {
+        debug.transition(
+          "countdown-connector id=%s use=%s state=enter",
+          state.connection.id,
+          state.connection.use,
+        );
+      }
+    }
+
+    const trackPlans = this.synthState.activeTracks.map(state => {
+      const instance = this.effectInstances.get(state.track.id);
+      return { state, instance, plan: instance.planAt(this.synthState.localTime, state) };
+    });
+    const connectorLayers = [];
+    for (const state of this.synthState.activeConnections) {
+      const instance = this.connectorInstances.get(state.connection.id);
+      const plan = instance.planAt(this.synthState.localTime, state);
+      connectorLayers.push(...plan.layers);
+    }
+    this.renderLayers = sortCountdownRenderLayers([
+      ...trackPlans.flatMap(({ plan }) => plan.layers),
+      ...connectorLayers,
+    ]);
+    this.synthSignals = Object.fromEntries(trackPlans.map(({ state, plan }) => [
+      state.track.id,
+      plan.signal,
+    ]));
+    const signature = this.renderLayers.map(layer => (
+      `${layer.band}:${layer.zIndex}:${layer.ownerType}:${layer.ownerId}:${layer.id}`
+    )).join(",");
+    if (force || signature !== this.renderLayerSignature) {
+      debug.plan(
+        "countdown-synth plan=rebuilt tracks=%s connectors=%s layers=%s",
+        [...nextTrackIds].join(",") || "none",
+        [...nextConnectionIds].join(",") || "none",
+        signature || "timer-only",
+      );
+      this.renderLayerSignature = signature;
+    }
+    this.previousActiveTrackIds = nextTrackIds;
+    this.previousActiveConnectionIds = nextConnectionIds;
+  }
+
+  drawCountdownEffectLayer(track, layer, context) {
+    this.drawCountdownLayerByKey(layer.drawKey, context);
+  }
+
+  drawCountdownConnectorLayer(connection, layer, context) {
+    this.drawCountdownLayerByKey(layer.drawKey, context);
+  }
+
+  drawCountdownLayerByKey(drawKey, context) {
+    if (drawKey === "clock-to-snake" && (
+      this.clockFrame.evolutionMode === "snake-origin"
+      && this.clockFrame.visibleCount === this.clockFrame.totalDotCount
+    )) {
+      drawCountdownSnake(
+        context,
+        this.layout,
+        { cells: [{ index: this.clockPlan.handoffCellIndex, level: 0 }] },
+        this.snakeSettings,
+        this.snakePalette,
+      );
+      return;
+    }
+    if (drawKey === "clock" || drawKey === "clock-to-snake") {
+      drawCountdownClock(
+        context,
+        this.layout,
+        this.clockFrame,
+        this.clockSettings,
+        countdownClockDotColors(
+          this.clockFrame,
+          this.clockPalette,
+          this.clockFlicker,
+          this.elapsed,
+        ),
+      );
+      return;
+    }
+    if (drawKey === "snake") {
+      drawCountdownSnake(
+        context,
+        this.layout,
+        this.snakeRenderFrame,
+        this.snakeSettings,
+        this.snakePalette,
+      );
+      return;
+    }
+    const drawFrame = drawKey === "bubbles-handoff"
+      ? this.snakeBubbleFrame
+      : this.frameFrame;
+    if (drawFrame === null) return;
+    drawCountdownFrame(
+      context,
+      this.layout,
+      drawFrame,
+      this.frameSettings,
+      countdownFrameDotColors(
+        drawFrame,
+        this.framePalette,
+        this.frameFlicker,
+        this.elapsed,
+      ),
+      drawKey === "bubbles-handoff" ? 0 : this.frameGrowthProgress,
+    );
+  }
+
+  drawCountdownRenderLayer(layer, context) {
+    const instances = layer.ownerType === "track"
+      ? this.effectInstances
+      : this.connectorInstances;
+    instances.get(layer.ownerId)?.drawLayer(layer, context);
+  }
+
   draw(frame, planEntry, context) {
     if (!this.active) return;
     const column = this.cellIndex % this.layout.columns;
@@ -1403,82 +1908,8 @@ export class CountdownFramedGenerator {
     const widths = glyphs.map(glyph => context.measureText(glyph).width);
     const totalWidth = widths.reduce((sum, width) => sum + width, 0);
     const textLeft = x - totalWidth * 0.5;
-    const drawClock = () => {
-      if (this.appearanceStage.effect !== "clock") return;
-      if (
-        this.clockFrame.evolutionMode === "snake-origin"
-        && this.clockFrame.visibleCount === this.clockFrame.totalDotCount
-      ) {
-        drawCountdownSnake(
-          context,
-          this.layout,
-          { cells: [{ index: this.clockPlan.handoffCellIndex, level: 0 }] },
-          this.snakeSettings,
-          this.snakePalette,
-        );
-      } else {
-        drawCountdownClock(
-          context,
-          this.layout,
-          this.clockFrame,
-          this.clockSettings,
-          countdownClockDotColors(
-            this.clockFrame,
-            this.clockPalette,
-            this.clockFlicker,
-            this.elapsed,
-          ),
-        );
-      }
-    };
-    if (this.appearanceStage.effect === "clock") {
-      if (this.clockSettings.behindText) drawClock();
-    } else if (this.appearanceStage.effect === "snake") {
-      if (this.snakeBubbleFrame !== null) {
-        drawCountdownFrame(
-          context,
-          this.layout,
-          this.snakeBubbleFrame,
-          this.frameSettings,
-          countdownFrameDotColors(
-            this.snakeBubbleFrame,
-            this.framePalette,
-            this.frameFlicker,
-            this.elapsed,
-          ),
-          0,
-        );
-      }
-      drawCountdownSnake(
-        context,
-        this.layout,
-        this.snakeRenderFrame,
-        this.snakeSettings,
-        this.snakePalette,
-      );
-    } else {
-      drawCountdownFrame(
-        context,
-        this.layout,
-        this.frameFrame,
-        this.frameSettings,
-        countdownFrameDotColors(
-          this.frameFrame,
-          this.framePalette,
-          this.frameFlicker,
-          this.elapsed,
-        ),
-        this.frameGrowthProgress,
-      );
-      if (this.snakeSettings.mergeIntoBubbles) {
-        drawCountdownSnake(
-          context,
-          this.layout,
-          this.snakeRenderFrame,
-          this.snakeSettings,
-          this.snakePalette,
-        );
-      }
+    for (const layer of this.renderLayers) {
+      if (layer.band === "behind-timer") this.drawCountdownRenderLayer(layer, context);
     }
     let cursor = textLeft;
     for (let index = 0; index < glyphs.length; index += 1) {
@@ -1487,13 +1918,13 @@ export class CountdownFramedGenerator {
       context.fillText(glyphs[index], cursor + width * 0.5, y);
       cursor += width;
     }
-    if (
-      this.appearanceStage.effect === "clock"
-      && !this.clockSettings.behindText
-    ) {
-      drawClock();
+    for (const layer of this.renderLayers) {
+      if (layer.band === "above-timer") this.drawCountdownRenderLayer(layer, context);
     }
     if (frame?.showCellGrid === true) drawCellGridGuides(context, this.layout);
+    this.timelineDebug.draw(context, this.layout, {
+      exporting: frame?.exporting === true,
+    });
   }
 
   animationDuration() {
@@ -1595,14 +2026,17 @@ export class CountdownFramedGenerator {
         paletteIndices: [...this.paletteIndices],
       },
       appearance: {
-        seed: this.snakeSettings.seed,
-        evolveSeed: this.snakeSettings.evolveSeed,
-        minimumCellDistance: this.snakeSettings.minimumCellDistance,
+        seed: this.appearanceSeed,
+        evolveSeed: this.appearanceEvolveSeed,
+        minimumCellDistance: this.minimumCellDistance,
         order: {
-          stages: this.appearanceOrderSettings.stageDefinitions.map(
-            stage => ({ ...stage }),
-          ),
-          stageDurationSeconds: this.appearanceOrderSettings.stageDurationSeconds,
+          stages: this.synthSettings.tracks.map(track => ({
+            effect: track.use,
+            evolutionStartsAt: (
+              track.evolution.startSeconds - track.startSeconds
+            ) / track.durationSeconds,
+          })),
+          stageDurationSeconds: null,
           evolutionStartsAt: this.appearanceStage.evolutionStartsAt,
           activeEffect: this.appearanceStage.effect,
           nextEffect: this.appearanceStage.nextEffect,
@@ -1613,7 +2047,35 @@ export class CountdownFramedGenerator {
           phaseProgress: this.appearanceStage.phaseProgress,
           evolutionProgress: this.appearanceStage.evolutionProgress,
         },
-        snake: {
+        synth: {
+          activeTrackIds: this.synthState.activeTracks.map(state => state.track.id),
+          activeConnectionIds: this.synthState.activeConnections.map(
+            state => state.connection.id,
+          ),
+          tracks: this.synthSettings.tracks.map(track => ({
+            id: track.id,
+            use: track.use,
+            startSeconds: track.startSeconds,
+            durationSeconds: track.durationSeconds,
+            evolution: { ...track.evolution },
+            zIndex: track.zIndex,
+            seed: this.effectInstances.get(track.id).inspect().seed,
+            signal: this.synthSignals?.[track.id] ?? null,
+          })),
+          connections: this.synthSettings.connections.map(connection => ({
+            id: connection.id,
+            from: connection.from,
+            to: connection.to,
+            requestedUse: connection.requestedUse,
+            use: connection.use,
+            startSeconds: connection.startSeconds,
+            durationSeconds: connection.durationSeconds,
+            evolution: { ...connection.evolution },
+          })),
+          renderLayers: this.renderLayers.map(layer => ({ ...layer })),
+        },
+        timelineDebug: this.timelineDebug.inspect(),
+        snake: this.snakeSettings === null ? null : {
           enabled: this.snakeSettings.enabled,
           paletteName: this.snakeSettings.palette,
           palette: [...this.snakePalette],
@@ -1626,8 +2088,10 @@ export class CountdownFramedGenerator {
           maximumLengthCells: this.availableSnakeCellCount,
           growAfterEachTick: this.snakeSettings.growAfterEachTick,
           mergeIntoBubbles: this.snakeSettings.mergeIntoBubbles,
+          growthTick: this.snakeGrowthTick,
           mergeActive: this.snakeMergeActive,
           mergeTick: this.snakeMergeTick,
+          mergeProgress: this.snakeBubbleMergeProgress,
           bubbleClearanceInCells: this.snakeSettings.bubbleClearanceInCells,
           maximumSubdivisionLevel: this.snakeSettings.maximumSubdivisionLevel,
           handoff: this.snakeHandoff === null ? null : {
@@ -1655,10 +2119,15 @@ export class CountdownFramedGenerator {
             linearProgress: this.snakeRenderFrame.linearProgress,
             progress: this.snakeRenderFrame.progress,
             headStep: this.snakeRenderFrame.headStep,
+            mergeProgress: this.snakeRenderFrame.mergeProgress ?? 0,
+            consumedCellCount: this.snakeRenderFrame.consumedCellCount ?? 0,
+            consumedCells: this.snakeRenderFrame.consumedCells?.map(
+              cell => ({ ...cell }),
+            ) ?? [],
             cells: this.snakeRenderFrame.cells.map(cell => ({ ...cell })),
           },
         },
-        clock: {
+        clock: this.clockSettings === null ? null : {
           enabled: this.clockSettings.enabled,
           seed: this.clockSettings.seed,
           evolveSeed: this.clockSettings.evolveSeed,
@@ -1699,12 +2168,16 @@ export class CountdownFramedGenerator {
               this.clockPlan.minimumSquareGapInSubdivisions,
             squares: this.clockPlan.squares.map(square => ({
               squareIndex: square.squareIndex,
+              motionRole: square.motionRole,
               offsetX: square.offsetX,
               offsetY: square.offsetY,
               topLeftColumn: square.topLeftColumn,
               topLeftRow: square.topLeftRow,
               reservation: square.reservation
                 ? { ...square.reservation }
+                : null,
+              originReservation: square.originReservation
+                ? { ...square.originReservation }
                 : null,
               dots: square.dots.map(dot => ({ ...dot })),
             })),
@@ -1722,7 +2195,7 @@ export class CountdownFramedGenerator {
             dots: this.clockFrame.dots.map(dot => ({ ...dot })),
           },
         },
-        frame: {
+        frame: this.frameSettings === null ? null : {
           stageName: "bubbles",
           enabled: this.frameSettings.enabled,
           paletteName: this.frameSettings.palette,
@@ -1802,8 +2275,8 @@ export class CountdownFramedGenerator {
             active: this.snakeBubblePlan !== null,
             phase: this.snakeBubblePlan === null
               ? "inactive"
-              : (this.appearanceStage.effect === "snake" ? "entering" : "roaming"),
-            progress: this.snakeBubblePlan?.progress ?? 0,
+              : (this.snakeBubbleMergeProgress < 1 ? "merging" : "merged"),
+            progress: this.snakeBubbleMergeProgress,
             sourceTick: this.snakeBubblePlan?.tick ?? null,
             trailSquareCount: this.snakeBubblePlan?.squares.length ?? 0,
             availableTrailSquareCount: this.snakeBubblePlan?.availableSquareCount ?? 0,
@@ -1887,6 +2360,8 @@ export class CountdownFramedGenerator {
 
   dispose() {
     this.active = false;
+    for (const instance of this.effectInstances.values()) instance.dispose();
+    for (const instance of this.connectorInstances.values()) instance.dispose();
     this.disposed = true;
   }
 }

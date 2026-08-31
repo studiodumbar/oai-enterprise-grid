@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+import { SETTINGS } from "../config.js";
 import { createNoiseFieldRegistry, NoiseFieldSampler, resolveNoiseFieldSettings } from "../src/noise-fields/index.js";
 import { createHeadlessDirector } from "../src/debug/headless.js";
 import { diogoniseNoiseSettings } from "../src/export/diogonisator.js";
@@ -240,9 +241,14 @@ test("noise-grid defaults retain the remapped Diogo geometry and field setup", (
   director.dispose();
 });
 
-test("text phases keep noise time moving while visibility ramps and restores", () => {
-  const { director } = createHeadlessDirector({ composition: "noise-grid" });
+test("the standalone phase transition keeps noise time moving while visibility ramps", () => {
+  const settings = structuredClone(SETTINGS);
+  settings.noiseGrid.intro = { ...settings.noiseGrid.intro, enabled: false };
+  settings.noiseGrid.outro = { ...settings.noiseGrid.outro, enabled: false };
+  const { director } = createHeadlessDirector({ composition: "noise-grid", settings });
   const generator = director.generator("noiseGrid");
+  assert.equal(director.inspect().phaseOverlay, null);
+  assert.equal(director.inspect().noiseVisibilityTransition.name, "noise-visibility");
   const authored = generator.settingsSnapshot().noiseFields.layers.visibility;
   const introDuration = director.endpointDurations.start;
   const update = (dt, frameIndex) => director.update({
@@ -272,7 +278,7 @@ test("text phases keep noise time moving while visibility ramps and restores", (
   });
   assert.ok(
     generator.outputState.visibility.every(level => level.values.every(value => value === 0)),
-    "the text envelope must not wait for the authored visibility hold",
+    "the transition envelope must not wait for the authored visibility hold",
   );
 
   update(introDuration * 0.7, 2);
@@ -284,7 +290,7 @@ test("text phases keep noise time moving while visibility ramps and restores", (
   });
   assert.ok(
     generator.outputState.visibility.some(level => level.values.some(value => value === 1)),
-    "restored visibility must be observable before the text disappears",
+    "restored visibility must be observable before the phase ends",
   );
   assert.deepEqual(
     generator.settingsSnapshot().noiseFields.layers.visibility,
