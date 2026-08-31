@@ -1,4 +1,4 @@
-const COUNT_FROM_SECONDS = 30;
+const COUNT_FROM_SECONDS = 10;
 
 export const COUNTDOWN_FRAMED_CONFIG = {
   settings: {
@@ -27,15 +27,12 @@ export const COUNTDOWN_FRAMED_CONFIG = {
         evolveSeed: false,
         minimumCellDistance: 5,
         order: {
-          stages: [
-            { effect: "clock", evolutionStartsAt: 0.5 },
-            { effect: "snake", evolutionStartsAt: 0.5 },
-            { effect: "bubbles", evolutionStartsAt: 0 },
-          ],
+          // This pass runs the clock stage alone for the whole countdown.
+          stages: [{ effect: "clock", evolutionStartsAt: 0.5 }],
         },
         effects: {
           snake: {
-            enabled: true,
+            enabled: false,
             palette: "flocker",
             durationSeconds: "auto", // The snake arrives on the next beat.
             lengthCells: 7,
@@ -52,6 +49,8 @@ export const COUNTDOWN_FRAMED_CONFIG = {
             squareCount: 2,
             dotsPerSquare: 4,
             rangeInSubdivisions: { x: 8, y: 8 },
+            // Half-extent of the clear band around the label, in 8ths of a cell.
+            textSafeZoneInSubdivisions: { x: 4, y: 2 },
             dotMargin: 0,
             timingCurve: [0.42, 0, 0.58, 1],
           },

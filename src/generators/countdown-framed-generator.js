@@ -381,7 +381,7 @@ export class CountdownFramedGenerator {
       this.snakeSettings.timingCurve,
     );
     debug.config(
-      "countdown-effect mode=clock enabled=%s seed=%d evolveSeed=%s palette=%s duration=%.3f level=%d squares=%d dotsPerSquare=%d rangeX=%d rangeY=%d curve=%j",
+      "countdown-effect mode=clock enabled=%s seed=%d evolveSeed=%s palette=%s duration=%.3f level=%d squares=%d dotsPerSquare=%d rangeX=%d rangeY=%d safeZoneX=%.3f safeZoneY=%.3f curve=%j",
       this.clockSettings.enabled ? "yes" : "no",
       this.clockSettings.seed,
       this.clockSettings.evolveSeed ? "yes" : "no",
@@ -392,6 +392,8 @@ export class CountdownFramedGenerator {
       this.clockSettings.dotsPerSquare,
       this.clockSettings.rangeInSubdivisions.x,
       this.clockSettings.rangeInSubdivisions.y,
+      this.clockSettings.textSafeZoneInSubdivisions.x,
+      this.clockSettings.textSafeZoneInSubdivisions.y,
       this.clockSettings.timingCurve,
     );
     debug.config(
@@ -615,6 +617,7 @@ export class CountdownFramedGenerator {
       squareCount: this.clockSettings.squareCount,
       dotsPerSquare: this.clockSettings.dotsPerSquare,
       rangeInSubdivisions: this.clockSettings.rangeInSubdivisions,
+      textSafeZoneInSubdivisions: this.clockSettings.textSafeZoneInSubdivisions,
     });
     if (
       emitDebug
@@ -1330,6 +1333,9 @@ export class CountdownFramedGenerator {
           dotsPerSquare: this.clockSettings.dotsPerSquare,
           dotCount: this.clockSettings.squareCount * this.clockSettings.dotsPerSquare,
           rangeInSubdivisions: { ...this.clockSettings.rangeInSubdivisions },
+          textSafeZoneInSubdivisions: {
+            ...this.clockSettings.textSafeZoneInSubdivisions,
+          },
           flicker: this.clockFlicker.inspect(),
           plan: this.clockPlan === null ? null : {
             seed: this.clockPlan.seed,

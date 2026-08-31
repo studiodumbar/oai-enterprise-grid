@@ -41,6 +41,32 @@ import {
 import { manhattanGridDistance } from "../src/generators/pathfinding-strategies.js";
 import { createCountingContext, runFrames } from "../src/debug/headless.js";
 
+// The shipped composition runs the clock stage alone across ten seconds. These
+// settings restore the three-stage order so the snake and bubbles effects keep
+// their coverage.
+const THREE_STAGE_COUNTDOWN = {
+  ...SETTINGS.countdownFramed,
+  countFromSeconds: 30,
+  timing: { ...SETTINGS.countdownFramed.timing, bodyDurationSeconds: 30, beatCount: 30 },
+  appearance: {
+    ...SETTINGS.countdownFramed.appearance,
+    order: {
+      stages: [
+        { effect: "clock", evolutionStartsAt: 0.5 },
+        { effect: "snake", evolutionStartsAt: 0.5 },
+        { effect: "bubbles", evolutionStartsAt: 0 },
+      ],
+    },
+    effects: {
+      ...SETTINGS.countdownFramed.appearance.effects,
+      snake: {
+        ...SETTINGS.countdownFramed.appearance.effects.snake,
+        enabled: true,
+      },
+    },
+  },
+};
+
 function createGenerator({
   seed = 123,
   viewport = { width: 900, height: 600 },
@@ -153,9 +179,25 @@ test("countdown uses countFromSeconds as its duration and beat count", () => {
   });
 });
 
+test("countdown ships a clock-only order", () => {
+  const shipped = resolveCountdownAppearanceOrder(
+    SETTINGS.countdownFramed.appearance,
+    SETTINGS.countdownFramed.countFromSeconds,
+  );
+  assert.deepEqual(shipped.stages, ["clock"]);
+  assert.equal(shipped.stageDurationSeconds, 10);
+  assert.deepEqual(
+    [0, 4, 9].map(time => {
+      const stage = countdownAppearanceStageAt(time, shipped);
+      return [stage.effect, stage.phase];
+    }),
+    [["clock", "stable"], ["clock", "stable"], ["clock", "evolving"]],
+  );
+});
+
 test("countdown orders equal clock, snake, and bubbles stages", () => {
   const order = resolveCountdownAppearanceOrder(
-    SETTINGS.countdownFramed.appearance,
+    THREE_STAGE_COUNTDOWN.appearance,
     30,
   );
   assert.equal(order.stageDurationSeconds, 10);
@@ -176,7 +218,7 @@ test("countdown orders equal clock, snake, and bubbles stages", () => {
   );
   assert.equal(order.windows[2].evolutionStartsAt, 0);
   const sevenSecondOrder = resolveCountdownAppearanceOrder(
-    SETTINGS.countdownFramed.appearance,
+    THREE_STAGE_COUNTDOWN.appearance,
     7,
   );
   assert.equal(
@@ -342,7 +384,7 @@ test("snake body grows after each tick and stays inside board capacity", () => {
   assert.equal(countdownSnakeLengthAt(7, 100, false, 75), 7);
   assert.equal(countdownSnakeLengthAt(100, 0, true, 75), 75);
 
-  const generator = createGenerator();
+  const generator = createGenerator({ options: THREE_STAGE_COUNTDOWN });
   generator.enter({ time: 0 });
   assert.equal(generator.inspect().appearance.snake.growAfterEachTick, true);
   assert.equal(generator.inspect().appearance.snake.baseLengthCells, 7);
@@ -354,7 +396,7 @@ test("snake body grows after each tick and stays inside board capacity", () => {
     maximumLengthCells,
   );
 
-  const duration = SETTINGS.countdownFramed.countFromSeconds;
+  const duration = THREE_STAGE_COUNTDOWN.countFromSeconds;
   generator.update({ time: duration / 3 });
   assert.equal(generator.inspect().appearance.snake.lengthCells, 7);
   generator.update({ time: duration / 2 });
@@ -373,13 +415,13 @@ test("snake body grows after each tick and stays inside board capacity", () => {
 
   const fixed = createGenerator({
     options: {
-      ...SETTINGS.countdownFramed,
+      ...THREE_STAGE_COUNTDOWN,
       appearance: {
-        ...SETTINGS.countdownFramed.appearance,
+        ...THREE_STAGE_COUNTDOWN.appearance,
         effects: {
-          ...SETTINGS.countdownFramed.appearance.effects,
+          ...THREE_STAGE_COUNTDOWN.appearance.effects,
           snake: {
-            ...SETTINGS.countdownFramed.appearance.effects.snake,
+            ...THREE_STAGE_COUNTDOWN.appearance.effects.snake,
             growAfterEachTick: false,
           },
         },
@@ -393,22 +435,8 @@ test("snake body grows after each tick and stays inside board capacity", () => {
 });
 
 test("snake resolves and renders its independently declared palette", () => {
-  const generator = createGenerator({
-    options: {
-      ...SETTINGS.countdownFramed,
-      appearance: {
-        ...SETTINGS.countdownFramed.appearance,
-        effects: {
-          ...SETTINGS.countdownFramed.appearance.effects,
-          snake: {
-            ...SETTINGS.countdownFramed.appearance.effects.snake,
-            enabled: true,
-          },
-        },
-      },
-    },
-  });
-  generator.enter({ time: SETTINGS.countdownFramed.countFromSeconds / 3 });
+  const generator = createGenerator({ options: THREE_STAGE_COUNTDOWN });
+  generator.enter({ time: THREE_STAGE_COUNTDOWN.countFromSeconds / 3 });
   const snake = generator.inspect().appearance.snake;
   const paletteName = SETTINGS.countdownFramed.appearance.effects.snake.palette;
   assert.equal(snake.paletteName, paletteName);
@@ -444,6 +472,7 @@ test("clock reveals two nearby 2x2 squares clockwise per beat", () => {
     squareCount: settings.squareCount,
     dotsPerSquare: settings.dotsPerSquare,
     rangeInSubdivisions: settings.rangeInSubdivisions,
+    textSafeZoneInSubdivisions: settings.textSafeZoneInSubdivisions,
   });
 
   assert.equal(plan.squares.length, 2);
@@ -463,6 +492,32 @@ test("clock reveals two nearby 2x2 squares clockwise per beat", () => {
     [0, 1, 0, 1],
   );
   assert.equal(countdownClockFrame(plan, 0.999, settings).visibleCount, 8);
+
+  // Cell 4 of a 3x3 board centers the label at subdivision 12, 12.
+  const safeZone = settings.textSafeZoneInSubdivisions;
+  for (const square of plan.squares) {
+    assert.ok(
+      square.topLeftColumn >= 12 + safeZone.x
+      || square.topLeftColumn + 2 <= 12 - safeZone.x
+      || square.topLeftRow >= 12 + safeZone.y
+      || square.topLeftRow + 2 <= 12 - safeZone.y,
+      `square ${square.topLeftColumn}:${square.topLeftRow} overlaps the text safe zone`,
+    );
+  }
+  assert.throws(
+    () => countdownClockPlan({
+      seed: 42,
+      tick: 0,
+      layout: { columns: 3, rows: 3 },
+      cellIndex: 4,
+      subdivisionLevel: settings.subdivisionLevel,
+      squareCount: settings.squareCount,
+      dotsPerSquare: settings.dotsPerSquare,
+      rangeInSubdivisions: { x: 1, y: 1 },
+      textSafeZoneInSubdivisions: { x: 8, y: 8 },
+    }),
+    /outside the text safe zone/,
+  );
 });
 
 test("frame fits two level-three 2x2 squares close to digit anchors", () => {
@@ -682,14 +737,14 @@ test("frame visibility noise textures boundary and refilled squares", () => {
 });
 
 test("frame avoidance keeps earlier type bubbles alive for multi-beat lifetimes", () => {
-  const frame = SETTINGS.countdownFramed.appearance.effects.frame;
+  const frame = THREE_STAGE_COUNTDOWN.appearance.effects.frame;
   const generator = createGenerator({
     options: {
-      ...SETTINGS.countdownFramed,
+      ...THREE_STAGE_COUNTDOWN,
       appearance: {
-        ...SETTINGS.countdownFramed.appearance,
+        ...THREE_STAGE_COUNTDOWN.appearance,
         effects: {
-          ...SETTINGS.countdownFramed.appearance.effects,
+          ...THREE_STAGE_COUNTDOWN.appearance.effects,
           frame: {
             ...frame,
             avoidance: { ...frame.avoidance, durationBeats: 2 },
@@ -698,7 +753,7 @@ test("frame avoidance keeps earlier type bubbles alive for multi-beat lifetimes"
       },
     },
   });
-  const bubblesStart = SETTINGS.countdownFramed.countFromSeconds * 2 / 3;
+  const bubblesStart = THREE_STAGE_COUNTDOWN.countFromSeconds * 2 / 3;
   generator.enter({ time: bubblesStart + 1 });
   const bubbles = generator.inspect().appearance.frame.avoidance.bubbles;
 
@@ -876,22 +931,8 @@ test("frame evolution remaps any countdown length onto full board capacity", () 
 });
 
 test("frame varies around each time cell while keeping its seed fixed", () => {
-  const generator = createGenerator({
-    options: {
-      ...SETTINGS.countdownFramed,
-      appearance: {
-        ...SETTINGS.countdownFramed.appearance,
-        effects: {
-          ...SETTINGS.countdownFramed.appearance.effects,
-          frame: {
-            ...SETTINGS.countdownFramed.appearance.effects.frame,
-            enabled: true,
-          },
-        },
-      },
-    },
-  });
-  const bubblesStart = SETTINGS.countdownFramed.countFromSeconds * 2 / 3;
+  const generator = createGenerator({ options: THREE_STAGE_COUNTDOWN });
+  const bubblesStart = THREE_STAGE_COUNTDOWN.countFromSeconds * 2 / 3;
   generator.enter({ time: bubblesStart });
   const initial = generator.inspect();
   const initialDots = initial.appearance.frame.plan.dots;
@@ -913,9 +954,9 @@ test("frame varies around each time cell while keeping its seed fixed", () => {
   assert.equal(initial.appearance.frame.flicker.modeSettings.speed, 0.04);
   assert.equal(
     initial.appearance.frame.flicker.modeSettings.spatialScale,
-    SETTINGS.countdownFramed.flicker.modes.noise.spatialScale,
+    THREE_STAGE_COUNTDOWN.flicker.modes.noise.spatialScale,
   );
-  const authoredFrame = SETTINGS.countdownFramed.appearance.effects.frame;
+  const authoredFrame = THREE_STAGE_COUNTDOWN.appearance.effects.frame;
   assert.equal(
     initial.appearance.frame.avoidance.radiusInCells,
     authoredFrame.avoidance.radiusInCells,
@@ -1029,7 +1070,7 @@ test("frame varies around each time cell while keeping its seed fixed", () => {
     next.appearance.frame.dotCount
       - next.appearance.frame.frame.avoidedSquareCount * 4,
   );
-  generator.update({ time: SETTINGS.countdownFramed.countFromSeconds - 0.001 });
+  generator.update({ time: THREE_STAGE_COUNTDOWN.countFromSeconds - 0.001 });
   const nearZero = generator.inspect().appearance.frame;
   assert.equal(nearZero.growthProgress, 0);
   assert.equal(nearZero.radius, initial.appearance.frame.radius);
@@ -1045,10 +1086,10 @@ test("frame varies around each time cell while keeping its seed fixed", () => {
 });
 
 test("frame accumulation is deterministic for sequential playback and seeking", () => {
-  const sequential = createGenerator({ seed: 319 });
-  const sought = createGenerator({ seed: 319 });
-  const bubblesStart = SETTINGS.countdownFramed.countFromSeconds * 2 / 3;
-  const targetTick = SETTINGS.countdownFramed.countFromSeconds - 1;
+  const sequential = createGenerator({ seed: 319, options: THREE_STAGE_COUNTDOWN });
+  const sought = createGenerator({ seed: 319, options: THREE_STAGE_COUNTDOWN });
+  const bubblesStart = THREE_STAGE_COUNTDOWN.countFromSeconds * 2 / 3;
+  const targetTick = THREE_STAGE_COUNTDOWN.countFromSeconds - 1;
   sequential.enter({ time: bubblesStart });
   for (let tick = bubblesStart + 1; tick <= targetTick; tick += 1) {
     sequential.update({ time: tick });

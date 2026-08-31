@@ -9,11 +9,11 @@ export const GLOBAL_CONFIG = {
   },
 
   ui: {
-    showCompositionPanel: false,
+    showCompositionPanel: true,
     showCellGrid: false,
-    showExportPanel: false,
-    noisePreview: true,
-    flockPreview: false,
+    showExportPanel: true,
+    noisePreview: false,
+    flockPreview: true,
   },
 
   // Machine-readable tracing. Channels: timeline, transition, plan, cells,
@@ -35,7 +35,7 @@ export const GLOBAL_CONFIG = {
     // game-of-life
     // voronoi,
     // noise-grid
-    active: "countdown-framed",
+    active: "interactive-flock",
     // Legacy phase defaults stay flat while compositions are migrated one by
     // one. A migrated composition overrides them through circleEndpoints.
     startWithCircle: true,

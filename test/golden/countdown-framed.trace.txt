@@ -3,12 +3,12 @@
 
 [cg:timeline] f=0000 phase=core cycle=0 duration=- paused=no
 [cg:plan] f=0000 enter=countdownFramedGrid
-[cg:plan] f=0000 countdown-effect mode=clock tick=0 evolution=no evolutionTick=0 seed=1 cell=13 squares=2 placements=26:11,24:4 dots=994,995,1083,1082,376,377,465,464
-[cg:timeline] f=0000 countdown-order stage=clock index=0/3 next=snake phase=stable evolution=no stageProgress=0.002 evolutionProgress=0.000
+[cg:plan] f=0000 countdown-effect mode=clock tick=0 evolution=no evolutionTick=0 seed=1 cell=13 squares=2 placements=20:14,24:4 dots=1252,1253,1341,1340,376,377,465,464
+[cg:timeline] f=0000 countdown-order stage=clock index=0/3 next=clock phase=stable evolution=no stageProgress=0.002 evolutionProgress=0.000
 [cg:transition] f=0000 countdown-intro tick=0 step=0 colors=[0,0,0,0,0]
 [cg:transition] f=0000 countdown-clock tick=0 visible=2/8 progress=0.001
 [cg:plan] f=0000 render=[countdownFramedGrid@1.00]
-[cg:timeline] f=0001 phase=core cycle=0 duration=30.000 paused=no
+[cg:timeline] f=0001 phase=core cycle=0 duration=10.000 paused=no
 [cg:transition] f=0003 countdown-intro tick=0 step=1 colors=[0,0,1,0,0]
 [cg:transition] f=0007 countdown-intro tick=0 step=2 colors=[0,1,2,1,0]
 [cg:transition] f=0011 countdown-intro tick=0 step=3 colors=[1,2,3,2,1]
@@ -17,7 +17,7 @@
 [cg:transition] f=0020 countdown-clock tick=0 visible=4/8 progress=0.255
 [cg:transition] f=0030 countdown-clock tick=0 visible=6/8 progress=0.529
 [cg:transition] f=0039 countdown-clock tick=0 visible=8/8 progress=0.768
-[cg:plan] f=0059 countdown-effect mode=clock tick=1 evolution=no evolutionTick=0 seed=1 cell=38 squares=2 placements=40:25,48:19 dots=2240,2241,2329,2328,1720,1721,1809,1808
+[cg:plan] f=0059 countdown-effect mode=clock tick=1 evolution=no evolutionTick=0 seed=1 cell=38 squares=2 placements=49:25,48:19 dots=2249,2250,2338,2337,1720,1721,1809,1808
 [cg:transition] f=0059 countdown-intro tick=1 step=0 colors=[0,0,0,0,0]
 [cg:transition] f=0059 countdown-clock tick=1 visible=2/8 progress=0.000
 [cg:plan] f=0060 render=[countdownFramedGrid@1.00]
@@ -29,7 +29,7 @@
 [cg:transition] f=0080 countdown-clock tick=1 visible=4/8 progress=0.255
 [cg:transition] f=0090 countdown-clock tick=1 visible=6/8 progress=0.529
 [cg:transition] f=0099 countdown-clock tick=1 visible=8/8 progress=0.768
-[cg:plan] f=0120 countdown-effect mode=clock tick=2 evolution=no evolutionTick=0 seed=1 cell=43 squares=2 placements=78:32,75:25 dots=2894,2895,2983,2982,2275,2276,2364,2363
+[cg:plan] f=0120 countdown-effect mode=clock tick=2 evolution=no evolutionTick=0 seed=1 cell=43 squares=2 placements=82:35,75:25 dots=3162,3163,3251,3250,2275,2276,2364,2363
 [cg:transition] f=0120 countdown-intro tick=2 step=0 colors=[0,0,0,0,0]
 [cg:transition] f=0120 countdown-clock tick=2 visible=2/8 progress=0.001
 [cg:plan] f=0121 render=[countdownFramedGrid@1.00]
@@ -41,7 +41,7 @@
 [cg:transition] f=0140 countdown-clock tick=2 visible=4/8 progress=0.255
 [cg:transition] f=0150 countdown-clock tick=2 visible=6/8 progress=0.529
 [cg:transition] f=0159 countdown-clock tick=2 visible=8/8 progress=0.768
-[cg:plan] f=0180 countdown-effect mode=clock tick=3 evolution=no evolutionTick=0 seed=1 cell=62 squares=2 placements=52:42,55:51 dots=3748,3749,3837,3836,4543,4544,4632,4631
+[cg:plan] f=0180 countdown-effect mode=clock tick=3 evolution=no evolutionTick=0 seed=1 cell=62 squares=2 placements=53:43,66:44 dots=3837,3838,3926,3925,3938,3939,4027,4026
 [cg:transition] f=0180 countdown-intro tick=3 step=0 colors=[0,0,0,0,0]
 [cg:transition] f=0180 countdown-clock tick=3 visible=2/8 progress=0.001
 [cg:plan] f=0181 render=[countdownFramedGrid@1.00]
@@ -53,7 +53,7 @@
 [cg:transition] f=0200 countdown-clock tick=3 visible=4/8 progress=0.255
 [cg:transition] f=0210 countdown-clock tick=3 visible=6/8 progress=0.529
 [cg:transition] f=0219 countdown-clock tick=3 visible=8/8 progress=0.768
-[cg:plan] f=0240 countdown-effect mode=clock tick=4 evolution=no evolutionTick=0 seed=1 cell=19 squares=2 placements=74:9,62:6 dots=866,867,955,954,590,591,679,678
+[cg:plan] f=0240 countdown-effect mode=clock tick=4 evolution=no evolutionTick=0 seed=1 cell=19 squares=2 placements=75:10,62:6 dots=955,956,1044,1043,590,591,679,678
 [cg:transition] f=0240 countdown-intro tick=4 step=0 colors=[0,0,0,0,0]
 [cg:transition] f=0240 countdown-clock tick=4 visible=2/8 progress=0.001
 [cg:plan] f=0241 render=[countdownFramedGrid@1.00]
@@ -65,11 +65,11 @@
 [cg:transition] f=0260 countdown-clock tick=4 visible=4/8 progress=0.255
 [cg:transition] f=0270 countdown-clock tick=4 visible=6/8 progress=0.529
 [cg:transition] f=0279 countdown-clock tick=4 visible=8/8 progress=0.768
-[cg:plan] f=0300 countdown-effect mode=clock tick=5 evolution=yes evolutionTick=0 seed=1 cell=26 squares=2 placements=28:20,29:15 dots=1788,1789,1877,1876,1349,1350,1438,1437
-[cg:timeline] f=0300 countdown-order stage=clock index=0/3 next=snake phase=evolving evolution=yes stageProgress=0.502 evolutionProgress=0.003
+[cg:plan] f=0300 countdown-effect mode=clock tick=5 evolution=yes evolutionTick=0 seed=1 cell=26 squares=2 placements=39:22,29:15 dots=1975,1976,2064,2063,1349,1350,1438,1437
+[cg:timeline] f=0300 countdown-order stage=clock index=0/3 next=clock phase=evolving evolution=yes stageProgress=0.502 evolutionProgress=0.003
 [cg:transition] f=0300 countdown-intro tick=5 step=0 colors=[0,0,0,0,0]
 [cg:transition] f=0300 countdown-clock tick=5 visible=2/8 progress=0.001
-[cg:timeline] f=0301 phase=core cycle=0 duration=30.000 paused=no
+[cg:timeline] f=0301 phase=core cycle=0 duration=10.000 paused=no
 [cg:plan] f=0301 render=[countdownFramedGrid@1.00]
 [cg:transition] f=0303 countdown-intro tick=5 step=1 colors=[0,0,1,0,0]
 [cg:transition] f=0307 countdown-intro tick=5 step=2 colors=[0,1,2,1,0]
@@ -79,7 +79,7 @@
 [cg:transition] f=0320 countdown-clock tick=5 visible=4/8 progress=0.255
 [cg:transition] f=0330 countdown-clock tick=5 visible=6/8 progress=0.529
 [cg:transition] f=0339 countdown-clock tick=5 visible=8/8 progress=0.768
-[cg:plan] f=0360 countdown-effect mode=clock tick=6 evolution=yes evolutionTick=1 seed=1 cell=31 squares=2 placements=79:13,76:17 dots=1223,1224,1312,1311,1572,1573,1661,1660
+[cg:plan] f=0360 countdown-effect mode=clock tick=6 evolution=yes evolutionTick=1 seed=1 cell=31 squares=2 placements=79:13,68:18 dots=1223,1224,1312,1311,1652,1653,1741,1740
 [cg:transition] f=0360 countdown-intro tick=6 step=0 colors=[0,0,0,0,0]
 [cg:transition] f=0360 countdown-clock tick=6 visible=2/8 progress=0.001
 [cg:plan] f=0361 render=[countdownFramedGrid@1.00]
@@ -91,7 +91,7 @@
 [cg:transition] f=0380 countdown-clock tick=6 visible=4/8 progress=0.255
 [cg:transition] f=0390 countdown-clock tick=6 visible=6/8 progress=0.529
 [cg:transition] f=0399 countdown-clock tick=6 visible=8/8 progress=0.768
-[cg:plan] f=0420 countdown-effect mode=clock tick=7 evolution=yes evolutionTick=2 seed=1 cell=57 squares=2 placements=17:40,22:43 dots=3537,3538,3626,3625,3806,3807,3895,3894
+[cg:plan] f=0420 countdown-effect mode=clock tick=7 evolution=yes evolutionTick=2 seed=1 cell=57 squares=2 placements=17:40,16:46 dots=3537,3538,3626,3625,4064,4065,4153,4152
 [cg:transition] f=0420 countdown-intro tick=7 step=0 colors=[0,0,0,0,0]
 [cg:transition] f=0420 countdown-clock tick=7 visible=2/8 progress=0.001
 [cg:plan] f=0421 render=[countdownFramedGrid@1.00]
@@ -103,7 +103,7 @@
 [cg:transition] f=0440 countdown-clock tick=7 visible=4/8 progress=0.255
 [cg:transition] f=0450 countdown-clock tick=7 visible=6/8 progress=0.529
 [cg:transition] f=0459 countdown-clock tick=7 visible=8/8 progress=0.768
-[cg:plan] f=0480 countdown-effect mode=clock tick=8 evolution=yes evolutionTick=3 seed=1 cell=54 squares=2 placements=86:43,79:42 dots=3870,3871,3959,3958,3775,3776,3864,3863
+[cg:plan] f=0480 countdown-effect mode=clock tick=8 evolution=yes evolutionTick=3 seed=1 cell=54 squares=2 placements=82:40,81:43 dots=3602,3603,3691,3690,3865,3866,3954,3953
 [cg:transition] f=0480 countdown-intro tick=8 step=0 colors=[0,0,0,0,0]
 [cg:transition] f=0480 countdown-clock tick=8 visible=2/8 progress=0.001
 [cg:plan] f=0481 render=[countdownFramedGrid@1.00]
@@ -115,7 +115,7 @@
 [cg:transition] f=0500 countdown-clock tick=8 visible=4/8 progress=0.255
 [cg:transition] f=0509 countdown-clock tick=8 visible=6/8 progress=0.500
 [cg:transition] f=0519 countdown-clock tick=8 visible=8/8 progress=0.768
-[cg:plan] f=0539 countdown-effect mode=clock tick=9 evolution=yes evolutionTick=4 seed=1 cell=67 squares=2 placements=11:46,4:46 dots=4059,4060,4148,4147,4052,4053,4141,4140
+[cg:plan] f=0539 countdown-effect mode=clock tick=9 evolution=yes evolutionTick=4 seed=1 cell=70 squares=2 placements=35:46,28:46 dots=4083,4084,4172,4171,4076,4077,4165,4164
 [cg:transition] f=0539 countdown-intro tick=9 step=0 colors=[0,0,0,0,0]
 [cg:transition] f=0539 countdown-clock tick=9 visible=2/8 progress=0.000
 [cg:plan] f=0540 render=[countdownFramedGrid@1.00]
@@ -127,91 +127,75 @@
 [cg:transition] f=0560 countdown-clock tick=9 visible=4/8 progress=0.255
 [cg:transition] f=0569 countdown-clock tick=9 visible=6/8 progress=0.500
 [cg:transition] f=0579 countdown-clock tick=9 visible=8/8 progress=0.768
-[cg:plan] f=0599 countdown-effect mode=snake tick=10 evolution=no evolutionTick=0 seed=1 length=7 maximum=75 cellFrom=40 cellTo=14 from=29 to=25 path=29,28,27,26,25
-[cg:timeline] f=0599 countdown-order stage=snake index=1/3 next=bubbles phase=stable evolution=no stageProgress=0.000 evolutionProgress=0.000
-[cg:transition] f=0599 countdown-intro tick=10 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0599 countdown-snake tick=10 head=0/4 cell=29 progress=0.000
-[cg:timeline] f=0600 phase=core cycle=0 duration=30.000 paused=no
+[cg:timeline] f=0599 phase=core cycle=1 duration=10.000 paused=no
+[cg:plan] f=0599 countdown-effect mode=clock tick=0 evolution=no evolutionTick=0 seed=1 cell=13 squares=2 placements=20:14,24:4 dots=1252,1253,1341,1340,376,377,465,464
+[cg:timeline] f=0599 countdown-order stage=clock index=0/3 next=clock phase=stable evolution=no stageProgress=0.000 evolutionProgress=0.000
+[cg:transition] f=0599 countdown-intro tick=0 step=0 colors=[0,0,0,0,0]
+[cg:transition] f=0599 countdown-clock tick=0 visible=2/8 progress=0.000
+[cg:timeline] f=0600 phase=core cycle=1 duration=10.000 paused=no
 [cg:plan] f=0600 render=[countdownFramedGrid@1.00]
-[cg:transition] f=0603 countdown-intro tick=10 step=1 colors=[0,0,1,0,0]
-[cg:transition] f=0607 countdown-intro tick=10 step=2 colors=[0,1,2,1,0]
-[cg:transition] f=0611 countdown-intro tick=10 step=3 colors=[1,2,3,2,1]
-[cg:transition] f=0615 countdown-intro tick=10 step=4 colors=[2,3,3,3,2]
-[cg:transition] f=0618 countdown-snake tick=10 head=1/4 cell=28 progress=0.209
-[cg:transition] f=0619 countdown-intro tick=10 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0626 countdown-snake tick=10 head=2/4 cell=27 progress=0.414
-[cg:transition] f=0633 countdown-snake tick=10 head=3/4 cell=26 progress=0.614
-[cg:transition] f=0641 countdown-snake tick=10 head=4/4 cell=25 progress=0.813
-[cg:plan] f=0659 countdown-effect mode=snake tick=11 evolution=no evolutionTick=0 seed=1 length=7 maximum=75 cellFrom=14 cellTo=70 from=25 to=59 path=25,26,37,48,59
-[cg:transition] f=0659 countdown-intro tick=11 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0659 countdown-snake tick=11 head=0/4 cell=25 progress=0.000
+[cg:transition] f=0603 countdown-intro tick=0 step=1 colors=[0,0,1,0,0]
+[cg:transition] f=0607 countdown-intro tick=0 step=2 colors=[0,1,2,1,0]
+[cg:transition] f=0611 countdown-intro tick=0 step=3 colors=[1,2,3,2,1]
+[cg:transition] f=0615 countdown-intro tick=0 step=4 colors=[2,3,3,3,2]
+[cg:transition] f=0619 countdown-intro tick=0 step=5 colors=[3,3,3,3,3]
+[cg:transition] f=0620 countdown-clock tick=0 visible=4/8 progress=0.255
+[cg:transition] f=0629 countdown-clock tick=0 visible=6/8 progress=0.500
+[cg:transition] f=0639 countdown-clock tick=0 visible=8/8 progress=0.768
+[cg:plan] f=0659 countdown-effect mode=clock tick=1 evolution=no evolutionTick=0 seed=1 cell=38 squares=2 placements=49:25,48:19 dots=2249,2250,2338,2337,1720,1721,1809,1808
+[cg:transition] f=0659 countdown-intro tick=1 step=0 colors=[0,0,0,0,0]
+[cg:transition] f=0659 countdown-clock tick=1 visible=2/8 progress=0.000
 [cg:plan] f=0660 render=[countdownFramedGrid@1.00]
-[cg:transition] f=0663 countdown-intro tick=11 step=1 colors=[0,0,1,0,0]
-[cg:transition] f=0667 countdown-intro tick=11 step=2 colors=[0,1,2,1,0]
-[cg:transition] f=0671 countdown-intro tick=11 step=3 colors=[1,2,3,2,1]
-[cg:transition] f=0675 countdown-intro tick=11 step=4 colors=[2,3,3,3,2]
-[cg:transition] f=0678 countdown-snake tick=11 head=1/4 cell=26 progress=0.209
-[cg:transition] f=0679 countdown-intro tick=11 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0686 countdown-snake tick=11 head=2/4 cell=37 progress=0.414
-[cg:transition] f=0693 countdown-snake tick=11 head=3/4 cell=48 progress=0.614
-[cg:transition] f=0701 countdown-snake tick=11 head=4/4 cell=59 progress=0.813
-[cg:plan] f=0719 countdown-effect mode=snake tick=12 evolution=no evolutionTick=0 seed=1 length=7 maximum=75 cellFrom=70 cellTo=3 from=59 to=14 path=59,58,47,36,25,14
-[cg:transition] f=0719 countdown-intro tick=12 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0719 countdown-snake tick=12 head=0/5 cell=59 progress=0.000
+[cg:transition] f=0663 countdown-intro tick=1 step=1 colors=[0,0,1,0,0]
+[cg:transition] f=0667 countdown-intro tick=1 step=2 colors=[0,1,2,1,0]
+[cg:transition] f=0671 countdown-intro tick=1 step=3 colors=[1,2,3,2,1]
+[cg:transition] f=0675 countdown-intro tick=1 step=4 colors=[2,3,3,3,2]
+[cg:transition] f=0679 countdown-intro tick=1 step=5 colors=[3,3,3,3,3]
+[cg:transition] f=0680 countdown-clock tick=1 visible=4/8 progress=0.255
+[cg:transition] f=0689 countdown-clock tick=1 visible=6/8 progress=0.500
+[cg:transition] f=0699 countdown-clock tick=1 visible=8/8 progress=0.768
+[cg:plan] f=0719 countdown-effect mode=clock tick=2 evolution=no evolutionTick=0 seed=1 cell=43 squares=2 placements=82:35,75:25 dots=3162,3163,3251,3250,2275,2276,2364,2363
+[cg:transition] f=0719 countdown-intro tick=2 step=0 colors=[0,0,0,0,0]
+[cg:transition] f=0719 countdown-clock tick=2 visible=2/8 progress=0.000
 [cg:plan] f=0720 render=[countdownFramedGrid@1.00]
-[cg:transition] f=0723 countdown-intro tick=12 step=1 colors=[0,0,1,0,0]
-[cg:transition] f=0727 countdown-intro tick=12 step=2 colors=[0,1,2,1,0]
-[cg:transition] f=0731 countdown-intro tick=12 step=3 colors=[1,2,3,2,1]
-[cg:transition] f=0735 countdown-intro tick=12 step=4 colors=[2,3,3,3,2]
-[cg:transition] f=0736 countdown-snake tick=12 head=1/5 cell=58 progress=0.167
-[cg:transition] f=0739 countdown-intro tick=12 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0744 countdown-snake tick=12 head=2/5 cell=47 progress=0.359
-[cg:transition] f=0749 countdown-snake tick=12 head=3/5 cell=36 progress=0.500
-[cg:transition] f=0755 countdown-snake tick=12 head=4/5 cell=25 progress=0.668
-[cg:transition] f=0763 countdown-snake tick=12 head=5/5 cell=14 progress=0.853
-[cg:plan] f=0779 countdown-effect mode=snake tick=13 evolution=no evolutionTick=0 seed=1 length=7 maximum=75 cellFrom=3 cellTo=76 from=14 to=65 path=14,15,16,17,18,29,40,41,42,43,54,65
-[cg:transition] f=0779 countdown-intro tick=13 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0779 countdown-snake tick=13 head=0/11 cell=14 progress=0.000
+[cg:transition] f=0723 countdown-intro tick=2 step=1 colors=[0,0,1,0,0]
+[cg:transition] f=0727 countdown-intro tick=2 step=2 colors=[0,1,2,1,0]
+[cg:transition] f=0731 countdown-intro tick=2 step=3 colors=[1,2,3,2,1]
+[cg:transition] f=0735 countdown-intro tick=2 step=4 colors=[2,3,3,3,2]
+[cg:transition] f=0739 countdown-intro tick=2 step=5 colors=[3,3,3,3,3]
+[cg:transition] f=0740 countdown-clock tick=2 visible=4/8 progress=0.255
+[cg:transition] f=0749 countdown-clock tick=2 visible=6/8 progress=0.500
+[cg:transition] f=0759 countdown-clock tick=2 visible=8/8 progress=0.768
+[cg:plan] f=0779 countdown-effect mode=clock tick=3 evolution=no evolutionTick=0 seed=1 cell=62 squares=2 placements=53:43,66:44 dots=3837,3838,3926,3925,3938,3939,4027,4026
+[cg:transition] f=0779 countdown-intro tick=3 step=0 colors=[0,0,0,0,0]
+[cg:transition] f=0779 countdown-clock tick=3 visible=2/8 progress=0.000
 [cg:plan] f=0780 render=[countdownFramedGrid@1.00]
-[cg:transition] f=0783 countdown-intro tick=13 step=1 colors=[0,0,1,0,0]
-[cg:transition] f=0787 countdown-intro tick=13 step=2 colors=[0,1,2,1,0]
-[cg:transition] f=0791 countdown-intro tick=13 step=3 colors=[1,2,3,2,1]
-[cg:transition] f=0792 countdown-snake tick=13 head=1/11 cell=15 progress=0.096
-[cg:transition] f=0795 countdown-intro tick=13 step=4 colors=[2,3,3,3,2]
-[cg:transition] f=0796 countdown-snake tick=13 head=2/11 cell=16 progress=0.167
-[cg:transition] f=0799 countdown-intro tick=13 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0800 countdown-snake tick=13 head=3/11 cell=17 progress=0.255
-[cg:transition] f=0804 countdown-snake tick=13 head=4/11 cell=18 progress=0.359
-[cg:transition] f=0807 countdown-snake tick=13 head=5/11 cell=29 progress=0.443
-[cg:transition] f=0809 countdown-snake tick=13 head=6/11 cell=40 progress=0.500
-[cg:transition] f=0812 countdown-snake tick=13 head=7/11 cell=41 progress=0.586
-[cg:transition] f=0815 countdown-snake tick=13 head=8/11 cell=42 progress=0.668
-[cg:transition] f=0819 countdown-snake tick=13 head=9/11 cell=43 progress=0.768
-[cg:transition] f=0823 countdown-snake tick=13 head=10/11 cell=54 progress=0.853
-[cg:transition] f=0827 countdown-snake tick=13 head=11/11 cell=65 progress=0.918
-[cg:plan] f=0839 countdown-effect mode=snake tick=14 evolution=no evolutionTick=0 seed=1 length=7 maximum=75 cellFrom=76 cellTo=26 from=65 to=37 path=65,64,63,62,61,50,39,38,37
-[cg:transition] f=0839 countdown-intro tick=14 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0839 countdown-snake tick=14 head=0/8 cell=65 progress=0.000
+[cg:transition] f=0783 countdown-intro tick=3 step=1 colors=[0,0,1,0,0]
+[cg:transition] f=0787 countdown-intro tick=3 step=2 colors=[0,1,2,1,0]
+[cg:transition] f=0791 countdown-intro tick=3 step=3 colors=[1,2,3,2,1]
+[cg:transition] f=0795 countdown-intro tick=3 step=4 colors=[2,3,3,3,2]
+[cg:transition] f=0799 countdown-intro tick=3 step=5 colors=[3,3,3,3,3]
+[cg:transition] f=0800 countdown-clock tick=3 visible=4/8 progress=0.255
+[cg:transition] f=0809 countdown-clock tick=3 visible=6/8 progress=0.500
+[cg:transition] f=0819 countdown-clock tick=3 visible=8/8 progress=0.768
+[cg:plan] f=0839 countdown-effect mode=clock tick=4 evolution=no evolutionTick=0 seed=1 cell=19 squares=2 placements=75:10,62:6 dots=955,956,1044,1043,590,591,679,678
+[cg:transition] f=0839 countdown-intro tick=4 step=0 colors=[0,0,0,0,0]
+[cg:transition] f=0839 countdown-clock tick=4 visible=2/8 progress=0.000
 [cg:plan] f=0840 render=[countdownFramedGrid@1.00]
-[cg:transition] f=0843 countdown-intro tick=14 step=1 colors=[0,0,1,0,0]
-[cg:transition] f=0847 countdown-intro tick=14 step=2 colors=[0,1,2,1,0]
-[cg:transition] f=0851 countdown-intro tick=14 step=3 colors=[1,2,3,2,1]
-[cg:transition] f=0853 countdown-snake tick=14 head=1/8 cell=64 progress=0.112
-[cg:transition] f=0855 countdown-intro tick=14 step=4 colors=[2,3,3,3,2]
-[cg:transition] f=0859 countdown-intro tick=14 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0859 countdown-snake tick=14 head=2/8 cell=63 progress=0.232
-[cg:transition] f=0864 countdown-snake tick=14 head=3/8 cell=62 progress=0.359
-[cg:transition] f=0868 countdown-snake tick=14 head=4/8 cell=61 progress=0.471
-[cg:transition] f=0871 countdown-snake tick=14 head=5/8 cell=50 progress=0.557
-[cg:transition] f=0875 countdown-snake tick=14 head=6/8 cell=39 progress=0.668
-[cg:transition] f=0880 countdown-snake tick=14 head=7/8 cell=38 progress=0.791
-[cg:transition] f=0886 countdown-snake tick=14 head=8/8 cell=37 progress=0.904
-[cg:plan] f=0899 countdown-effect mode=snake tick=15 evolution=yes evolutionTick=0 seed=1 length=7 maximum=75 cellFrom=26 cellTo=69 from=37 to=58 path=37,36,47,58
-[cg:timeline] f=0899 countdown-order stage=snake index=1/3 next=bubbles phase=evolving evolution=yes stageProgress=0.500 evolutionProgress=0.000
-[cg:transition] f=0899 countdown-intro tick=15 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0899 countdown-snake tick=15 head=0/3 cell=37 progress=0.000
+[cg:transition] f=0843 countdown-intro tick=4 step=1 colors=[0,0,1,0,0]
+[cg:transition] f=0847 countdown-intro tick=4 step=2 colors=[0,1,2,1,0]
+[cg:transition] f=0851 countdown-intro tick=4 step=3 colors=[1,2,3,2,1]
+[cg:transition] f=0855 countdown-intro tick=4 step=4 colors=[2,3,3,3,2]
+[cg:transition] f=0859 countdown-intro tick=4 step=5 colors=[3,3,3,3,3]
+[cg:transition] f=0860 countdown-clock tick=4 visible=4/8 progress=0.255
+[cg:transition] f=0869 countdown-clock tick=4 visible=6/8 progress=0.500
+[cg:transition] f=0879 countdown-clock tick=4 visible=8/8 progress=0.768
+[cg:plan] f=0899 countdown-effect mode=clock tick=5 evolution=yes evolutionTick=0 seed=1 cell=26 squares=2 placements=39:22,29:15 dots=1975,1976,2064,2063,1349,1350,1438,1437
+[cg:timeline] f=0899 countdown-order stage=clock index=0/3 next=clock phase=evolving evolution=yes stageProgress=0.500 evolutionProgress=0.000
+[cg:transition] f=0899 countdown-intro tick=5 step=0 colors=[0,0,0,0,0]
+[cg:transition] f=0899 countdown-clock tick=5 visible=2/8 progress=0.000
 
 # draw volume
 blankFrames=0
 firstDrawnFrame=0
-totalFill=4119
+totalFill=4496

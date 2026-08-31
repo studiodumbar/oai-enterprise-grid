@@ -20,9 +20,14 @@ export function resolveCountdownAppearanceOrder(appearance, totalDurationSeconds
     authored.order,
     "countdownFramed.appearance.order",
   );
-  if (!Array.isArray(order.stages) || order.stages.length !== COUNTDOWN_EFFECTS.length) {
+  if (
+    !Array.isArray(order.stages)
+    || order.stages.length < 1
+    || order.stages.length > COUNTDOWN_EFFECTS.length
+  ) {
     throw new RangeError(
-      "countdownFramed.appearance.order.stages must contain clock, snake, and bubbles.",
+      "countdownFramed.appearance.order.stages must list one to three of "
+      + "clock, snake, and bubbles.",
     );
   }
   const stageDefinitions = order.stages.map((authoredStage, index) => {
@@ -51,7 +56,7 @@ export function resolveCountdownAppearanceOrder(appearance, totalDurationSeconds
     });
   });
   const stages = stageDefinitions.map(stage => stage.effect);
-  if (new Set(stages).size !== COUNTDOWN_EFFECTS.length) {
+  if (new Set(stages).size !== stages.length) {
     throw new RangeError(
       "countdownFramed.appearance.order.stages cannot repeat an effect.",
     );
@@ -130,16 +135,28 @@ export function countdownAppearanceEffectTicks(
   totalTickCount,
   order,
 ) {
-  const window = order?.windows?.find(candidate => candidate.effect === effect);
-  if (!window) {
-    throw new RangeError(`Countdown appearance order has no "${effect}" stage.`);
+  if (!COUNTDOWN_EFFECTS.includes(effect)) {
+    throw new RangeError(`Countdown appearance effect "${effect}" is unknown.`);
   }
+  const window = order?.windows?.find(candidate => candidate.effect === effect);
   if (!Number.isSafeInteger(tick) || tick < 0 || tick >= totalTickCount) {
     throw new RangeError("Countdown appearance tick must be inside the countdown.");
   }
   requireFinitePositive(tickSeconds, "Countdown appearance tick seconds");
   if (!Number.isSafeInteger(totalTickCount) || totalTickCount <= 0) {
     throw new RangeError("Countdown appearance tick count must be positive.");
+  }
+  if (!window) {
+    // The order can omit an effect; its ticks then never become active.
+    return {
+      startTick: totalTickCount,
+      endTick: totalTickCount - 1,
+      evolutionStartTick: totalTickCount,
+      evolutionTickCount: 1,
+      evolutionEnabled: false,
+      evolutionTick: 0,
+      evolutionProgress: 0,
+    };
   }
   const startTick = Math.max(0, Math.floor(window.startSeconds / tickSeconds));
   const endTick = Math.min(

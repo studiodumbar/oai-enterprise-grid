@@ -32,6 +32,13 @@ function requirePositiveInteger(value, label) {
   return value;
 }
 
+function requireNonNegativeNumber(value, label) {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new RangeError(`${label} must be a non-negative number.`);
+  }
+  return value;
+}
+
 function requireString(value, label) {
   if (typeof value !== "string" || value.trim() === "") {
     throw new TypeError(`${label} must be a non-empty string.`);
@@ -105,6 +112,18 @@ export function resolveCountdownClockSettings(appearance, beatSeconds) {
     range.y,
     "countdownFramed.appearance.effects.clock.rangeInSubdivisions.y",
   );
+  const safeZone = requireObject(
+    clock.textSafeZoneInSubdivisions,
+    "countdownFramed.appearance.effects.clock.textSafeZoneInSubdivisions",
+  );
+  const safeZoneX = requireNonNegativeNumber(
+    safeZone.x,
+    "countdownFramed.appearance.effects.clock.textSafeZoneInSubdivisions.x",
+  );
+  const safeZoneY = requireNonNegativeNumber(
+    safeZone.y,
+    "countdownFramed.appearance.effects.clock.textSafeZoneInSubdivisions.y",
+  );
   if (!Number.isFinite(clock.dotMargin) || clock.dotMargin < 0 || clock.dotMargin >= 1) {
     throw new RangeError(
       "countdownFramed.appearance.effects.clock.dotMargin must be from zero up to one.",
@@ -124,6 +143,7 @@ export function resolveCountdownClockSettings(appearance, beatSeconds) {
     squareCount,
     dotsPerSquare,
     rangeInSubdivisions: Object.freeze({ x: rangeX, y: rangeY }),
+    textSafeZoneInSubdivisions: Object.freeze({ x: safeZoneX, y: safeZoneY }),
     dotMargin: clock.dotMargin,
     timingCurve: Object.freeze(normalizeBezierCurve(
       clock.timingCurve,
@@ -142,6 +162,7 @@ export function countdownClockPlan({
   squareCount = 2,
   dotsPerSquare = 4,
   rangeInSubdivisions,
+  textSafeZoneInSubdivisions,
 }) {
   const planSeed = requireNonNegativeInteger(seed, "Countdown clock seed") >>> 0;
   const appearanceTick = requireNonNegativeInteger(tick, "Countdown clock tick");
@@ -178,6 +199,18 @@ export function countdownClockPlan({
   const range = requireObject(rangeInSubdivisions, "Countdown clock range");
   const rangeX = requireNonNegativeInteger(range.x, "Countdown clock horizontal range");
   const rangeY = requireNonNegativeInteger(range.y, "Countdown clock vertical range");
+  const safeZone = requireObject(
+    textSafeZoneInSubdivisions,
+    "Countdown clock text safe zone",
+  );
+  const safeZoneX = requireNonNegativeNumber(
+    safeZone.x,
+    "Countdown clock horizontal safe zone",
+  );
+  const safeZoneY = requireNonNegativeNumber(
+    safeZone.y,
+    "Countdown clock vertical safe zone",
+  );
 
   const subdivisions = 1 << level;
   const gridColumns = columns * subdivisions;
@@ -208,7 +241,20 @@ export function countdownClockPlan({
       }
     }
   }
-  const candidates = [...candidatesByPosition.values()];
+  // The countdown label owns the middle of its cell, so every 2x2 square that
+  // touches the safe zone around it is dropped before ranking.
+  const clearsTextSafeZone = candidate => (
+    candidate.topLeftColumn >= textCenterColumn + safeZoneX
+    || candidate.topLeftColumn + 2 <= textCenterColumn - safeZoneX
+    || candidate.topLeftRow >= textCenterRow + safeZoneY
+    || candidate.topLeftRow + 2 <= textCenterRow - safeZoneY
+  );
+  const candidates = [...candidatesByPosition.values()].filter(clearsTextSafeZone);
+  if (candidates.length < squaresRequested) {
+    throw new RangeError(
+      "Countdown clock range cannot fit its squares outside the text safe zone.",
+    );
+  }
   const usedDotIndices = new Set();
   const squares = [];
   for (let squareIndex = 0; squareIndex < squaresRequested; squareIndex += 1) {
