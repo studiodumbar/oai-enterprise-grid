@@ -34,7 +34,7 @@ export const DEFAULT_PANEL_DEFINITIONS = Object.freeze([
   }),
   Object.freeze({
     id: "fields",
-    title: "Fields",
+    title: "Fields preview",
     code: "FLD",
     column: "right",
     width: 320,

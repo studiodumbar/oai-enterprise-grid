@@ -44,7 +44,7 @@ export const GLOBAL_CONFIG = {
         // game-of-life
         // voronoi,
         // noise-grid
-        active: "countdown-framed",
+        active: "interactive-flock",
         // Legacy phase defaults stay flat while compositions are migrated one by
         // one. A migrated composition overrides them through circleEndpoints.
         startWithCircle: true,
@@ -83,7 +83,7 @@ export const GLOBAL_CONFIG = {
     },
 
     // App-wide palette order; compositions can select another derived order.
-    palette: "flicker",
+    palette: "mono",
 
     noiseFields: {
         enabled: true,
