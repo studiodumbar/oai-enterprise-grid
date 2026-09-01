@@ -51,6 +51,7 @@ new window.p5(p => {
   let interactiveFlockPanel = null;
   let lastPanelSyncTime = -Infinity;
   let compositionTimingOverrides = new Map();
+  let noiseGridTimelineOverride = null;
   let longSideCellsOverrides = new Map();
   let paletteOverride = null;
   let projectSeed = createProjectSeed();
@@ -97,11 +98,15 @@ new window.p5(p => {
     document.title = `OAI // ${composition}`;
   }
 
-  function resolvedRuntimeConfig(overrides = compositionTimingOverrides) {
+  function resolvedRuntimeConfig(
+    overrides = compositionTimingOverrides,
+    timelineOverride = noiseGridTimelineOverride,
+  ) {
     if (
       overrides.size === 0
       && longSideCellsOverrides.size === 0
       && paletteOverride === null
+      && timelineOverride === null
     ) {
       return {
         settings: SETTINGS,
@@ -113,6 +118,7 @@ new window.p5(p => {
       compositionTimingOverrides: overrides,
       longSideCellsOverrides,
       paletteOverride,
+      noiseGridTimelineOverride: timelineOverride,
     });
   }
 
@@ -138,16 +144,16 @@ new window.p5(p => {
   function setCoreDurationFromConsole(seconds) {
     if (inputLocked) throw new Error("Core duration cannot change while input is locked.");
     const compositionId = director.inspect().compositionId;
+    if (compositionId === "noise-grid") {
+      return applyNoiseGridTimeline({
+        ...currentNoiseGridTimeline(),
+        holdSeconds: seconds,
+      }).holdSeconds;
+    }
     const nextOverrides = new Map(compositionTimingOverrides);
     nextOverrides.set(compositionId, seconds);
     const config = resolvedRuntimeConfig(nextOverrides);
     const saved = director.snapshotProjectState();
-    // Noise-grid snapshots carry their imported duration as generator state.
-    // Keep the newly authored composition clock authoritative during the rebuild.
-    if (compositionId === "noise-grid") {
-      const settings = saved.generators?.noiseGrid?.settings;
-      if (settings) settings.durationSeconds = seconds;
-    }
     let next = null;
     try {
       next = createDirectorForRuntime(runtime, config);
@@ -221,6 +227,89 @@ new window.p5(p => {
     return inspection?.compositionId === "noise-grid"
       ? inspection.timeline.coreDuration
       : null;
+  }
+
+  function currentNoiseGridTimeline() {
+    const inspection = director?.inspect();
+    if (inspection?.compositionId !== "noise-grid") return null;
+    const timeline = inspection.timeline;
+    const beatCount = COMPOSITION_DEFINITIONS["noise-grid"].timing.beatCount;
+    const phase = timeline.phase === "start"
+      ? "intro"
+      : (timeline.phase === "core" ? "hold" : (timeline.phase === "end" ? "outro" : null));
+    const introSeconds = timeline.endpointDurations.start;
+    const holdSeconds = timeline.coreDuration;
+    const outroSeconds = timeline.endpointDurations.end;
+    const totalSeconds = introSeconds + holdSeconds + outroSeconds;
+    const currentSeconds = ((timeline.outerElapsed % totalSeconds) + totalSeconds) % totalSeconds;
+    return {
+      introSeconds,
+      holdSeconds,
+      outroSeconds,
+      beatSeconds: timeline.coreDuration / beatCount,
+      phase,
+      currentSeconds,
+      position: currentSeconds / totalSeconds,
+    };
+  }
+
+  function applyNoiseGridTimeline(value) {
+    if (inputLocked) return currentNoiseGridTimeline();
+    const compositionId = director.inspect().compositionId;
+    if (compositionId !== "noise-grid") return null;
+    const nextOverride = {
+      introSeconds: Number(value?.introSeconds),
+      holdSeconds: Number(value?.holdSeconds),
+      outroSeconds: Number(value?.outroSeconds),
+    };
+    const config = resolvedRuntimeConfig(compositionTimingOverrides, nextOverride);
+    const saved = director.snapshotProjectState();
+    const settings = saved.generators?.noiseGrid?.settings;
+    if (settings) settings.durationSeconds = nextOverride.holdSeconds;
+    saved.compositionTimeline = {
+      version: 1,
+      ...nextOverride,
+    };
+    let next = null;
+    try {
+      next = createDirectorForRuntime(runtime, config);
+      next.restoreProjectState(saved);
+      next.update(currentFrame(0));
+      next.seek(elapsed);
+    } catch (error) {
+      next?.dispose();
+      debug.config(
+        "timing-override state=failed composition=noise-grid intro=%.3f body=%.3f outro=%.3f error=%s",
+        nextOverride.introSeconds,
+        nextOverride.holdSeconds,
+        nextOverride.outroSeconds,
+        error?.name ?? "Error",
+      );
+      throw error;
+    }
+
+    const previous = director;
+    director = next;
+    noiseGridTimelineOverride = nextOverride;
+    try {
+      previous.dispose();
+    } catch (error) {
+      debug.config(
+        "timing-override state=dispose-failed composition=noise-grid error=%s",
+        error?.name ?? "Error",
+      );
+    }
+    const applied = currentNoiseGridTimeline();
+    debug.config(
+      "timing-override state=applied composition=noise-grid intro=%.3f body=%.3f outro=%.3f",
+      applied.introSeconds,
+      applied.holdSeconds,
+      applied.outroSeconds,
+    );
+    syncDocumentTitle();
+    syncCompositionUi();
+    renderPreview();
+    return applied;
   }
 
   function setNoiseGridDurationFromUi(seconds) {
@@ -710,6 +799,8 @@ new window.p5(p => {
       setLongSideCells: setLongSideCellsFromUi,
       currentAnimationDuration: currentNoiseGridDuration,
       setAnimationDuration: setNoiseGridDurationFromUi,
+      currentNoiseGridTimeline,
+      setNoiseGridTimeline: applyNoiseGridTimeline,
     });
     interactiveFlockPanel = createInteractiveFlockPanel({
       container: panelWorkspace.body("interactive-flock"),

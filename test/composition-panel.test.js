@@ -9,6 +9,10 @@ import {
   normalizeLongSideCells,
   paletteChoices,
 } from "../src/ui/composition-panel.js";
+import {
+  noiseGridTimelineShares,
+  normalizeNoiseGridTimeline,
+} from "../src/ui/noise-grid-timeline-control.js";
 
 test("composition choices keep canonical ids and produce concise labels", () => {
   assert.deepEqual(canonicalCompositionChoices([
@@ -58,6 +62,39 @@ test("animation duration controls accept finite positive seconds", () => {
   assert.equal(normalizeAnimationDuration("2.5"), 2.5);
   assert.throws(() => normalizeAnimationDuration(0), /finite positive number/);
   assert.throws(() => normalizeAnimationDuration(Infinity), /finite positive number/);
+});
+
+test("noise-grid timeline controls normalize three positive phases", () => {
+  assert.deepEqual(normalizeNoiseGridTimeline({
+    introSeconds: "1.5",
+    holdSeconds: 6,
+    outroSeconds: 1.5,
+    beatSeconds: 1.5,
+    phase: "hold",
+    currentSeconds: 3,
+    position: 1 / 3,
+  }), {
+    introSeconds: 1.5,
+    holdSeconds: 6,
+    outroSeconds: 1.5,
+    beatSeconds: 1.5,
+    phase: "hold",
+    position: 1 / 3,
+    currentSeconds: 3,
+  });
+  assert.deepEqual(noiseGridTimelineShares({
+    introSeconds: 1.5,
+    holdSeconds: 6,
+    outroSeconds: 1.5,
+  }), {
+    intro: 1 / 6,
+    hold: 2 / 3,
+    outro: 1 / 6,
+  });
+  assert.throws(
+    () => normalizeNoiseGridTimeline({ introSeconds: 0, holdSeconds: 6, outroSeconds: 1 }),
+    /introSeconds must be a finite positive number/,
+  );
 });
 
 test("composition telemetry formats the shared timeline and interactive hint", () => {

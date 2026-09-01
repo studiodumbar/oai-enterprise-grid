@@ -845,9 +845,23 @@ export function countdownSnakeFrame(plan, linearProgress, settings) {
   }
   const progress = Math.max(0, Math.min(1, Number(linearProgress) || 0));
   const easedProgress = cubicBezierAt(progress, settings.timingCurve);
+  const headStartStep = plan.headStartStep ?? 0;
+  const headEndStep = plan.headEndStep ?? path.length - 1;
+  if (
+    !Number.isSafeInteger(headStartStep)
+    || !Number.isSafeInteger(headEndStep)
+    || headStartStep < 0
+    || headEndStep < headStartStep
+    || headEndStep >= path.length
+  ) {
+    throw new RangeError("Countdown snake head steps must describe a valid path segment.");
+  }
   const headStep = Math.min(
-    path.length - 1,
-    Math.floor(easedProgress * path.length),
+    headEndStep,
+    Math.floor(
+      headStartStep
+      + easedProgress * (headEndStep - headStartStep + 1),
+    ),
   );
   const firstStep = Math.max(0, headStep - settings.lengthCells + 1);
   const desiredBodyPath = path.slice(firstStep, headStep + 1);
@@ -927,6 +941,53 @@ export function countdownSnakeDisappearanceFrame(completedFrame, mode, linearPro
       cellIndices: [],
     },
     cells: completedFrame.cells.slice(removedCellCount).map(cell => ({ ...cell })),
+  };
+}
+
+export function countdownSnakeDiveFrame(
+  tailFrame,
+  routeFrame,
+  lifecycleProgress,
+  maximumSubdivisionLevel,
+) {
+  if (!Array.isArray(tailFrame?.cells) || !Array.isArray(routeFrame?.cells)) {
+    throw new TypeError("Countdown snake dive requires tail and route cells.");
+  }
+  const progress = Math.max(0, Math.min(1, Number(lifecycleProgress) || 0));
+  const maximumLevel = requireNonNegativeInteger(
+    maximumSubdivisionLevel,
+    "Countdown snake dive maximum level",
+  );
+  const combinedCells = [...tailFrame.cells, ...routeFrame.cells];
+  const lastPosition = new Map();
+  const collisionCellIndices = [];
+  for (let position = 0; position < combinedCells.length; position += 1) {
+    const index = combinedCells[position].index;
+    if (lastPosition.has(index)) collisionCellIndices.push(index);
+    lastPosition.set(index, position);
+  }
+  const uniqueCells = combinedCells
+    .filter((cell, position) => lastPosition.get(cell.index) === position);
+  const visibleCells = uniqueCells.filter(cell => cell.opacity !== 0);
+  let visibleBodyIndex = 0;
+  const cells = uniqueCells.map(cell => {
+    if (cell.opacity === 0) return { ...cell, level: 0 };
+    const level = countdownSnakeSubdivisionLevel(
+      visibleBodyIndex,
+      visibleCells.length,
+      maximumLevel,
+    );
+    visibleBodyIndex += 1;
+    return { ...cell, level };
+  });
+  return {
+    ...routeFrame,
+    lifecycleProgress: progress,
+    selfCollision: {
+      active: collisionCellIndices.length > 0,
+      cellIndices: [...new Set(collisionCellIndices)],
+    },
+    cells,
   };
 }
 

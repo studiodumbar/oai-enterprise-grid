@@ -272,6 +272,74 @@ canvas {
     --tp-monitor-foreground-color: #8cdfad;
 }
 
+.noise-timeline {
+    position: relative;
+    display: flex;
+    min-height: 24px;
+    margin: 4px 8px 8px;
+    overflow: hidden;
+    border: 1px solid var(--flight-moss);
+    border-radius: 3px;
+    background: var(--flight-carbon);
+    color: var(--flight-chalk);
+    font: 600 9px/24px var(--flight-mono);
+    letter-spacing: 0.04em;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.noise-timeline-segment {
+    min-width: 38px;
+    box-sizing: border-box;
+    border-right: 1px solid var(--flight-void);
+    opacity: 0.58;
+    transition: opacity 100ms ease, background-color 100ms ease;
+}
+
+.noise-timeline-segment.is-outro {
+    border-right: 0;
+}
+
+.noise-timeline-segment.is-intro,
+.noise-timeline-segment.is-outro {
+    background: rgba(140, 223, 173, 0.13);
+}
+
+.noise-timeline-segment.is-hold {
+    background: rgba(140, 223, 173, 0.28);
+}
+
+.noise-timeline-segment.is-active {
+    background: var(--flight-signal);
+    color: var(--flight-void);
+    opacity: 1;
+}
+
+.noise-timeline-playhead {
+    position: absolute;
+    z-index: 2;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--flight-chalk);
+    box-shadow: 0 0 0 1px rgba(5, 8, 6, 0.48);
+    pointer-events: none;
+    transform: translateX(-1px);
+}
+
+.noise-timeline-playhead::before {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-top: 4px solid var(--flight-chalk);
+    border-right: 3px solid transparent;
+    border-left: 3px solid transparent;
+    content: "";
+    transform: translateX(-50%);
+}
+
 /* Existing panels can move into a workspace host before their internals are rebuilt. */
 .panel-window-body > #export-panel {
     border: 0;

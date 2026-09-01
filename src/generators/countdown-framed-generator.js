@@ -47,6 +47,7 @@ import {
   countdownSnakeColorVariation,
   countdownSnakeDisappearanceFrame,
   countdownSnakeDisappearanceVariation,
+  countdownSnakeDiveFrame,
   countdownSnakeEngorgementFrame,
   countdownSnakeFrame,
   countdownSnakeLengthAt,
@@ -933,28 +934,12 @@ export class CountdownFramedGenerator {
       const localTime = this.elapsed % this.durationSeconds;
       if (this.hasSnakeTrack) {
         this.prepareSnakePlan(this.tick, false);
-        const resizedSnakeFrame = countdownSnakeFrame(
-          this.snakePlan,
-          this.snakeFrame?.linearProgress ?? 0,
-          this.snakeFrameSettings,
-        );
         const beatProgress = (
           localTime - this.tick * this.tickSeconds
         ) / this.tickSeconds;
-        const resizedDisappearanceFrame = countdownSnakeDisappearanceFrame(
-          this.snakeDisappearancePlan.completedFrame,
-          this.snakeDisappearancePlan.mode,
+        const collisionFrames = this.snakeLifecycleFramesAt(
           beatProgress,
-        );
-        const collisionFrames = this.snakeFramesWithSelfCollision(
-          this.snakeDisappearancePlan.phase === "dive"
-            ? {
-              ...resizedSnakeFrame,
-              cells: [],
-              selfCollision: { active: false, cellIndices: [] },
-            }
-            : resizedSnakeFrame,
-          resizedDisappearanceFrame,
+          beatProgress,
         );
         this.snakeFrame = collisionFrames.snakeFrame;
         this.snakeDisappearanceFrame = collisionFrames.disappearanceFrame;
@@ -1106,7 +1091,10 @@ export class CountdownFramedGenerator {
     return countdownSnakeToBubblesAt(time, this.snakeBubblesConnection);
   }
 
-  snakeStateAt(tick) {
+  snakeStateAt(tick, ownBodyCellIndices = [], forcedSecondaryDirection = null) {
+    if (!Array.isArray(ownBodyCellIndices)) {
+      throw new TypeError("Countdown snake own body cells must be an array.");
+    }
     const evolution = this.effectTicks("snake", tick);
     const growthEndTick = this.hasSnakeBubblesConnector
       ? Math.max(evolution.startTick, evolution.evolutionStartTick - 1)
@@ -1152,11 +1140,21 @@ export class CountdownFramedGenerator {
       seed,
       tick,
     );
-    const secondaryDirection = countdownSnakeSecondaryDirection(
+    const selectedSecondaryDirection = countdownSnakeSecondaryDirection(
       this.snakeSettings.secondaryMovement,
       seed,
       tick,
     );
+    if (
+      forcedSecondaryDirection !== null
+      && !this.snakeSettings.secondaryMovement.directions.includes(
+        forcedSecondaryDirection,
+      )
+    ) {
+      throw new RangeError("Countdown snake forced direction is unsupported.");
+    }
+    const secondaryDirection = forcedSecondaryDirection
+      ?? selectedSecondaryDirection;
     const textSafeCellIndices = countdownSnakeTextSafeCells(
       this.layout,
       sourceCellIndex,
@@ -1168,7 +1166,13 @@ export class CountdownFramedGenerator {
       this.textSafeZone,
     ).filter(index => index !== targetCellIndex);
     const blockedCellIndices = [
-      ...new Set([...textSafeCellIndices, ...targetSafeCellIndices]),
+      ...new Set([
+        ...textSafeCellIndices,
+        ...targetSafeCellIndices,
+        ...ownBodyCellIndices.filter(index => (
+          index !== sourceCellIndex && index !== targetCellIndex
+        )),
+      ]),
     ];
     let secondaryRoute = null;
     let secondaryRouteError = null;
@@ -1230,6 +1234,35 @@ export class CountdownFramedGenerator {
         textSafeCellIndices,
         blockedCellIndices,
       },
+    };
+  }
+
+  snakeStateAvoidingBodyAt(tick, ownBodyCellIndices) {
+    const blocked = new Set(ownBodyCellIndices);
+    let collisionState = null;
+    const directionAttempts = [
+      null,
+      ...(this.snakeSettings.secondaryMovement.enabled
+        ? this.snakeSettings.secondaryMovement.directions
+        : []),
+    ];
+    for (const direction of directionAttempts) {
+      let candidate;
+      try {
+        candidate = this.snakeStateAt(tick, ownBodyCellIndices, direction);
+      } catch (error) {
+        if (!/Countdown snake (?:path cannot avoid|cannot reach)/.test(
+          error?.message ?? "",
+        )) throw error;
+        continue;
+      }
+      const crossesBody = candidate.plan.path.some(index => blocked.has(index));
+      if (!crossesBody) return { state: candidate, fallback: false };
+      collisionState ??= candidate;
+    }
+    return {
+      state: collisionState ?? this.snakeStateAt(tick),
+      fallback: true,
     };
   }
 
@@ -1398,6 +1431,57 @@ export class CountdownFramedGenerator {
     this.snakeFieldCommitState = "idle";
   }
 
+  snakeLifecycleFramesAt(snakeLinearProgress, beatProgress) {
+    const phase = this.snakeDisappearancePlan.phase;
+    if (phase === "move") {
+      const snakeFrame = countdownSnakeFrame(
+        this.snakePlan,
+        snakeLinearProgress,
+        this.snakeFrameSettings,
+      );
+      const disappearanceFrame = countdownSnakeDisappearanceFrame(
+        this.snakeDisappearancePlan.completedFrame,
+        "instant",
+        beatProgress,
+      );
+      return this.snakeFramesWithSelfCollision(snakeFrame, disappearanceFrame);
+    }
+
+    const progress = Math.max(0, Math.min(1, beatProgress));
+    const lifecycleProgress = phase === "dive"
+      ? progress * 0.5
+      : 0.5 + progress * 0.5;
+    const tailProgress = phase === "dive" ? 0 : progress;
+    const tailFrame = countdownSnakeDisappearanceFrame(
+      this.snakeDisappearancePlan.completedFrame,
+      "tail-dive",
+      tailProgress,
+    );
+    const retreatProgress = phase === "dive" ? 0 : progress * progress;
+    const peakLength = this.snakePlan.peakLengthCells;
+    const normalLength = this.snakePlan.normalLengthCells;
+    const routeLength = Math.max(
+      normalLength,
+      Math.round(peakLength + (normalLength - peakLength) * retreatProgress),
+    );
+    const routeFrame = countdownSnakeFrame(
+      this.snakePlan,
+      progress,
+      { ...this.snakeFrameSettings, lengthCells: routeLength },
+    );
+    const snakeFrame = countdownSnakeDiveFrame(
+      tailFrame,
+      routeFrame,
+      lifecycleProgress,
+      this.snakeSettings.maximumSubdivisionLevel,
+    );
+    const disappearanceFrame = {
+      ...tailFrame,
+      cells: [],
+    };
+    return this.snakeFramesWithSelfCollision(snakeFrame, disappearanceFrame);
+  }
+
   snakeFramesWithSelfCollision(snakeFrame, disappearanceFrame) {
     const disappearingCells = new Set(
       disappearanceFrame.cells.map(cell => cell.index),
@@ -1426,12 +1510,15 @@ export class CountdownFramedGenerator {
     const diveAt = Array(count).fill(false);
     let startTick = modes.findIndex(mode => mode === "instant");
     if (startTick < 0) startTick = 0;
-    let previousDive = false;
+    const diveTicks = [];
     for (let offset = 0; offset < count; offset += 1) {
       const tick = (startTick + offset) % count;
-      const dive = modes[tick] === "tail-dive" && !previousDive;
+      const dive = modes[tick] === "tail-dive" && diveTicks.every(otherTick => {
+        const distance = Math.abs(tick - otherTick);
+        return Math.min(distance, count - distance) >= 3;
+      });
       diveAt[tick] = dive;
-      previousDive = dive;
+      if (dive) diveTicks.push(tick);
     }
     return modes.map((selectedMode, tick) => {
       const previousTick = (tick + count - 1) % count;
@@ -1445,26 +1532,23 @@ export class CountdownFramedGenerator {
   }
 
   prepareSnakeDisappearancePlan(tick, emitDebug = true) {
-    const sourceTick = (tick + this.countFromSeconds - 1)
-      % this.countFromSeconds;
-    const sourceState = this.snakeStateAt(sourceTick);
     const lifecycle = this.snakeDisappearanceSchedule[tick];
-    const routeFrame = countdownSnakeFrame(
+    const diveTick = lifecycle.phase === "emerge"
+      ? (tick + this.countFromSeconds - 1) % this.countFromSeconds
+      : tick;
+    const sourceTick = (
+      diveTick + this.countFromSeconds - 1
+    ) % this.countFromSeconds;
+    const sourceState = this.snakeStateAt(sourceTick);
+    const completedFrame = countdownSnakeFrame(
       sourceState.plan,
       1,
       sourceState.frameSettings,
     );
-    const hiddenHead = {
-      index: sourceState.plan.targetCellIndex,
-      level: 0,
-      opacity: 0,
-    };
-    const completedFrame = lifecycle.phase === "dive"
-      ? { ...routeFrame, cells: [...routeFrame.cells, hiddenHead] }
-      : routeFrame;
-    const mode = lifecycle.phase === "dive" ? "tail-dive" : "instant";
+    const mode = lifecycle.phase === "move" ? "instant" : "tail-dive";
     this.snakeDisappearancePlan = {
       tick,
+      diveTick,
       sourceTick,
       selectedMode: lifecycle.selectedMode,
       phase: lifecycle.phase,
@@ -1491,20 +1575,107 @@ export class CountdownFramedGenerator {
 
   prepareSnakePlan(tick, emitDebug = true) {
     this.prepareSnakeDisappearancePlan(tick, emitDebug);
-    const routeTick = this.snakeDisappearancePlan.phase === "emerge"
-      ? this.snakeDisappearancePlan.sourceTick
+    const continuousDive = this.snakeDisappearancePlan.phase !== "move";
+    const routeTick = continuousDive
+      ? this.snakeDisappearancePlan.diveTick
       : tick;
-    const state = this.snakeStateAt(routeTick);
+    const completedBodyCellIndices = continuousDive
+      ? this.snakeDisappearancePlan.completedFrame.cells.map(cell => cell.index)
+      : [];
+    let bodyAvoidanceFallback = false;
+    let state = this.snakeStateAt(routeTick);
+    if (continuousDive) {
+      const avoided = this.snakeStateAvoidingBodyAt(
+        routeTick,
+        completedBodyCellIndices,
+      );
+      state = avoided.state;
+      bodyAvoidanceFallback = avoided.fallback;
+    }
     state.plan.routeTick = routeTick;
-    if (this.snakeDisappearancePlan.phase === "emerge") {
-      state.plan.path = [state.plan.sourceCellIndex, ...state.plan.path];
-      state.plan.sourceIndex = state.plan.sourceCellIndex;
-      state.plan.hiddenCellIndices = [state.plan.sourceCellIndex];
-      if (state.plan.secondaryMovement.wrapStep !== null) {
-        state.plan.secondaryMovement.wrapStep += 1;
-      }
+    if (continuousDive) {
+      const nextRouteTick = (routeTick + 1) % this.countFromSeconds;
+      const nextAvoided = this.snakeStateAvoidingBodyAt(nextRouteTick, [
+        ...completedBodyCellIndices,
+        state.plan.sourceCellIndex,
+        ...state.plan.path,
+        state.plan.targetCellIndex,
+      ]);
+      const nextState = nextAvoided.state;
+      bodyAvoidanceFallback ||= nextAvoided.fallback;
+      const firstRoute = state.plan;
+      const secondRoute = nextState.plan;
+      const portalStep = firstRoute.path.length + 1;
+      const path = [
+        firstRoute.sourceCellIndex,
+        ...firstRoute.path,
+        firstRoute.targetCellIndex,
+        ...secondRoute.path,
+        secondRoute.targetCellIndex,
+      ];
+      const firstMovement = firstRoute.secondaryMovement;
+      const secondMovement = secondRoute.secondaryMovement;
+      const activeMovement = firstMovement.enabled ? firstMovement : secondMovement;
+      const wrapStep = firstMovement.enabled
+        ? firstMovement.wrapStep + 1
+        : (secondMovement.enabled
+          ? portalStep + secondMovement.wrapStep + 1
+          : null);
+      state = {
+        ...state,
+        growthTick: nextState.growthTick,
+        frameSettings: {
+          ...nextState.frameSettings,
+          timingCurve: [0, 0, 1, 1],
+        },
+        plan: {
+          ...firstRoute,
+          routeTick,
+          routeTicks: [routeTick, nextRouteTick],
+          colorVariation: firstRoute.colorVariation,
+          secondaryMovement: {
+            ...activeMovement,
+            enabled: firstMovement.enabled || secondMovement.enabled,
+            wrapStep,
+          },
+          sourceIndex: path[0],
+          targetCellIndex: secondRoute.targetCellIndex,
+          targetIndex: path.at(-1),
+          hiddenCellIndices: [
+            firstRoute.sourceCellIndex,
+            firstRoute.targetCellIndex,
+            secondRoute.targetCellIndex,
+          ],
+          textSafeCellIndices: [
+            ...new Set([
+              ...firstRoute.textSafeCellIndices,
+              ...secondRoute.textSafeCellIndices,
+            ]),
+          ],
+          blockedCellIndices: [
+            ...new Set([
+              ...firstRoute.blockedCellIndices,
+              ...secondRoute.blockedCellIndices,
+            ]),
+          ],
+          path,
+          portalStep,
+          headStartStep: this.snakeDisappearancePlan.phase === "dive"
+            ? 0
+            : portalStep,
+          headEndStep: this.snakeDisappearancePlan.phase === "dive"
+            ? portalStep
+            : path.length - 1,
+          normalLengthCells: nextState.frameSettings.lengthCells,
+          peakLengthCells: Math.min(
+            this.availableSnakeCellCount,
+            this.snakeDisappearancePlan.completedFrame.cells.length + path.length,
+          ),
+        },
+      };
     } else {
       state.plan.hiddenCellIndices = [];
+      state.plan.routeTicks = [routeTick];
     }
     const visitedCells = new Set();
     const collisionRiskCellIndices = [];
@@ -1513,7 +1684,7 @@ export class CountdownFramedGenerator {
       visitedCells.add(index);
     }
     state.plan.selfAvoidance = {
-      policy: collisionRiskCellIndices.length > 0
+      policy: bodyAvoidanceFallback || collisionRiskCellIndices.length > 0
         ? "collision-fallback"
         : "avoided",
       collisionRiskCellIndices: [...new Set(collisionRiskCellIndices)],
@@ -1531,9 +1702,10 @@ export class CountdownFramedGenerator {
       )
     ) {
       debug.plan(
-        "countdown-effect mode=snake tick=%d routeTick=%d evolution=%s evolutionTick=%d growthTick=%d engorgement=%s seed=%d variation=%s lifecycle=%s selfAvoidance=%s collisionRisk=%s secondaryMovement=%s preferredDirection=%s direction=%s avoidance=%s exitColumn=%s wrapStep=%s length=%d maximum=%d cellFrom=%d cellTo=%d from=%d to=%d textSafeCells=%s path=%s",
+        "countdown-effect mode=snake tick=%d routeTick=%d routeTicks=%s evolution=%s evolutionTick=%d growthTick=%d engorgement=%s seed=%d variation=%s lifecycle=%s headSegment=%s selfAvoidance=%s collisionRisk=%s secondaryMovement=%s preferredDirection=%s direction=%s avoidance=%s exitColumn=%s wrapStep=%s length=%d maximum=%d cellFrom=%d cellTo=%d from=%d to=%d textSafeCells=%s path=%s",
         tick,
         routeTick,
+        state.plan.routeTicks.join(","),
         state.evolution.evolutionEnabled ? "yes" : "no",
         state.evolution.evolutionTick,
         this.snakeGrowthTick,
@@ -1541,6 +1713,9 @@ export class CountdownFramedGenerator {
         state.plan.seed,
         state.plan.colorVariation,
         this.snakeDisappearancePlan.phase,
+        state.plan.headStartStep === undefined
+          ? "full"
+          : `${state.plan.headStartStep}-${state.plan.headEndStep}`,
         state.plan.selfAvoidance.policy,
         state.plan.selfAvoidance.collisionRiskCellIndices.join(",") || "none",
         state.plan.secondaryMovement.enabled ? "yes" : "no",
@@ -2094,25 +2269,9 @@ export class CountdownFramedGenerator {
     let nextSnakeRenderFrame = null;
     let snakeChanged = false;
     if (this.hasSnakeTrack) {
-      const baseSnakeFrame = countdownSnakeFrame(
-        this.snakePlan,
+      const collisionFrames = this.snakeLifecycleFramesAt(
         beatElapsed / this.snakeSettings.duration.seconds,
-        this.snakeFrameSettings,
-      );
-      this.snakeDisappearanceFrame = countdownSnakeDisappearanceFrame(
-        this.snakeDisappearancePlan.completedFrame,
-        this.snakeDisappearancePlan.mode,
         beatProgress,
-      );
-      const collisionFrames = this.snakeFramesWithSelfCollision(
-        this.snakeDisappearancePlan.phase === "dive"
-          ? {
-            ...baseSnakeFrame,
-            cells: [],
-            selfCollision: { active: false, cellIndices: [] },
-          }
-          : baseSnakeFrame,
-        this.snakeDisappearanceFrame,
       );
       nextSnakeFrame = collisionFrames.snakeFrame;
       this.snakeFrame = nextSnakeFrame;
@@ -3072,6 +3231,7 @@ export class CountdownFramedGenerator {
           },
           disappearance: this.snakeDisappearancePlan === null ? null : {
             tick: this.snakeDisappearancePlan.tick,
+            diveTick: this.snakeDisappearancePlan.diveTick,
             sourceTick: this.snakeDisappearancePlan.sourceTick,
             selectedMode: this.snakeDisappearancePlan.selectedMode,
             phase: this.snakeDisappearancePlan.phase,
@@ -3090,6 +3250,7 @@ export class CountdownFramedGenerator {
           },
           plan: this.snakePlan === null ? null : {
             routeTick: this.snakePlan.routeTick,
+            routeTicks: [...this.snakePlan.routeTicks],
             seed: this.snakePlan.seed,
             colorVariation: this.snakePlan.colorVariation,
             secondaryMovement: { ...this.snakePlan.secondaryMovement },
@@ -3100,6 +3261,11 @@ export class CountdownFramedGenerator {
               ],
             },
             hiddenCellIndices: [...this.snakePlan.hiddenCellIndices],
+            portalStep: this.snakePlan.portalStep ?? null,
+            headStartStep: this.snakePlan.headStartStep ?? null,
+            headEndStep: this.snakePlan.headEndStep ?? null,
+            normalLengthCells: this.snakePlan.normalLengthCells ?? null,
+            peakLengthCells: this.snakePlan.peakLengthCells ?? null,
             sourceCellIndex: this.snakePlan.sourceCellIndex,
             targetCellIndex: this.snakePlan.targetCellIndex,
             sourceIndex: this.snakePlan.sourceIndex,
@@ -3111,6 +3277,7 @@ export class CountdownFramedGenerator {
           frame: this.snakeFrame === null ? null : {
             linearProgress: this.snakeFrame.linearProgress,
             progress: this.snakeFrame.progress,
+            lifecycleProgress: this.snakeFrame.lifecycleProgress ?? null,
             headStep: this.snakeFrame.headStep,
             colorVariation: this.snakeFrame.colorVariation,
             secondaryMovement: { ...this.snakeFrame.secondaryMovement },

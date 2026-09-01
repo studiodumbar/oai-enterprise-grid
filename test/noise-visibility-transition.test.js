@@ -14,14 +14,6 @@ import {
 
 const SETTINGS_OVERRIDE = Object.freeze({
   enabled: true,
-  holdSeconds: 0.5,
-  maximumHoldShare: 0.6,
-  edgeWeights: Object.freeze({
-    idleBefore: 1,
-    rampOut: 1,
-    rampBack: 1,
-    idleAfter: 1,
-  }),
   threshold: 1,
   contrast: 0.01,
   softness: 0,
@@ -31,29 +23,25 @@ function endpointAt(phase, progress) {
   return { phase, progress, durationSeconds: 2 };
 }
 
-test("noise visibility owns the former text envelope as a standalone transition", () => {
+test("noise visibility reveals on intro and clears on outro", () => {
   const transition = new NoiseVisibilityTransition(SETTINGS_OVERRIDE);
-  const amountAt = progress => transition.effects(endpointAt("start", progress))
-    .noiseVisibility.amount;
+  const amountAt = (phase, progress) => transition.effects(endpointAt(phase, progress))
+    ?.noiseVisibility.amount;
 
-  assert.equal(amountAt(0), 0);
-  assert.equal(amountAt(0.1875), 0);
-  assert.equal(amountAt(0.28125), 0.5);
-  assert.equal(amountAt(0.375), 1);
-  assert.equal(amountAt(0.6), 1);
-  assert.equal(amountAt(0.71875), 0.5);
-  assert.equal(amountAt(0.8125), 0);
-  assert.equal(amountAt(1), 0);
+  assert.equal(amountAt("start", 0), 1);
+  assert.equal(amountAt("start", 0.5), 0.5);
+  assert.equal(amountAt("start", 1), 0);
+  assert.equal(amountAt("end", 0), 0);
+  assert.equal(amountAt("end", 0.5), 0.5);
+  assert.equal(amountAt("end", 1), 1);
+  assert.equal(transition.effects(endpointAt("core", 0.5)), null);
   assert.deepEqual(transition.effects(endpointAt("start", 0.6)).noiseVisibility, {
-    amount: 1,
+    amount: 0.4,
     threshold: 1,
     contrast: 0.01,
     softness: 0,
   });
-  assert.equal(
-    transition.effects(endpointAt("end", 1 - 0.28125)).noiseVisibility.amount,
-    0.5,
-  );
+  assert.deepEqual(transition.inspect().order, ["intro", "hold", "outro"]);
 
   const text = new TextRevealArrangementMode({ text: "TITLE" });
   assert.equal(Object.hasOwn(DEFAULT_TEXT_REVEAL_SETTINGS, "noiseVisibility"), false);
@@ -61,47 +49,56 @@ test("noise visibility owns the former text envelope as a standalone transition"
   assert.equal(text.phaseEffectsFor, undefined);
 });
 
-test("noise visibility envelope timing is fully configurable", () => {
-  const transition = new NoiseVisibilityTransition({
-    ...SETTINGS_OVERRIDE,
-    holdSeconds: 10,
-    maximumHoldShare: 0.4,
-    edgeWeights: {
-      idleBefore: 1,
-      rampOut: 2,
-      rampBack: 1,
-      idleAfter: 2,
-    },
+test("noise-grid runs intro, flow hold, and outro in export order", () => {
+  const { director } = createHeadlessDirector({ composition: "noise-grid" });
+  const frame = (dt, frameIndex) => ({
+    dt,
+    compositionDt: dt,
+    time: 0,
+    frameIndex,
+    viewport: { width: 900, height: 600 },
   });
-  const windows = transition.windowsFor(2);
-  const closeTo = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-12);
 
-  closeTo(windows.rampOutStart, 0.1);
-  closeTo(windows.holdStart, 0.3);
-  closeTo(windows.holdEnd, 0.7);
-  closeTo(windows.rampBackEnd, 0.8);
-  assert.throws(
-    () => new NoiseVisibilityTransition({ ...SETTINGS_OVERRIDE, maximumHoldShare: 1 }),
-    /maximumHoldShare/,
-  );
+  director.update(frame(0, 0));
+  assert.equal(director.animationDuration(), 9);
+  assert.equal(director.inspect().timeline.phase, "start");
+  assert.equal(director.generator("noiseGrid").inspect().visibilitySettings.threshold, 1);
+
+  director.update(frame(1.5 + 1e-9, 1));
+  assert.equal(director.inspect().timeline.phase, "core");
+  assert.equal(director.generator("noiseGrid").inspect().visibilitySettings.threshold, 0.36);
+
+  director.update(frame(6, 2));
+  assert.equal(director.inspect().timeline.phase, "end");
+  director.update(frame(0.75, 3));
+  const halfway = director.generator("noiseGrid").inspect().visibilitySettings;
+  assert.ok(Math.abs(halfway.threshold - 0.68) < 1e-9);
+  assert.deepEqual(director.inspect().noiseVisibilityTransition.order, [
+    "intro", "hold", "outro",
+  ]);
+  director.dispose();
+});
+
+test("noise visibility validates its authored clear field", () => {
   assert.throws(
     () => new NoiseVisibilityTransition({
       ...SETTINGS_OVERRIDE,
-      edgeWeights: { rampOut: 0 },
+      contrast: 0,
     }),
-    /rampOut and rampBack.*positive/,
+    /contrast must be a finite positive number/,
+  );
+  assert.throws(
+    () => new NoiseVisibilityTransition({ ...SETTINGS_OVERRIDE, threshold: 2 }),
+    /threshold must be between 0 and 1/,
   );
 });
 
 test("noise visibility rejects enabled use outside noise-grid during setup", () => {
   assert.equal(SETTINGS.noiseGrid.noiseVisibilityTransition.enabled, true);
-  assert.equal(SETTINGS.noiseGrid.noiseVisibilityTransition.maximumHoldShare, 0.6);
-  assert.deepEqual(SETTINGS.noiseGrid.noiseVisibilityTransition.edgeWeights, {
-    idleBefore: 1,
-    rampOut: 1,
-    rampBack: 1,
-    idleAfter: 1,
-  });
+  assert.equal(SETTINGS.noiseGrid.circleEndpoints.start.enabled, true);
+  assert.equal(SETTINGS.noiseGrid.circleEndpoints.start.mode, "native");
+  assert.equal(SETTINGS.noiseGrid.circleEndpoints.end.enabled, true);
+  assert.equal(SETTINGS.noiseGrid.circleEndpoints.end.mode, "native");
   assert.equal(SETTINGS.gameOfLife.noiseVisibilityTransition, undefined);
   assert.equal(
     createNoiseVisibilityTransition({

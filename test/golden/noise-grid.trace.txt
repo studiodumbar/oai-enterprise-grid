@@ -1,17 +1,21 @@
 # composition: noise-grid
 # frames: 900
 
-[cg:timeline] f=0000 phase=start cycle=0 duration=2.000 paused=yes
+[cg:timeline] f=0000 phase=start cycle=0 duration=1.500 paused=yes
 [cg:plan] f=0000 enter=noiseGrid
 [cg:plan] f=0000 render=[noiseGrid@1.00]
-[cg:transition] f=0000 noise-visibility phase=start threshold=1.000 contrast=0.010 softness=0.000
-[cg:transition] f=0000 overlay=intro mode=text
-[cg:transition] f=0000 text hold clamped authored=3 requested=3.000 applied=1.200 phase=2.000
-[cg:timeline] f=0120 phase=core cycle=0 duration=30.000 paused=no
-[cg:transition] f=0120 noise-visibility phase=- threshold=0.360 contrast=1.200 softness=0.100
-[cg:transition] f=0120 overlay=- mode=-
+[cg:transition] f=0000 noise-visibility phase=start amount=0.989 threshold=1.000 contrast=0.010 softness=0.000
+[cg:timeline] f=0090 phase=core cycle=0 duration=6.000 paused=no
+[cg:transition] f=0090 noise-visibility phase=- amount=0.000 threshold=0.360 contrast=1.200 softness=0.100
+[cg:timeline] f=0450 phase=end cycle=0 duration=1.500 paused=yes
+[cg:transition] f=0450 noise-visibility phase=end amount=0.011 threshold=1.000 contrast=0.010 softness=0.000
+[cg:timeline] f=0539 phase=start cycle=1 duration=1.500 paused=no
+[cg:transition] f=0539 noise-visibility phase=start amount=1.000 threshold=1.000 contrast=0.010 softness=0.000
+[cg:timeline] f=0540 phase=start cycle=1 duration=1.500 paused=yes
+[cg:timeline] f=0629 phase=core cycle=1 duration=6.000 paused=no
+[cg:transition] f=0629 noise-visibility phase=- amount=0.000 threshold=0.360 contrast=1.200 softness=0.100
 
 # draw volume
-blankFrames=0
-firstDrawnFrame=0
-totalFill=376537
+blankFrames=100
+firstDrawnFrame=38
+totalFill=317179

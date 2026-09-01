@@ -84,6 +84,23 @@ function requireName(value, label) {
   return value;
 }
 
+function requireNoiseGridProjectTimeline(value) {
+  requireObject(value, "Noise-grid project timeline");
+  if (value.version !== 1) {
+    throw new Error("Noise-grid project timeline uses an unsupported version.");
+  }
+  const resolved = { version: 1 };
+  for (const name of ["introSeconds", "holdSeconds", "outroSeconds"]) {
+    if (!Number.isFinite(value[name]) || value[name] <= 0) {
+      throw new RangeError(
+        `Noise-grid project timeline ${name} must be a finite positive number.`,
+      );
+    }
+    resolved[name] = value[name];
+  }
+  return Object.freeze(resolved);
+}
+
 function availableMessage(values) {
   return values.length > 0 ? values.join(", ") : "<none>";
 }
@@ -931,6 +948,14 @@ export class CompositionDirector {
       compositionId: this.currentCompositionName,
       generators,
     };
+    if (this.currentCompositionName === "noise-grid") {
+      snapshot.compositionTimeline = {
+        version: 1,
+        introSeconds: this.endpointDurations.start,
+        holdSeconds: this.coreAnimationDuration(),
+        outroSeconds: this.endpointDurations.end,
+      };
+    }
     const rule = this.currentRule?.snapshotProjectState?.();
     if (rule !== undefined) snapshot.rule = rule;
     return snapshot;
@@ -946,6 +971,22 @@ export class CompositionDirector {
       || !this.compositionDefinitions.has(snapshot.compositionId)
     ) throw new Error("Project state refers to an unknown composition.");
     this.use(snapshot.compositionId);
+    if (snapshot.compositionTimeline !== undefined) {
+      if (snapshot.compositionId !== "noise-grid") {
+        throw new Error("Only noise-grid project state can contain compositionTimeline.");
+      }
+      const timeline = requireNoiseGridProjectTimeline(snapshot.compositionTimeline);
+      this.endpointDurations = Object.freeze({
+        start: timeline.introSeconds,
+        end: timeline.outroSeconds,
+      });
+      debug.config(
+        "project-timing state=restored composition=noise-grid intro=%.3f body=%.3f outro=%.3f",
+        timeline.introSeconds,
+        timeline.holdSeconds,
+        timeline.outroSeconds,
+      );
+    }
     if (snapshot.rule !== undefined) {
       const restoreRule = this.currentRule?.restoreProjectState;
       if (typeof restoreRule !== "function") {

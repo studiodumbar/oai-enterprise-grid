@@ -29,7 +29,7 @@ export const GLOBAL_CONFIG = {
     // draw, config, export — or "all". A ?debug= query parameter overrides this,
     // and cg`debug <channels>` switches it at runtime. See AGENTS.md section 3.
     debug: {
-        channels: "timeline",
+        channels: "",
     },
 
     composition: {

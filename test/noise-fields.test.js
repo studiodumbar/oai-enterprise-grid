@@ -239,6 +239,10 @@ test("noise-grid lifecycle draws level-four glyphs and returns copied preview pl
   const { director, context } = headless;
   director.update({ dt: 0, compositionDt: 0, time: 0, frameIndex: 0, viewport: { width: 900, height: 600 } });
   director.draw({ time: 0, frameIndex: 0 });
+  assert.equal(context.counts.fill, 0, "the intro starts on a clear board");
+  director.seek(director.endpointDurations.start);
+  director.update({ dt: 0, compositionDt: 0, time: 0, frameIndex: 1, viewport: { width: 900, height: 600 } });
+  director.draw({ time: 0, frameIndex: 1 });
   const generator = director.generator("noiseGrid");
   assert.equal(generator.noiseSettings.layers.color.holdSeconds, 0.25);
   assert.equal(generator.settingsSnapshot().noiseFields.layers.color.holdSeconds, 0.25);
@@ -300,11 +304,11 @@ test("noise-grid defaults retain the remapped Diogo geometry and field setup", (
     smoothing: 0.5,
     hysteresis: 0.03,
   });
-  assert.equal(generator.animationDuration(), 30);
+  assert.equal(generator.animationDuration(), 6);
   director.dispose();
 });
 
-test("the standalone phase transition keeps noise time moving while visibility ramps", () => {
+test("the standalone intro reveals while noise time keeps moving", () => {
   const settings = structuredClone(SETTINGS);
   settings.noiseGrid.intro = { ...settings.noiseGrid.intro, enabled: false };
   settings.noiseGrid.outro = { ...settings.noiseGrid.outro, enabled: false };
@@ -322,18 +326,9 @@ test("the standalone phase transition keeps noise time moving while visibility r
     viewport: { width: 900, height: 600 },
   });
 
-  update(introDuration * 0.1, 0);
+  update(0, 0);
   assert.equal(director.lastFrame.time, 0);
-  assert.ok(Math.abs(generator.inspect().fieldTime - introDuration * 0.1) < 1e-12);
-  assert.deepEqual(generator.inspect().visibilitySettings, {
-    threshold: authored.threshold,
-    contrast: authored.contrast,
-    softness: authored.softness,
-  });
-
-  update(introDuration * 0.1, 1);
-  assert.equal(director.lastFrame.time, 0);
-  assert.ok(Math.abs(generator.inspect().fieldTime - introDuration * 0.2) < 1e-12);
+  assert.equal(generator.inspect().fieldTime, 0);
   assert.deepEqual(generator.inspect().visibilitySettings, {
     threshold: 1,
     contrast: 0.01,
@@ -341,11 +336,20 @@ test("the standalone phase transition keeps noise time moving while visibility r
   });
   assert.ok(
     generator.outputState.visibility.every(level => level.values.every(value => value === 0)),
-    "the transition envelope must not wait for the authored visibility hold",
+    "the intro must begin on a clear board",
   );
 
-  update(introDuration * 0.7, 2);
-  assert.ok(Math.abs(generator.inspect().fieldTime - introDuration * 0.9) < 1e-12);
+  update(introDuration * 0.5, 1);
+  assert.equal(director.lastFrame.time, 0);
+  assert.ok(Math.abs(generator.inspect().fieldTime - introDuration * 0.5) < 1e-12);
+  assert.deepEqual(generator.inspect().visibilitySettings, {
+    threshold: authored.threshold + (1 - authored.threshold) * 0.5,
+    contrast: authored.contrast + (0.01 - authored.contrast) * 0.5,
+    softness: authored.softness * 0.5,
+  });
+
+  update(introDuration * 0.5 + 1e-9, 2);
+  assert.ok(Math.abs(generator.inspect().fieldTime - (introDuration + 1e-9)) < 1e-12);
   assert.deepEqual(generator.inspect().visibilitySettings, {
     threshold: authored.threshold,
     contrast: authored.contrast,
@@ -353,22 +357,14 @@ test("the standalone phase transition keeps noise time moving while visibility r
   });
   assert.ok(
     generator.outputState.visibility.some(level => level.values.some(value => value === 1)),
-    "restored visibility must be observable before the phase ends",
+    "the flow phase must restore the authored visibility field",
   );
   assert.deepEqual(
     generator.settingsSnapshot().noiseFields.layers.visibility,
     authored,
     "the phase effect must never mutate authored config",
   );
-
-  update(introDuration * 0.1 + 1e-9, 3);
   assert.equal(director.inspect().timeline.phase, "core");
-  assert.ok(Math.abs(generator.inspect().fieldTime - (introDuration + 1e-9)) < 1e-12);
-  assert.deepEqual(generator.inspect().visibilitySettings, {
-    threshold: authored.threshold,
-    contrast: authored.contrast,
-    softness: authored.softness,
-  });
   director.dispose();
 });
 

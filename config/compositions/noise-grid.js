@@ -73,20 +73,32 @@ export const NOISE_GRID_CONFIG = {
         smoothing: 0.5,
         hysteresis: 0.03,
       },
-      // This phase transition is intentionally supported only by noise-grid.
-      // It runs independently from the configured intro/outro arrangement.
+      // Noise-grid owns a simple beat-aligned reveal / flow / clear loop. The
+      // native endpoints expose the phases to the visibility transition while
+      // the disabled arrangements keep global text/fade overlays out of it.
+      intro: {
+        enabled: false,
+        durationSeconds: "auto",
+      },
+      outro: {
+        enabled: false,
+        durationSeconds: "auto",
+      },
+      circleEndpoints: {
+        start: {
+          enabled: true,
+          mode: "native",
+          durationSeconds: "auto",
+        },
+        end: {
+          enabled: true,
+          mode: "native",
+          durationSeconds: "auto",
+        },
+      },
+      // This phase effect is intentionally supported only by noise-grid.
       noiseVisibilityTransition: {
         enabled: true,
-        holdSeconds: 6,
-        // Caps the clear hold so the surrounding ramps always have phase time.
-        maximumHoldShare: 0.01,
-        // Relative shares of the time left after the hold; values are normalized.
-        edgeWeights: {
-          idleBefore: 2,
-          rampOut: 1000,
-          rampBack: 1000,
-          idleAfter: 0.1,
-        },
         threshold: 1,
         contrast: 0.01,
         softness: 0,

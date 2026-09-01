@@ -1444,40 +1444,69 @@ test("snake disappearance equally selects instant removal or an accelerating tai
   instantGenerator.dispose();
 
   const diveGenerator = createGenerator();
-  diveGenerator.enter({ time: 3 });
+  diveGenerator.enter({ time: 2.999999 });
+  const beforeDive = diveGenerator.inspect().appearance.snake;
+  diveGenerator.update({ time: 3 });
   const initialDiveSnake = diveGenerator.inspect().appearance.snake;
   const initialDive = initialDiveSnake.disappearance;
   assert.equal(initialDive.sourceTick, 2);
   assert.equal(initialDive.selectedMode, "tail-dive");
   assert.equal(initialDive.phase, "dive");
   assert.equal(initialDive.mode, "tail-dive");
-  assert.equal(initialDive.cells.length, initialDive.totalCellCount);
-  assert.deepEqual(initialDiveSnake.frame.cells, []);
-  assert.deepEqual(initialDiveSnake.renderFrame.cells, []);
-  assert.equal(initialDive.cells.at(-1).opacity, 0);
-  diveGenerator.update({ time: 3.75 });
-  const acceleratedDive = diveGenerator.inspect().appearance.snake.disappearance;
-  assert.ok(acceleratedDive.cells.length < initialDive.cells.length);
+  assert.deepEqual(initialDive.cells, []);
+  assert.deepEqual(initialDiveSnake.plan.routeTicks, [3, 4]);
+  assert.equal(initialDiveSnake.frame.lifecycleProgress, 0);
   assert.deepEqual(
-    acceleratedDive.cells.at(-1),
-    initialDive.cells.at(-1),
+    initialDiveSnake.frame.cells.filter(cell => cell.opacity !== 0),
+    beforeDive.renderFrame.cells.filter(cell => cell.opacity !== 0),
   );
-  diveGenerator.dispose();
-
-  const emergeGenerator = createGenerator();
-  emergeGenerator.enter({ time: 4 });
-  const emergeSnake = emergeGenerator.inspect().appearance.snake;
+  assert.equal(initialDiveSnake.frame.cells.at(-1).opacity, 0);
+  diveGenerator.update({ time: 3.75 });
+  const prolongedDive = diveGenerator.inspect().appearance.snake;
+  assert.equal(prolongedDive.frame.lifecycleProgress, 0.375);
+  assert.ok(prolongedDive.frame.cells.length > initialDiveSnake.frame.cells.length);
+  diveGenerator.update({ time: 3.999999 });
+  const beforeEmerge = diveGenerator.inspect().appearance.snake;
+  diveGenerator.update({ time: 4 });
+  const emergeSnake = diveGenerator.inspect().appearance.snake;
   assert.equal(emergeSnake.disappearance.phase, "emerge");
   assert.deepEqual(emergeSnake.disappearance.cells, []);
   assert.equal(emergeSnake.plan.routeTick, 3);
-  assert.equal(emergeSnake.plan.path[0], initialDive.cells.at(-1).index);
-  assert.equal(emergeSnake.frame.cells[0].index, initialDive.cells.at(-1).index);
-  assert.equal(emergeSnake.frame.cells[0].opacity, 0);
-  emergeGenerator.update({ time: 4.5 });
-  const emergedSnake = emergeGenerator.inspect().appearance.snake;
-  assert.ok(emergedSnake.frame.cells.some(cell => cell.opacity !== 0));
+  assert.deepEqual(emergeSnake.plan.routeTicks, [3, 4]);
+  assert.equal(emergeSnake.frame.lifecycleProgress, 0.5);
+  assert.equal(emergeSnake.frame.headStep, beforeEmerge.frame.headStep);
+  assert.deepEqual(emergeSnake.frame.cells, beforeEmerge.frame.cells);
+  diveGenerator.update({ time: 4.5 });
+  const emergedSnake = diveGenerator.inspect().appearance.snake;
+  assert.equal(emergedSnake.frame.lifecycleProgress, 0.75);
+  assert.ok(emergedSnake.disappearance.removedCellCount > 0);
   assert.deepEqual(emergedSnake.disappearance.cells, []);
-  emergeGenerator.dispose();
+  diveGenerator.dispose();
+
+  for (const seed of [0, 1, 123, 0xffffffff]) {
+    const lifecycleGenerator = createGenerator({ seed });
+    lifecycleGenerator.enter({ time: 0 });
+    let previousDiveTick = -Infinity;
+    let diveCount = 0;
+    for (let tick = 1; tick <= 30; tick += 1) {
+      lifecycleGenerator.update({ time: tick - 0.000001 });
+      const before = lifecycleGenerator.inspect().appearance.snake;
+      lifecycleGenerator.update({ time: tick });
+      const after = lifecycleGenerator.inspect().appearance.snake;
+      if (after.disappearance.phase !== "dive") continue;
+      const unwrappedTick = tick === 30 ? 30 : tick;
+      assert.ok(unwrappedTick - previousDiveTick >= 3);
+      assert.equal(before.disappearance.phase, "move");
+      assert.deepEqual(
+        after.frame.cells.filter(cell => cell.opacity !== 0),
+        before.renderFrame.cells.filter(cell => cell.opacity !== 0),
+      );
+      previousDiveTick = unwrappedTick;
+      diveCount += 1;
+    }
+    assert.ok(diveCount > 0);
+    lifecycleGenerator.dispose();
+  }
 
   assert.throws(
     () => countdownSnakeDisappearanceVariation(

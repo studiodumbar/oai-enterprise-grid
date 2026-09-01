@@ -801,7 +801,7 @@ test("public compositions expose the explicit configuration hierarchy", () => {
   }
 });
 
-test("global Dijkstra reaches every composition including flock", () => {
+test("global Dijkstra reaches every composition except noise-grid's native timeline", () => {
   assert.equal(GLOBAL_CONFIG.composition.circleEndpoints.end.mode, "dijkstra");
   assert.equal(GLOBAL_CONFIG.composition.circleEndpoints.end.enabled, true);
   for (const [compositionId, definition] of Object.entries(COMPOSITION_DEFINITIONS)) {
@@ -815,6 +815,11 @@ test("global Dijkstra reaches every composition including flock", () => {
       `Composition "${compositionId}" needs an endpoint settings group.`,
     );
     for (const key of settingsKeys) {
+      if (compositionId === "noise-grid") {
+        assert.equal(SETTINGS[key].circleEndpoints.end.mode, "native");
+        assert.equal(SETTINGS[key].circleEndpoints.end.enabled, true);
+        continue;
+      }
       assert.equal(
         SETTINGS[key].circleEndpoints.end.mode,
         "dijkstra",
@@ -924,6 +929,41 @@ test("runtime core-duration overrides rebuild timing without mutating authored c
   assert.throws(
     () => createRuntimeConfig({ compositionTimingOverrides: { missing: 12 } }),
     /Unknown composition timing override/,
+  );
+});
+
+test("noise-grid timeline overrides compile all three export phases", () => {
+  const runtime = createRuntimeConfig({
+    noiseGridTimelineOverride: {
+      introSeconds: 1,
+      holdSeconds: 8,
+      outroSeconds: 2,
+    },
+  });
+
+  assert.equal(runtime.settings.noiseGrid.timing.bodyDurationSeconds, 8);
+  assert.equal(runtime.settings.noiseGrid.intro.durationSeconds, 1);
+  assert.equal(runtime.settings.noiseGrid.outro.durationSeconds, 2);
+  assert.deepEqual(runtime.settings.noiseGrid.circleEndpoints.start, {
+    enabled: true,
+    durationSeconds: 1,
+    mode: "native",
+  });
+  assert.deepEqual(runtime.settings.noiseGrid.circleEndpoints.end, {
+    enabled: true,
+    durationSeconds: 2,
+    mode: "native",
+  });
+  assert.equal(SETTINGS.noiseGrid.timing.bodyDurationSeconds, 6);
+  assert.throws(
+    () => createRuntimeConfig({
+      noiseGridTimelineOverride: {
+        introSeconds: 1,
+        holdSeconds: 0,
+        outroSeconds: 1,
+      },
+    }),
+    /holdSeconds must be a finite positive number/,
   );
 });
 

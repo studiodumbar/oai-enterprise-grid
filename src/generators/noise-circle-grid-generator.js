@@ -227,8 +227,9 @@ export class NoiseCircleGridGenerator {
     const phase = effect === null ? null : frame?.compositionEndpoint?.phase ?? null;
     if (phase !== this.visibilityEffectPhase) {
       debug.transition(
-        "noise-visibility phase=%s threshold=%.3f contrast=%.3f softness=%.3f",
+        "noise-visibility phase=%s amount=%.3f threshold=%.3f contrast=%.3f softness=%.3f",
         phase ?? "-",
+        effect?.amount ?? 0,
         effect?.threshold ?? this.visibilitySettings.threshold,
         effect?.contrast ?? this.visibilitySettings.contrast,
         effect?.softness ?? this.visibilitySettings.softness,

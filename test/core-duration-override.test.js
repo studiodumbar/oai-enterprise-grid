@@ -38,6 +38,7 @@ test("noise-grid timing overrides remain authoritative over restored generator s
   original.update(FRAME_ZERO);
   const snapshot = original.snapshotProjectState();
   snapshot.generators.noiseGrid.settings.durationSeconds = 9;
+  snapshot.compositionTimeline.holdSeconds = 9;
 
   const config = createRuntimeConfig({
     compositionTimingOverrides: { "noise-grid": 9 },
@@ -54,4 +55,36 @@ test("noise-grid timing overrides remain authoritative over restored generator s
   assert.equal(rebuilt.generator("noiseGrid").animationDuration(), 9);
   original.dispose();
   rebuilt.dispose();
+});
+
+test("noise-grid project JSON round-trips intro, hold, and outro settings", () => {
+  const config = createRuntimeConfig({
+    noiseGridTimelineOverride: {
+      introSeconds: 1,
+      holdSeconds: 8,
+      outroSeconds: 2,
+    },
+  });
+  const original = createHeadlessDirector({
+    composition: "noise-grid",
+    settings: config.settings,
+  }).director;
+  original.update(FRAME_ZERO);
+  const snapshot = original.snapshotProjectState();
+
+  assert.deepEqual(snapshot.compositionTimeline, {
+    version: 1,
+    introSeconds: 1,
+    holdSeconds: 8,
+    outroSeconds: 2,
+  });
+
+  const restored = createHeadlessDirector({ composition: "noise-grid" }).director;
+  restored.restoreProjectState(JSON.parse(JSON.stringify(snapshot)));
+  restored.update(FRAME_ZERO);
+  assert.deepEqual(restored.inspect().timeline.endpointDurations, { start: 1, end: 2 });
+  assert.equal(restored.inspect().timeline.coreDuration, 8);
+  assert.deepEqual(restored.snapshotProjectState().compositionTimeline, snapshot.compositionTimeline);
+  original.dispose();
+  restored.dispose();
 });

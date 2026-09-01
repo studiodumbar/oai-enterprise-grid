@@ -235,6 +235,79 @@ function withCompositionTimingOverrides(configs, authoredOverrides) {
   });
 }
 
+function normalizeNoiseGridTimelineOverride(value) {
+  if (value === undefined || value === null) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new TypeError("Noise-grid timeline override must be an object.");
+  }
+  const normalized = {};
+  for (const name of ["introSeconds", "holdSeconds", "outroSeconds"]) {
+    const seconds = value[name];
+    if (!Number.isFinite(seconds) || seconds <= 0) {
+      throw new RangeError(
+        `Noise-grid timeline ${name} must be a finite positive number.`,
+      );
+    }
+    normalized[name] = seconds;
+  }
+  return Object.freeze(normalized);
+}
+
+// The noise-grid editor authors the three visible phases together. Keep this
+// override at the config boundary so previews and fresh export directors use
+// the same compiled clock without mutating the authored bundle.
+function withNoiseGridTimelineOverride(configs, authoredOverride) {
+  const override = normalizeNoiseGridTimelineOverride(authoredOverride);
+  if (override === null) return configs;
+  return configs.map(config => {
+    const definition = config.compositionDefinitions?.["noise-grid"];
+    const noiseGrid = config.settings?.noiseGrid;
+    if (!definition || !noiseGrid) return config;
+    return {
+      ...config,
+      settings: {
+        ...config.settings,
+        noiseGrid: {
+          ...noiseGrid,
+          intro: {
+            ...(noiseGrid.intro ?? {}),
+            durationSeconds: override.introSeconds,
+          },
+          outro: {
+            ...(noiseGrid.outro ?? {}),
+            durationSeconds: override.outroSeconds,
+          },
+          circleEndpoints: {
+            ...(noiseGrid.circleEndpoints ?? {}),
+            start: {
+              ...(noiseGrid.circleEndpoints?.start ?? {}),
+              enabled: true,
+              mode: "native",
+              durationSeconds: override.introSeconds,
+            },
+            end: {
+              ...(noiseGrid.circleEndpoints?.end ?? {}),
+              enabled: true,
+              mode: "native",
+              durationSeconds: override.outroSeconds,
+            },
+          },
+        },
+      },
+      compositionDefinitions: {
+        ...config.compositionDefinitions,
+        "noise-grid": {
+          ...definition,
+          timing: {
+            ...definition.timing,
+            bodyDurationSeconds: override.holdSeconds,
+          },
+        },
+      },
+    };
+  });
+}
+
 function normalizedLongSideCellsOverrides(value) {
   const entries = value instanceof Map ? [...value] : Object.entries(value ?? {});
   const overrides = new Map();
@@ -466,9 +539,13 @@ export function createRuntimeConfig({
   compositionTimingOverrides,
   paletteOverride,
   longSideCellsOverrides,
+  noiseGridTimelineOverride,
 } = {}) {
   return resolveRuntimeConfig(
-    withCompositionTimingOverrides(compositionConfigs, compositionTimingOverrides),
+    withNoiseGridTimelineOverride(
+      withCompositionTimingOverrides(compositionConfigs, compositionTimingOverrides),
+      noiseGridTimelineOverride,
+    ),
     normalizedPaletteOverride(paletteOverride),
     longSideCellsOverrides,
   );

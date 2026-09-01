@@ -1,4 +1,5 @@
 import { Pane } from "../vendor/tweakpane-4.0.5.min.js";
+import { createNoiseGridTimelineControl } from "./noise-grid-timeline-control.js";
 
 const INTERACTIVE_FLOCK_INSTRUCTIONS = Object.freeze({
   launcher: "Add beat → draw launches → Play.",
@@ -122,6 +123,8 @@ export function createCompositionPanel({
   setLongSideCells = () => null,
   currentAnimationDuration = () => null,
   setAnimationDuration = () => null,
+  currentNoiseGridTimeline = () => null,
+  setNoiseGridTimeline = () => null,
 } = {}) {
   if (!container?.append) {
     throw new TypeError("Composition panel needs a DOM container.");
@@ -145,6 +148,12 @@ export function createCompositionPanel({
     || typeof setAnimationDuration !== "function"
   ) {
     throw new TypeError("Composition panel animation-duration hooks must be functions.");
+  }
+  if (
+    typeof currentNoiseGridTimeline !== "function"
+    || typeof setNoiseGridTimeline !== "function"
+  ) {
+    throw new TypeError("Composition panel noise-grid timeline hooks must be functions.");
   }
 
   const choices = canonicalCompositionChoices(compositions);
@@ -216,6 +225,11 @@ export function createCompositionPanel({
     label: "How to add a beat",
     readonly: true,
   });
+  const noiseGridTimeline = createNoiseGridTimelineControl({
+    pane,
+    current: currentNoiseGridTimeline,
+    set: setNoiseGridTimeline,
+  });
 
   function sync() {
     if (disposed) return false;
@@ -243,9 +257,11 @@ export function createCompositionPanel({
       }
       longSideCellsBinding.hidden = longSideCells === null;
       coreDurationBinding.hidden = animationDuration !== null;
-      durationBinding.hidden = animationDuration === null;
+      durationBinding.hidden = animationDuration === null
+        || currentNoiseGridTimeline() !== null;
       instructionBinding.hidden = telemetry.instruction === "";
       pane.refresh();
+      noiseGridTimeline.sync();
     } finally {
       syncing = false;
     }
@@ -296,6 +312,7 @@ export function createCompositionPanel({
     dispose() {
       if (disposed) return;
       disposed = true;
+      noiseGridTimeline.dispose();
       pane.dispose();
     },
   };
