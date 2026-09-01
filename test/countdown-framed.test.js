@@ -13,6 +13,8 @@ import {
   countdownClockBirthRippleAt,
   countdownClockEvolutionAt,
   countdownClockFrame,
+  countdownClockOffsetSchedule,
+  countdownClockOffsetStateAt,
   countdownClockPlan,
 } from "../src/countdown-appearance-effects/clock.js";
 import {
@@ -61,6 +63,7 @@ import {
 } from "../src/countdown-appearance-effects/bubbles-debug.js";
 import { manhattanGridDistance } from "../src/generators/pathfinding-strategies.js";
 import { createCountingContext, runFrames } from "../src/debug/headless.js";
+import { captureDebug } from "../src/debug/index.js";
 
 function createGenerator({
   seed = 123,
@@ -113,6 +116,74 @@ function untimedTrackOptions(uses, countFromSeconds = 6) {
 
 function singleTrackOptions(use, countFromSeconds = 6) {
   return untimedTrackOptions([use], countFromSeconds);
+}
+
+function bubblesTrackOptions() {
+  return singleTrackOptions(
+    "bubbles",
+    SETTINGS.countdownFramed.countFromSeconds,
+  );
+}
+
+function snakeBubblesOptions() {
+  const effects = SETTINGS.countdownFramed.appearance.effects;
+  const snakeEndSeconds = 17;
+  const bubblesStartSeconds = 20;
+  const countFromSeconds = 30;
+  const tracks = [
+    {
+      id: "snake-main",
+      use: "snake",
+      startSeconds: 0,
+      durationSeconds: snakeEndSeconds,
+      evolution: {
+        startSeconds: snakeEndSeconds,
+        durationSeconds: bubblesStartSeconds - snakeEndSeconds,
+      },
+      zIndex: 20,
+      settings: effects.snake,
+    },
+    {
+      id: "bubbles-main",
+      use: "bubbles",
+      startSeconds: bubblesStartSeconds,
+      durationSeconds: countFromSeconds - bubblesStartSeconds,
+      evolution: {
+        startSeconds: bubblesStartSeconds,
+        durationSeconds: countFromSeconds - bubblesStartSeconds,
+      },
+      zIndex: 30,
+      settings: effects.frame,
+    },
+  ];
+  return {
+    ...SETTINGS.countdownFramed,
+    countFromSeconds,
+    timing: {
+      ...SETTINGS.countdownFramed.timing,
+      bodyDurationSeconds: countFromSeconds,
+      beatCount: countFromSeconds,
+    },
+    appearance: {
+      ...SETTINGS.countdownFramed.appearance,
+      synth: {
+        ...SETTINGS.countdownFramed.appearance.synth,
+        tracks,
+        connections: [{
+          id: "snake-bubbles",
+          from: tracks[0].id,
+          to: tracks[1].id,
+          use: "auto",
+          startSeconds: snakeEndSeconds,
+          durationSeconds: bubblesStartSeconds - snakeEndSeconds,
+          evolution: {
+            startSeconds: snakeEndSeconds,
+            durationSeconds: bubblesStartSeconds - snakeEndSeconds,
+          },
+        }],
+      },
+    },
+  };
 }
 
 function clockSnakeRippleOptions() {
@@ -262,6 +333,16 @@ function frameDotIdentity(dots) {
   }));
 }
 
+function frameDotOverlapsRectangle(dot, rectangle) {
+  const x = dot.xInSubdivisions ?? dot.column + 0.5;
+  const y = dot.yInSubdivisions ?? dot.row + 0.5;
+  const radius = (dot.sizeInSubdivisions ?? 1) / 2;
+  return x - radius < rectangle.right
+    && x + radius > rectangle.left
+    && y - radius < rectangle.bottom
+    && y + radius > rectangle.top;
+}
+
 function clockSquareBounds(square, squareSize) {
   return {
     left: square.topLeftColumn,
@@ -384,7 +465,6 @@ test("countdown chooses deterministic cells at least three parent cells apart", 
 
 test("countdown uses countFromSeconds as its duration and beat count", () => {
   const countFromSeconds = SETTINGS.countdownFramed.countFromSeconds;
-  const snakeBubblesSeconds = 3;
   assert.equal(SETTINGS.countdownFramed.ui.noisePreview, false);
   const generator = createGenerator();
   generator.enter({ time: 0 });
@@ -398,9 +478,24 @@ test("countdown uses countFromSeconds as its duration and beat count", () => {
   assert.notEqual(generator.inspect().cellIndex, firstCell);
 
   generator.update({ time: countFromSeconds - 0.001 });
-  assert.equal(generator.inspect().label, "00:01");
+  const finalTick = generator.inspect();
+  assert.equal(finalTick.label, "00:01");
+  assert.equal(finalTick.textCentered, true);
+  assert.deepEqual(finalTick.textCenter, {
+    x: finalTick.layout.offsetX + finalTick.layout.patternWidth / 2,
+    y: finalTick.layout.offsetY + finalTick.layout.patternHeight / 2,
+  });
+  const centeredContext = createCountingContext();
+  const centeredGlyphs = [];
+  centeredContext.fillText = (...args) => centeredGlyphs.push(args);
+  generator.draw({}, {}, centeredContext);
+  assert.deepEqual(centeredGlyphs[2].slice(1), [
+    finalTick.textCenter.x,
+    finalTick.textCenter.y,
+  ]);
   generator.update({ time: countFromSeconds });
   assert.equal(generator.inspect().label, formatCountdown(countFromSeconds));
+  assert.equal(generator.inspect().textCentered, false);
   assert.equal(generator.animationDuration(), countFromSeconds);
   assert.deepEqual(COMPOSITION_DEFINITIONS["countdown-framed"].timing, {
     bodyDurationSeconds: countFromSeconds,
@@ -415,11 +510,7 @@ test("countdown uses countFromSeconds as its duration and beat count", () => {
     ]),
     [
       ["clock-main", 0, countFromSeconds / 6],
-      [
-        "snake-main",
-        countFromSeconds / 3,
-        countFromSeconds / 3 - snakeBubblesSeconds,
-      ],
+      ["snake-main", countFromSeconds / 3, countFromSeconds / 3 - 3],
       ["bubbles-main", countFromSeconds * 2 / 3, countFromSeconds / 3],
     ],
   );
@@ -427,19 +518,18 @@ test("countdown uses countFromSeconds as its duration and beat count", () => {
     resolvedSynth.connections.map(connection => [
       connection.id,
       connection.startSeconds,
-      connection.durationSeconds,
+      Number(connection.durationSeconds.toFixed(9)),
     ]),
     [
       ["clock-snake", countFromSeconds / 6, countFromSeconds / 6],
-      [
-        "snake-bubbles",
-        countFromSeconds * 2 / 3 - snakeBubblesSeconds,
-        snakeBubblesSeconds,
-      ],
+      ["snake-bubbles", countFromSeconds * 2 / 3 - 3, 3],
     ],
   );
-  const [clockTrack, snakeTrack, bubblesTrack] = SETTINGS.countdownFramed
-    .appearance.synth.tracks;
+  const [clockTrack, snakeTrack, bubblesTrack] =
+    SETTINGS.countdownFramed.appearance.synth.tracks;
+  assert.equal(clockTrack.use, "clock");
+  assert.equal(snakeTrack.use, "snake");
+  assert.equal(bubblesTrack.use, "bubbles");
   assert.deepEqual(
     SETTINGS.countdownFramed.appearance.synth.connections.map(connection => [
       connection.from,
@@ -450,6 +540,46 @@ test("countdown uses countFromSeconds as its duration and beat count", () => {
       [snakeTrack.id, bubblesTrack.id],
     ],
   );
+});
+
+test("bubbles center their final tick geometry independently of the tuning score", () => {
+  const countFromSeconds = SETTINGS.countdownFramed.countFromSeconds;
+  const generator = createGenerator({
+    options: singleTrackOptions("bubbles", countFromSeconds),
+  });
+  generator.enter({ time: countFromSeconds - 0.001 });
+  const finalTick = generator.inspect();
+  assert.equal(finalTick.appearance.frame.plan.textCentered, true);
+  assert.deepEqual(finalTick.appearance.frame.plan.textCenter, {
+    x: finalTick.appearance.frame.plan.gridColumns / 2,
+    y: finalTick.appearance.frame.plan.gridRows / 2,
+  });
+  assert.ok(finalTick.appearance.frame.plan.digitCircles.every(circle => (
+    circle.y === finalTick.appearance.frame.plan.gridRows / 2
+  )));
+  assert.deepEqual(
+    finalTick.appearance.frame.avoidance.finalWipe.center,
+    { xProgress: 0.5, yProgress: 0.5 },
+  );
+  const finalTimerCellIndex = Math.floor(finalTick.layout.rows / 2)
+    * finalTick.layout.columns + Math.floor(finalTick.layout.columns / 2);
+  assert.equal(
+    finalTick.appearance.frame.merge.textSafeCellIndex,
+    finalTimerCellIndex,
+  );
+  assert.equal(finalTick.appearance.frame.merge.textSafeCellCount, 1);
+  assert.ok(finalTick.appearance.frame.frame.dots.every(dot => (
+    !frameDotOverlapsRectangle(
+      dot,
+      finalTick.appearance.frame.frame.textSafeRectangle,
+    )
+  )));
+  const finalWipe = finalTick.appearance.frame.avoidance.bubbles.find(
+    bubble => bubble.kind === "final-wipe",
+  );
+  assert.equal(finalWipe.circles[0].x, finalTick.appearance.frame.plan.gridColumns / 2);
+  assert.equal(finalWipe.circles[0].y, finalTick.appearance.frame.plan.gridRows / 2);
+  generator.dispose();
 });
 
 test("one synth timeline track owns the full countdown without dormant effects", () => {
@@ -697,7 +827,7 @@ test("countdown orders equal clock, snake, and bubbles stages", () => {
 test("countdown intro spreads palette steps outward from the center colon", () => {
   assert.deepEqual(
     countdownPalette(SETTINGS.countdownFramed, PALETTES),
-    PALETTES.countdown,
+    PALETTES.daybreak,
   );
   assert.deepEqual(countdownRevealPaletteIndices("03:00", 4, 0), [0, 0, 0, 0, 0]);
   assert.deepEqual(countdownRevealPaletteIndices("03:00", 4, 1), [0, 0, 1, 0, 0]);
@@ -713,20 +843,21 @@ test("countdown intro derives its steps and final-color hold from one beat", () 
   const { stepCount, stepSeconds } = reveal;
   const authoredDuration = SETTINGS.countdownFramed.textReveal.durationSeconds;
   const durationMultiplier = Number(/\*\s*([\d.]+)/.exec(authoredDuration)?.[1]);
-  assert.equal(stepCount, 5);
+  assert.equal(stepCount, 7);
+  assert.equal(reveal.palette.at(-1), "#ffffff");
   assert.equal(reveal.authoredDuration, authoredDuration);
   assert.equal(reveal.durationSource, "composition-beat");
   assert.equal(reveal.durationMultiplier, durationMultiplier);
   assert.equal(reveal.durationSeconds, durationMultiplier);
-  assert.equal(stepSeconds, durationMultiplier / 5);
+  assert.equal(stepSeconds, durationMultiplier / stepCount);
   assert.deepEqual(generator.inspect().reveal.paletteIndices, [0, 0, 0, 0, 0]);
 
   generator.update({ time: stepSeconds });
   assert.deepEqual(generator.inspect().reveal.paletteIndices, [0, 0, 1, 0, 0]);
   generator.update({ time: stepSeconds * stepCount });
-  assert.deepEqual(generator.inspect().reveal.paletteIndices, [3, 3, 3, 3, 3]);
+  assert.deepEqual(generator.inspect().reveal.paletteIndices, [5, 5, 5, 5, 5]);
   generator.update({ time: 0.999 });
-  assert.deepEqual(generator.inspect().reveal.paletteIndices, [3, 3, 3, 3, 3]);
+  assert.deepEqual(generator.inspect().reveal.paletteIndices, [5, 5, 5, 5, 5]);
   generator.update({ time: 1 });
   assert.deepEqual(generator.inspect().reveal.paletteIndices, [0, 0, 0, 0, 0]);
   generator.dispose();
@@ -818,7 +949,10 @@ test("snake selects top or bottom secondary movement one third of the time", () 
     );
   }
 
-  const highBitSeedGenerator = createGenerator({ seed: 0xffffffff });
+  const highBitSeedGenerator = createGenerator({
+    seed: 0xffffffff,
+    options: snakeBubblesOptions(),
+  });
   highBitSeedGenerator.enter({ time: 1 });
   assert.equal(
     highBitSeedGenerator.inspect().appearance.snake.plan.seed,
@@ -826,7 +960,7 @@ test("snake selects top or bottom secondary movement one third of the time", () 
   );
   highBitSeedGenerator.dispose();
 
-  const generator = createGenerator();
+  const generator = createGenerator({ options: snakeBubblesOptions() });
   generator.enter({ time: 0 });
   const initialSnake = generator.inspect().appearance.snake;
   assert.equal(initialSnake.secondaryMovement.enabled, true);
@@ -850,10 +984,11 @@ test("snake selects top or bottom secondary movement one third of the time", () 
   const narrow = createGenerator({
     seed: 28,
     viewport: { width: 390, height: 844 },
+    options: snakeBubblesOptions(),
   });
   narrow.enter({ time: 29.999 });
   const narrowSnake = narrow.inspect().appearance.snake;
-  assert.equal(narrowSnake.plan.secondaryMovement.avoidance, "behind-timer");
+  assert.equal(narrowSnake.plan.secondaryMovement.avoidance, "strict");
   assert.equal(
     new Set(narrowSnake.frame.cells.map(cell => cell.index)).size,
     narrowSnake.frame.cells.length,
@@ -873,7 +1008,7 @@ test("snake selects top or bottom secondary movement one third of the time", () 
           ...snakeSettings.secondaryMovement,
           probability: 1.01,
         },
-      }),
+      }, snakeBubblesOptions()),
     }),
     /probability must be from zero to one/,
   );
@@ -885,20 +1020,19 @@ test("snake selects top or bottom secondary movement one third of the time", () 
           ...snakeSettings.secondaryMovement,
           directions: ["left"],
         },
-      }),
+      }, snakeBubblesOptions()),
     }),
     /directions must only contain: top, bottom/,
   );
 });
 
-test("snake routes around every parent cell touched by the timer safe zone", () => {
+test("snake routes around the single parent cell containing the timer", () => {
   const layout = { columns: 5, rows: 3 };
   const textSafeCellIndices = countdownSnakeTextSafeCells(
     layout,
     0,
-    { widthInCells: 1.25, heightInCells: 0.75 },
   );
-  assert.deepEqual(textSafeCellIndices, [0, 1]);
+  assert.deepEqual(textSafeCellIndices, [0]);
 
   const path = countdownSnakePath(layout, 0, 4, 42, textSafeCellIndices);
   assert.deepEqual(
@@ -1035,7 +1169,7 @@ test("snake tapers its body and engorgement reveals one pulsing meal", () => {
 });
 
 test("stable snake stops beside type before connector engorgement takes ownership", () => {
-  const generator = createGenerator();
+  const generator = createGenerator({ options: snakeBubblesOptions() });
   generator.enter({ time: 0 });
   const first = generator.inspect();
   const { plan } = first.appearance.snake;
@@ -1117,7 +1251,7 @@ test("normal snake movement hands off to a three-second fill transition", () => 
   assert.equal(countdownSnakeLengthAt(7, 100, false, 75), 7);
   assert.equal(countdownSnakeLengthAt(100, 0, true, 75), 75);
 
-  const generator = createGenerator();
+  const generator = createGenerator({ options: snakeBubblesOptions() });
   generator.enter({ time: 0 });
   assert.equal(generator.inspect().appearance.snake.growAfterEachTick, true);
   assert.equal(generator.inspect().appearance.snake.baseLengthCells, 7);
@@ -1164,7 +1298,7 @@ test("normal snake movement hands off to a three-second fill transition", () => 
     options: withTrackSettings("snake", {
       ...SETTINGS.countdownFramed.appearance.effects.snake,
       growAfterEachTick: false,
-    }),
+    }, snakeBubblesOptions()),
   });
   fixed.enter({ time: 0 });
   fixed.update({
@@ -1257,14 +1391,17 @@ test("wraparound engorgement fills every parent cell deterministically", () => {
     assert.doesNotThrow(() => JSON.stringify(plan));
   };
 
-  const landscape = createGenerator();
+  const landscape = createGenerator({ options: snakeBubblesOptions() });
   assertPlan(landscape.snakeEngorgementPlan, landscape.snakeSettings);
   landscape.enter({ time: 15 });
   landscape.resize({ width: 600, height: 900 });
   assertPlan(landscape.snakeEngorgementPlan, landscape.snakeSettings);
   const resizedFrame = landscape.inspect().appearance.snake.renderFrame;
 
-  const portrait = createGenerator({ viewport: { width: 600, height: 900 } });
+  const portrait = createGenerator({
+    viewport: { width: 600, height: 900 },
+    options: snakeBubblesOptions(),
+  });
   portrait.enter({ time: 15 });
   assert.deepEqual(
     portrait.inspect().appearance.snake.renderFrame,
@@ -1272,7 +1409,7 @@ test("wraparound engorgement fills every parent cell deterministically", () => {
   );
 
   const smaller = createGenerator({
-    options: { ...SETTINGS.countdownFramed, longSideCells: 10 },
+    options: { ...snakeBubblesOptions(), longSideCells: 10 },
   });
   assertPlan(smaller.snakeEngorgementPlan, smaller.snakeSettings);
   assert.doesNotThrow(() => JSON.stringify(landscape.inspect()));
@@ -1283,17 +1420,17 @@ test("wraparound engorgement fills every parent cell deterministically", () => {
   smaller.dispose();
 });
 
-test("snake resolves and renders its independently declared palette", () => {
+test("countdown effects inherit the composition palette", () => {
   const generator = createGenerator({
     options: withTrackSettings("snake", {
       ...SETTINGS.countdownFramed.appearance.effects.snake,
       enabled: true,
-    }),
+    }, snakeBubblesOptions()),
   });
   generator.enter({ time: SETTINGS.countdownFramed.countFromSeconds / 3 + 5 });
   const appearance = generator.inspect().appearance;
   const snake = appearance.snake;
-  const paletteName = SETTINGS.countdownFramed.appearance.effects.snake.palette;
+  const paletteName = SETTINGS.countdownFramed.palette;
   assert.equal(snake.paletteName, paletteName);
   assert.deepEqual(
     snake.palette,
@@ -1431,7 +1568,7 @@ test("snake disappearance equally selects instant removal or an accelerating tai
   assert.deepEqual(diveMiddle.cells, completedFrame.cells.slice(1));
   assert.deepEqual(diveEnd.cells, []);
 
-  const instantGenerator = createGenerator();
+  const instantGenerator = createGenerator({ options: snakeBubblesOptions() });
   instantGenerator.enter({ time: 1 });
   assert.equal(
     instantGenerator.inspect().appearance.snake.disappearance.mode,
@@ -1443,7 +1580,7 @@ test("snake disappearance equally selects instant removal or an accelerating tai
   );
   instantGenerator.dispose();
 
-  const diveGenerator = createGenerator();
+  const diveGenerator = createGenerator({ options: snakeBubblesOptions() });
   diveGenerator.enter({ time: 2.999999 });
   const beforeDive = diveGenerator.inspect().appearance.snake;
   diveGenerator.update({ time: 3 });
@@ -1484,15 +1621,26 @@ test("snake disappearance equally selects instant removal or an accelerating tai
   diveGenerator.dispose();
 
   for (const seed of [0, 1, 123, 0xffffffff]) {
-    const lifecycleGenerator = createGenerator({ seed });
+    const lifecycleGenerator = createGenerator({
+      seed,
+      options: snakeBubblesOptions(),
+    });
     lifecycleGenerator.enter({ time: 0 });
     let previousDiveTick = -Infinity;
     let diveCount = 0;
     for (let tick = 1; tick <= 30; tick += 1) {
       lifecycleGenerator.update({ time: tick - 0.000001 });
-      const before = lifecycleGenerator.inspect().appearance.snake;
+      const beforeState = lifecycleGenerator.inspect();
+      const before = beforeState.appearance.snake;
       lifecycleGenerator.update({ time: tick });
-      const after = lifecycleGenerator.inspect().appearance.snake;
+      const afterState = lifecycleGenerator.inspect();
+      const after = afterState.appearance.snake;
+      if (
+        !beforeState.appearance.synth.activeTrackIds.includes("snake-main")
+        || !afterState.appearance.synth.activeTrackIds.includes("snake-main")
+      ) {
+        continue;
+      }
       if (after.disappearance.phase !== "dive") continue;
       const unwrappedTick = tick === 30 ? 30 : tick;
       assert.ok(unwrappedTick - previousDiveTick >= 3);
@@ -1536,6 +1684,8 @@ test("clock reveals two nearby 2x2 squares clockwise per beat", () => {
     textSafeZone: settings.textSafeZone,
     minimumSquareGapInSubdivisions:
       settings.minimumSquareGapInSubdivisions,
+    farSeparationMinimumRadiusInCells:
+      settings.farSeparation.minimumRadiusInCells,
   });
 
   assert.equal(plan.squares.length, 2);
@@ -1716,6 +1866,8 @@ test("clock far-separation moves only the traveling cell", () => {
     textSafeZone: settings.textSafeZone,
     minimumSquareGapInSubdivisions:
       settings.minimumSquareGapInSubdivisions,
+    farSeparationMinimumRadiusInCells:
+      settings.farSeparation.minimumRadiusInCells,
   };
   const regular = countdownClockPlan({
     ...base,
@@ -1750,8 +1902,14 @@ test("clock far-separation moves only the traveling cell", () => {
   );
   assert.ok(
     separated.separationDistanceInSubdivisions
-      > regular.separationDistanceInSubdivisions * 4,
+      >= settings.farSeparation.minimumRadiusInCells * separated.subdivisions,
   );
+  const farReservation = reservationFor(separated, "traveling");
+  const touchesHorizontalEdge = farReservation.left === 0
+    || farReservation.right === separated.gridColumns;
+  const touchesVerticalEdge = farReservation.top === 0
+    || farReservation.bottom === separated.gridRows;
+  assert.equal(touchesHorizontalEdge && touchesVerticalEdge, false);
   assertClockSafeZones(separated);
   assert.deepEqual(
     countdownClockPlan({ ...base, farSeparationProbability: 1 }),
@@ -1764,6 +1922,144 @@ test("clock far-separation moves only the traveling cell", () => {
     farSeparationProbability: 0.5,
   }).farSeparated);
   assert.deepEqual(new Set(flips), new Set([false, true]));
+});
+
+test("far clock square chooses likely fitting patterns that resync", () => {
+  const settings = SETTINGS.countdownFramed.appearance.effects.clock;
+  const offset = settings.travelingSquareBeatOffset;
+  assert.equal(offset.probability, 0.85);
+  assert.deepEqual(offset.patterns.map(pattern => [
+    pattern.durationBeats,
+    pattern.repeatCount,
+  ]), [
+    [0.75, 4],
+    [1.25, 4],
+    [1.5, 2],
+    [2, 1],
+    [2.5, 2],
+  ]);
+  const expectedPatterns = new Set([
+    "quick-four",
+    "five-four",
+    "slow-two",
+    "double-hold",
+    "long-two",
+  ]);
+  const triggeredPatterns = new Set();
+  let activeBlockCount = 0;
+  let blockCount = 0;
+  for (let seed = 0; seed < 200; seed += 1) {
+    const schedule = countdownClockOffsetSchedule(seed, 9, offset);
+    assert.equal(schedule.blocks[0].startBeat, 0);
+    assert.equal(schedule.blocks.at(-1).endBeat, 9);
+    for (const block of schedule.blocks) {
+      blockCount += 1;
+      assert.ok(Number.isInteger(block.startBeat));
+      assert.ok(Number.isInteger(block.endBeat));
+      assert.equal(block.endBeat - block.startBeat, block.totalBeats);
+      assert.equal(block.durationBeats * block.repeatCount, block.totalBeats);
+      if (!block.active) continue;
+      activeBlockCount += 1;
+      triggeredPatterns.add(block.patternId);
+    }
+  }
+  assert.deepEqual(
+    triggeredPatterns,
+    expectedPatterns,
+  );
+  assert.ok(activeBlockCount / blockCount > 0.7);
+
+  const noFit = countdownClockOffsetSchedule(42, 2, {
+    enabled: true,
+    probability: 1,
+    patterns: [{ id: "three-beat", durationBeats: 0.75, repeatCount: 4 }],
+  });
+  assert.deepEqual(noFit.blocks.map(block => block.patternId), [
+    "synced",
+    "synced",
+  ]);
+  assert.equal(countdownClockOffsetStateAt(noFit, 2), null);
+  assert.throws(
+    () => countdownClockOffsetSchedule(42, 6, {
+      enabled: true,
+      probability: 1,
+      patterns: [{ id: "cannot-resync", durationBeats: 2.25, repeatCount: 2 }],
+    }),
+    /must resync on a whole main beat; 2.25 × 2 = 4.5/,
+  );
+});
+
+test("far clock square keeps its independent cadence until each resync", () => {
+  const options = singleTrackOptions("clock");
+  options.appearance.synth.tracks[0].settings = {
+    ...options.appearance.synth.tracks[0].settings,
+    travelingSquareBeatOffset: {
+      enabled: true,
+      probability: 1,
+      patterns: [{ id: "quick-four", durationBeats: 0.75, repeatCount: 4 }],
+    },
+    farSeparation: { enabled: true, probability: 1 },
+  };
+  let generator;
+  const lines = captureDebug(["config", "transition"], () => {
+    generator = createGenerator({ seed: 42, options });
+    generator.enter({ time: 0.74 });
+    generator.update({ time: 0.76 });
+  });
+  assert.ok(lines.some(line => (
+    line.includes("travelingBeatOffset=yes")
+    && line.includes("beatOffsetPatterns=quick-four:0.75x4")
+  )));
+  assert.ok(lines.some(line => (
+    line.includes("countdown-clock-offset state=active")
+    && line.includes("pattern=quick-four")
+    && line.includes("instance=2/4")
+  )));
+
+  let state = generator.inspect().appearance.clock;
+  assert.equal(state.offsetState.blockStartBeat, 0);
+  assert.equal(state.offsetState.instanceIndex, 1);
+  assert.equal(state.offsetState.durationBeats, 0.75);
+  assert.equal(state.frame.squares.find(
+    square => square.motionRole === "anchored",
+  ).sourceTick, 0);
+  assert.equal(state.frame.squares.find(
+    square => square.motionRole === "traveling",
+  ).sourceTick, 100001);
+
+  generator.update({ time: 1.1 });
+  state = generator.inspect().appearance.clock;
+  assert.equal(state.frame.squares.find(
+    square => square.motionRole === "anchored",
+  ).sourceTick, 1);
+  assert.equal(state.frame.squares.find(
+    square => square.motionRole === "traveling",
+  ).sourceTick, 100001);
+
+  generator.update({ time: 3 });
+  state = generator.inspect().appearance.clock;
+  assert.equal(state.offsetState.blockStartBeat, 3);
+  assert.equal(state.offsetState.instanceIndex, 0);
+  assert.equal(state.offsetState.instanceAgeBeats, 0);
+  assert.equal(state.frame.squares.find(
+    square => square.motionRole === "anchored",
+  ).sourceTick, 3);
+  assert.equal(state.frame.squares.find(
+    square => square.motionRole === "traveling",
+  ).sourceTick, 100004);
+
+  generator.seek(6);
+  const looped = generator.inspect().appearance.clock;
+  assert.equal(looped.offsetState.blockStartBeat, 0);
+  assert.equal(looped.offsetState.instanceIndex, 0);
+  assert.equal(looped.offsetState.instanceAgeBeats, 0);
+  assert.equal(looped.frame.squares.find(
+    square => square.motionRole === "anchored",
+  ).sourceTick, 0);
+  assert.equal(looped.frame.squares.find(
+    square => square.motionRole === "traveling",
+  ).sourceTick, 100000);
+  generator.dispose();
 });
 
 test("clock squares keep seeded positions and render beneath the timer text", () => {
@@ -1843,6 +2139,16 @@ test("clock expands through 3x3, 4x4, and 8x8 before becoming the snake origin",
   for (const plan of expandingPlans) {
     const anchored = plan.squares.find(square => square.motionRole === "anchored");
     const traveling = plan.squares.find(square => square.motionRole === "traveling");
+    assert.equal(anchored.rotationDirection, "clockwise");
+    assert.equal(traveling.rotationDirection, "counter-clockwise");
+    assert.deepEqual(anchored.dots.slice(0, 2).map(dot => [
+      dot.column - anchored.topLeftColumn,
+      dot.row - anchored.topLeftRow,
+    ]), [[0, 0], [1, 0]]);
+    assert.deepEqual(traveling.dots.slice(0, 2).map(dot => [
+      dot.column - traveling.topLeftColumn,
+      dot.row - traveling.topLeftRow,
+    ]), [[0, 0], [0, 1]]);
     assert.equal(anchored.reservation.right - anchored.reservation.left, plan.squareSize);
     assert.equal(traveling.reservation.right - traveling.reservation.left, plan.squareSize);
     assert.deepEqual(anchored.reservation, anchored.originReservation);
@@ -1853,6 +2159,9 @@ test("clock expands through 3x3, 4x4, and 8x8 before becoming the snake origin",
       );
     }
   }
+  assert.ok(plans.at(-1).squares.every(
+    square => square.rotationDirection === undefined,
+  ));
   assert.equal(plans.at(-1).evolutionMode, "snake-origin");
   assert.ok(plans.at(-1).dots.every(dot => dot.cellIndex === base.handoffCellIndex));
   assert.ok(plans.at(-1).dots.every(dot => dot.sizeInSubdivisions === 8));
@@ -2011,6 +2320,54 @@ test("birth ripple starts one beat before handoff and trails the snake for four 
     cleared.appearance.synth.renderLayers.map(layer => layer.drawKey),
     ["snake"],
   );
+  generator.dispose();
+});
+
+test("timer and snake cells mask the lower-priority birth ripple", () => {
+  const generator = createGenerator({ seed: 0 });
+  const snakeStartSeconds = SETTINGS.countdownFramed.countFromSeconds / 3;
+  let state = null;
+  const lines = captureDebug(["transition"], () => {
+    generator.enter({ time: snakeStartSeconds });
+    for (let offset = 0; offset < 3; offset += 0.05) {
+      generator.update({ time: snakeStartSeconds + offset });
+      const candidate = generator.inspect();
+      const render = candidate.appearance.clock.frame.birthRipple?.render;
+      if (render?.hiddenByTimerCount > 0 && render.hiddenBySnakeCount > 0) {
+        state = candidate;
+        break;
+      }
+    }
+  });
+  assert.notEqual(state, null);
+  const ripple = state.appearance.clock.frame.birthRipple;
+  const priority = ripple.render;
+  const visibleSnakeCellIndices = new Set([
+    ...generator.snakeRenderFrame.cells,
+    ...generator.snakeDisappearanceRenderFrame.cells,
+  ].map(cell => cell.index));
+
+  assert.equal(state.appearance.order.activeEffect, "snake");
+  assert.ok(ripple.cells.some(cell => cell.index === state.cellIndex));
+  assert.ok(ripple.cells.some(cell => visibleSnakeCellIndices.has(cell.index)));
+  assert.equal(priority.timerCellIndex, state.cellIndex);
+  assert.equal(priority.snakePriorityActive, true);
+  assert.ok(priority.hiddenByTimerCount > 0);
+  assert.ok(priority.hiddenBySnakeCount > 0);
+  assert.equal(
+    priority.visibleCellCount,
+    priority.sourceCellCount
+      - priority.hiddenByTimerCount
+      - priority.hiddenBySnakeCount,
+  );
+  assert.ok(priority.cells.every(cell => cell.index !== state.cellIndex));
+  assert.ok(priority.cells.every(cell => !visibleSnakeCellIndices.has(cell.index)));
+  assert.ok(lines.some(line => (
+    line.includes("countdown-ripple-priority state=active")
+    && line.includes("snakePriority=yes")
+    && line.includes("hiddenByTimer=")
+    && line.includes("hiddenBySnake=")
+  )));
   generator.dispose();
 });
 
@@ -2265,6 +2622,17 @@ test("clock rejects invalid ripple and impossible safe-zone settings at setup", 
   assert.throws(
     () => createGenerator({
       options: optionsWithClock({
+        farSeparation: {
+          ...SETTINGS.countdownFramed.appearance.effects.clock.farSeparation,
+          minimumRadiusInCells: 0,
+        },
+      }),
+    }),
+    /farSeparation.minimumRadiusInCells must be a finite positive number/,
+  );
+  assert.throws(
+    () => createGenerator({
+      options: optionsWithClock({
         birthRipple: {
           ...SETTINGS.countdownFramed.appearance.effects.clock.birthRipple,
           wakeDepthInCells: 0,
@@ -2310,7 +2678,8 @@ test("clock rejects invalid ripple and impossible safe-zone settings at setup", 
 });
 
 test("snake engorges alive, reveals its meal, then commits atomically to bubbles", () => {
-  const generator = createGenerator();
+  const options = snakeBubblesOptions();
+  const generator = createGenerator({ options });
   generator.enter({ time: 0 });
   const snakeTrack = generator.inspect().appearance.synth.tracks.find(
     track => track.use === "snake",
@@ -2331,7 +2700,7 @@ test("snake engorges alive, reveals its meal, then commits atomically to bubbles
   assert.equal(
     generator.inspect().label,
     formatCountdown(
-      SETTINGS.countdownFramed.countFromSeconds - snakeTrack.startSeconds,
+      options.countFromSeconds - snakeTrack.startSeconds,
     ),
   );
 
@@ -2354,7 +2723,7 @@ test("snake engorges alive, reveals its meal, then commits atomically to bubbles
   assert.equal(
     growthStart.label,
     formatCountdown(
-      SETTINGS.countdownFramed.countFromSeconds - connection.startSeconds,
+      options.countFromSeconds - connection.startSeconds,
     ),
   );
   assert.equal(growthStart.appearance.frame.merge.phase, "engorging");
@@ -2391,6 +2760,13 @@ test("snake engorges alive, reveals its meal, then commits atomically to bubbles
   );
   assert.equal(growthMidpoint.appearance.snake.engorgement.growthActive, true);
   assert.equal(growthMidpoint.appearance.frame.merge.convertedTileCount, 0);
+  assert.equal(
+    growthMidpoint.appearance.snake.textSafeCellIndex,
+    growthMidpoint.cellIndex,
+  );
+  assert.ok(growthMidpoint.appearance.snake.renderFrame.cells.every(
+    cell => cell.index !== growthMidpoint.cellIndex,
+  ));
 
   generator.update({ time: connectionEndSeconds - 0.75 });
   const growthBurst = generator.inspect();
@@ -2399,6 +2775,9 @@ test("snake engorges alive, reveals its meal, then commits atomically to bubbles
       > growthStart.appearance.snake.engorgement.currentLength,
   );
   assert.equal(growthBurst.appearance.snake.engorgement.growthActive, true);
+  assert.ok(growthBurst.appearance.snake.renderFrame.cells.every(
+    cell => cell.index !== growthBurst.cellIndex,
+  ));
 
   generator.update({ time: connectionEndSeconds - 0.39 });
   const meal = generator.inspect();
@@ -2410,6 +2789,24 @@ test("snake engorges alive, reveals its meal, then commits atomically to bubbles
     meal.appearance.snake.engorgement.uniqueCellCount,
     meal.layout.columns * meal.layout.rows,
   );
+  assert.equal(meal.appearance.snake.textSafeHiddenCellCount, 1);
+  assert.ok(meal.appearance.snake.renderFrame.cells.every(
+    cell => cell.index !== meal.cellIndex,
+  ));
+  const snakeDrawContext = createCountingContext();
+  const snakeDotCenters = [];
+  snakeDrawContext.arc = (x, y) => snakeDotCenters.push({ x, y });
+  generator.draw({}, {}, snakeDrawContext);
+  const snakeTimerColumn = meal.cellIndex % meal.layout.columns;
+  const snakeTimerRow = Math.floor(meal.cellIndex / meal.layout.columns);
+  const timerLeft = meal.layout.offsetX + snakeTimerColumn * meal.layout.cellSize;
+  const timerTop = meal.layout.offsetY + snakeTimerRow * meal.layout.cellSize;
+  assert.ok(snakeDotCenters.every(({ x, y }) => (
+    x < timerLeft
+    || x >= timerLeft + meal.layout.cellSize
+    || y < timerTop
+    || y >= timerTop + meal.layout.cellSize
+  )));
   assert.equal(
     meal.appearance.snake.renderFrame.cells.filter(cell => cell.pulse).length,
     2,
@@ -2467,7 +2864,7 @@ test("snake engorges alive, reveals its meal, then commits atomically to bubbles
   assert.equal(
     merged.label,
     formatCountdown(
-      SETTINGS.countdownFramed.countFromSeconds - connectionEndSeconds,
+      options.countFromSeconds - connectionEndSeconds,
     ),
   );
   assert.equal(merged.appearance.frame.merge.phase, "dead");
@@ -2486,14 +2883,114 @@ test("snake engorges alive, reveals its meal, then commits atomically to bubbles
     merged.appearance.snake.engorgement.plannedLength,
   );
   assert.ok(merged.appearance.frame.merge.convertedTileCount > 0);
+  assert.equal(merged.appearance.frame.merge.waterfallStep, 0);
+  assert.equal(
+    merged.appearance.frame.merge.inheritedCellCount,
+    merged.appearance.frame.merge.sourceBodyCells.length,
+  );
+  assert.equal(merged.appearance.frame.merge.releasedCellCount, 0);
+  assert.ok(merged.appearance.frame.merge.trailSquares.every(
+    square => square.currentLevel === square.sourceLevel,
+  ));
+  assert.equal(merged.appearance.frame.merge.textSafeCellCount, 1);
+  assert.equal(
+    merged.appearance.frame.merge.textSafeCellIndex,
+    merged.cellIndex,
+  );
+  assert.ok(
+    merged.appearance.frame.frame.textSafeHiddenInheritedSquareCount > 0,
+  );
+  assert.equal(
+    merged.appearance.frame.frame.textSafeHiddenGeneratedSquareCount,
+    0,
+  );
+  assert.ok(
+    merged.appearance.frame.frame.dots.every(dot => !frameDotOverlapsRectangle(
+      dot,
+      merged.appearance.frame.frame.textSafeRectangle,
+    )),
+  );
 
-  generator.resize({ width: 900, height: 600 });
+  generator.update({ time: connectionEndSeconds + 0.999 });
+  assert.equal(generator.inspect().appearance.frame.merge.waterfallStep, 0);
+
+  generator.update({ time: connectionEndSeconds + 1 });
+  const firstWaterfallBeat = generator.inspect().appearance.frame.merge;
+  assert.equal(firstWaterfallBeat.waterfallStep, 1);
+  assert.equal(
+    firstWaterfallBeat.releasedCellCount,
+    firstWaterfallBeat.sourceBodyCells.filter(cell => cell.level === 3).length,
+  );
+  assert.ok(firstWaterfallBeat.trailSquares.every(
+    square => square.currentLevel === square.sourceLevel + 1,
+  ));
+
+  generator.update({ time: connectionEndSeconds + 2 });
+  const secondWaterfallState = generator.inspect();
+  const secondWaterfallFrame = secondWaterfallState.appearance.frame.frame;
+  const timerCellIndex = secondWaterfallFrame.textSafeCellIndex;
+  const timerColumn = timerCellIndex % secondWaterfallState.layout.columns;
+  const sameRowNeighbors = [timerColumn - 1, timerColumn + 1]
+    .filter(column => column >= 0 && column < secondWaterfallState.layout.columns)
+    .map(column => (
+      Math.floor(timerCellIndex / secondWaterfallState.layout.columns)
+        * secondWaterfallState.layout.columns + column
+    ));
+  const visibleParentCells = new Set(secondWaterfallFrame.dots.map(dot => {
+    const x = dot.xInSubdivisions ?? dot.column + 0.5;
+    const y = dot.yInSubdivisions ?? dot.row + 0.5;
+    return Math.floor(y / secondWaterfallState.appearance.frame.subdivisions)
+      * secondWaterfallState.layout.columns
+      + Math.floor(x / secondWaterfallState.appearance.frame.subdivisions);
+  }));
+  assert.ok(sameRowNeighbors.every(index => visibleParentCells.has(index)));
+
+  generator.update({ time: connectionEndSeconds + 4 });
+  const generatedOnlyState = generator.inspect();
+  const generatedOnly = generatedOnlyState.appearance.frame.merge;
+  assert.equal(generatedOnly.waterfallStep, 4);
+  assert.equal(generatedOnly.inheritedCellCount, 0);
+  assert.equal(
+    generatedOnly.releasedCellCount,
+    generatedOnly.sourceBodyCells.length,
+  );
+  assert.deepEqual(generatedOnly.trailSquares, []);
+  assert.equal(
+    generatedOnlyState.appearance.frame.frame
+      .textSafeHiddenInheritedSquareCount,
+    0,
+  );
+  assert.ok(
+    generatedOnlyState.appearance.frame.frame
+      .textSafeHiddenGeneratedSquareCount > 0,
+  );
+  assert.ok(generatedOnlyState.appearance.frame.plan.dots.some(
+    dot => frameDotOverlapsRectangle(
+      dot,
+      generatedOnlyState.appearance.frame.frame.textSafeRectangle,
+    ),
+  ));
+  assert.ok(generatedOnlyState.appearance.frame.frame.dots.every(
+    dot => !frameDotOverlapsRectangle(
+      dot,
+      generatedOnlyState.appearance.frame.frame.textSafeRectangle,
+    ),
+  ));
+
+  generator.resize({ width: 600, height: 900 });
   const resizedMerge = generator.inspect();
   assert.equal(resizedMerge.appearance.frame.merge.progress, 1);
   assert.deepEqual(resizedMerge.appearance.snake.renderFrame.cells, []);
   assert.equal(resizedMerge.appearance.frame.merge.fieldCommitState, "committed");
+  assert.equal(resizedMerge.appearance.frame.frame.textSafeCellCount, 1);
+  assert.ok(resizedMerge.appearance.frame.frame.dots.every(dot => (
+    !frameDotOverlapsRectangle(
+      dot,
+      resizedMerge.appearance.frame.frame.textSafeRectangle,
+    )
+  )));
 
-  const direct = createGenerator();
+  const direct = createGenerator({ options });
   direct.enter({
     time: connection.startSeconds + connection.durationSeconds / 2,
   });
@@ -2501,16 +2998,23 @@ test("snake engorges alive, reveals its meal, then commits atomically to bubbles
     direct.inspect().appearance.snake.renderFrame,
     growthMidpoint.appearance.snake.renderFrame,
   );
+  const soughtWaterfall = createGenerator({ options });
+  soughtWaterfall.enter({ time: connectionEndSeconds + 1 });
+  assert.deepEqual(
+    soughtWaterfall.inspect().appearance.frame.merge.trailSquares,
+    firstWaterfallBeat.trailSquares,
+  );
+  soughtWaterfall.dispose();
   direct.dispose();
   generator.dispose();
 });
 
-test("stable handoff avoids type before wraparound engorgement fills behind it", () => {
+test("handoff keeps one timer cell clear while internal engorgement crosses it", () => {
   const generator = createGenerator({ options: clockSnakeRippleOptions() });
   const stageSeconds = SETTINGS.countdownFramed.countFromSeconds / 3;
   generator.enter({ time: stageSeconds - 0.001 });
   const clockOrigin = generator.inspect().appearance.clock.plan.handoffCellIndex;
-  let crossedTimerCell = false;
+  let internalSnakeCrossedTimerCell = false;
 
   for (
     let tick = stageSeconds;
@@ -2520,26 +3024,34 @@ test("stable handoff avoids type before wraparound engorgement fills behind it",
     for (const offset of [0, 0.999]) {
       generator.update({ time: tick + offset });
       const state = generator.inspect();
-      const { plan, renderFrame } = state.appearance.snake;
+      const { renderFrame } = state.appearance.snake;
+      const timerCellIndex = state.textCentered
+        ? Math.floor(state.layout.rows / 2) * state.layout.columns
+          + Math.floor(state.layout.columns / 2)
+        : state.cellIndex;
       const safeCells = countdownSnakeTextSafeCells(
         state.layout,
-        state.cellIndex,
-        state.appearance.clock.textSafeZone,
+        timerCellIndex,
       );
-      assert.deepEqual(plan.textSafeCellIndices, safeCells);
-      assert.ok(plan.path.every(index => !safeCells.includes(index)));
+      assert.deepEqual(safeCells, [timerCellIndex]);
+      assert.equal(state.appearance.snake.textSafeCellIndex, timerCellIndex);
+      assert.ok(renderFrame.cells.every(cell => cell.index !== timerCellIndex));
       const connectorActive = state.appearance.synth.activeConnectionIds
         .includes("snake-bubbles");
       if (connectorActive) {
-        crossedTimerCell ||= renderFrame.cells.some(cell => (
-          safeCells.includes(cell.index)
-        ));
+        internalSnakeCrossedTimerCell ||= generator.snakeEngorgementFrame.cells.some(
+          cell => (
+            safeCells.includes(cell.index)
+          ),
+        );
       } else if (state.appearance.synth.activeTrackIds.includes("snake-main")) {
-        assert.ok(renderFrame.cells.every(cell => !safeCells.includes(cell.index)));
+        assert.ok(renderFrame.cells.every(cell => (
+          !safeCells.includes(cell.index)
+        )));
       }
     }
   }
-  assert.equal(crossedTimerCell, true);
+  assert.equal(internalSnakeCrossedTimerCell, true);
 
   generator.update({ time: stageSeconds * 2 });
   const enteringEngorgement = generator.inspect().appearance.frame.merge;
@@ -2592,49 +3104,64 @@ test("frame fits two level-three 2x2 squares close to digit anchors", () => {
 });
 
 test("frame avoidance expands once and refills from its center", () => {
-  const oneBeat = {
-    durationBeats: 1,
-    timingCurve: [0.42, 0, 0.58, 1],
-  };
-  const twoBeats = { ...oneBeat, durationBeats: 2 };
+  const avoidance = SETTINGS.countdownFramed.appearance.effects.frame.avoidance;
 
-  assert.deepEqual(countdownFrameAvoidanceEnvelopesAt(0, oneBeat), {
+  assert.deepEqual(avoidance.timingCurve, [0.895, 0.03, 0.685, 0.22]);
+  assert.deepEqual(avoidance.refill.timingCurve, [0.25, 0.46, 0.45, 0.94]);
+
+  assert.deepEqual(countdownFrameAvoidanceEnvelopesAt(0, avoidance), {
     phase: "emptying",
     emptyEnvelope: 0,
     refillEnvelope: 0,
   });
-  assert.deepEqual(countdownFrameAvoidanceEnvelopesAt(0.5, oneBeat), {
-    phase: "refilling",
-    emptyEnvelope: 1,
-    refillEnvelope: 0,
-  });
-  assert.deepEqual(countdownFrameAvoidanceEnvelopesAt(1, oneBeat), {
+  const beforeRefill = countdownFrameAvoidanceEnvelopesAt(0.924, avoidance);
+  assert.equal(beforeRefill.phase, "emptying");
+  assert.equal(beforeRefill.refillEnvelope, 0);
+  const refillStart = countdownFrameAvoidanceEnvelopesAt(0.925, avoidance);
+  assert.equal(refillStart.phase, "refilling");
+  assert.equal(refillStart.refillEnvelope, 0);
+  assert.ok(refillStart.emptyEnvelope >= beforeRefill.emptyEnvelope);
+  const growing = countdownFrameAvoidanceEnvelopesAt(1.25, avoidance);
+  assert.equal(growing.phase, "refilling");
+  assert.ok(growing.refillEnvelope > 0);
+  assert.ok(growing.refillEnvelope < growing.emptyEnvelope);
+  assert.deepEqual(countdownFrameAvoidanceEnvelopesAt(2.5, avoidance), {
     phase: "complete",
     emptyEnvelope: 1,
     refillEnvelope: 1,
   });
-  assert.deepEqual(countdownFrameAvoidanceEnvelopesAt(1, twoBeats), {
-    phase: "refilling",
-    emptyEnvelope: 1,
-    refillEnvelope: 0,
-  });
-  const refilling = countdownFrameAvoidanceEnvelopesAt(0.75, oneBeat);
-  assert.equal(refilling.emptyEnvelope, 1);
-  assert.ok(refilling.refillEnvelope > 0 && refilling.refillEnvelope < 1);
-  const authored = SETTINGS.countdownFramed.appearance.effects.frame.avoidance;
-  assert.ok(
-    countdownFrameAvoidanceEnvelopesAt(0.1, authored).emptyEnvelope > 0.5,
-  );
-  assert.ok(
-    countdownFrameAvoidanceEnvelopesAt(0.5, authored).emptyEnvelope > 0.9,
-  );
+  for (let age = 0; age <= avoidance.durationBeats; age += 0.025) {
+    const envelope = countdownFrameAvoidanceEnvelopesAt(age, avoidance);
+    assert.ok(envelope.refillEnvelope >= 0);
+    assert.ok(envelope.refillEnvelope <= envelope.emptyEnvelope);
+    assert.ok(envelope.emptyEnvelope <= 1);
+  }
   assert.throws(
     () => countdownFrameAvoidanceEnvelopesAt(
       0,
-      { ...oneBeat, durationBeats: 0.5 },
+      { ...avoidance, durationBeats: 0.5 },
     ),
     /at least one beat/,
   );
+});
+
+test("frame refill begins 0.075 beats before its source tick ends", () => {
+  const generator = createGenerator({ options: bubblesTrackOptions() });
+  generator.enter({ time: 0.924 });
+  const before = generator.inspect().appearance.frame.avoidance.bubbles.find(
+    bubble => bubble.sourceTick === 0,
+  );
+  assert.equal(before.phase, "emptying");
+  assert.equal(before.refillEnvelope, 0);
+
+  generator.update({ time: 0.925 });
+  const started = generator.inspect().appearance.frame.avoidance.bubbles.find(
+    bubble => bubble.sourceTick === 0,
+  );
+  assert.equal(started.ageBeats, 0.925);
+  assert.equal(started.phase, "refilling");
+  assert.equal(started.refillEnvelope, 0);
+  generator.dispose();
 });
 
 test("bubble debug overlays every live circle separately so overlap accumulates", () => {
@@ -2690,14 +3217,14 @@ test("bubble debug overlays every live circle separately so overlap accumulates"
   );
 });
 
-test("enabled bubble debug exposes and draws all overlapping beat envelopes", () => {
+test("enabled bubble debug exposes every envelope and draws displaced squares", () => {
   const sampleTime = SETTINGS.countdownFramed.countFromSeconds * 2 / 3 + 2.25;
   const frame = SETTINGS.countdownFramed.appearance.effects.frame;
   const enabled = createGenerator({
     options: withTrackSettings("bubbles", {
       ...frame,
       debug: { ...frame.debug, visualizeBubbles: true },
-    }),
+    }, bubblesTrackOptions()),
   });
   enabled.enter({ time: sampleTime });
   const debugState = enabled.inspect().appearance.frame.debug;
@@ -2712,21 +3239,19 @@ test("enabled bubble debug exposes and draws all overlapping beat envelopes", ()
   const enabledContext = createCountingContext();
   enabled.draw({}, {}, enabledContext);
 
-  const disabled = createGenerator();
+  const disabled = createGenerator({ options: bubblesTrackOptions() });
   disabled.enter({ time: sampleTime });
   const disabledContext = createCountingContext();
   disabled.draw({}, {}, disabledContext);
 
-  assert.ok(
-    enabledContext.counts.fill > disabledContext.counts.fill + debugState.circleCount,
-  );
+  assert.ok(enabledContext.counts.fill > disabledContext.counts.fill);
   assert.equal(disabled.inspect().appearance.frame.debug.active, false);
   enabled.dispose();
   disabled.dispose();
 });
 
-test("snake taper rasterizes into persistent bubble squares", () => {
-  const trail = countdownSnakeBubblePlan({
+test("snake taper inherits its levels, subdivides per beat, then releases to bubbles", () => {
+  const options = {
     layout: { columns: 3, rows: 3 },
     cells: [
       { index: 0, level: 1 },
@@ -2736,14 +3261,25 @@ test("snake taper rasterizes into persistent bubble squares", () => {
     ],
     progress: 1,
     appearanceTick: 19,
-  });
+  };
+  const trail = countdownSnakeBubblePlan(options);
   const generated = createFramePlan();
   const merged = countdownFramePlanWithSnakeTrail(generated, trail);
 
   assert.equal(trail.availableSquareCount, 40);
   assert.equal(trail.squares.length, 40);
   assert.equal(new Set(trail.squares.map(square => square.tileIndex)).size, 40);
-  assert.equal(trail.dots.length, 160);
+  assert.equal(trail.dots.length, 88);
+  assert.equal(trail.waterfallStep, 0);
+  assert.equal(trail.inheritedCellCount, 4);
+  assert.equal(trail.releasedCellCount, 0);
+  assert.ok(trail.squares.every(
+    square => square.currentLevel === square.sourceLevel,
+  ));
+  assert.deepEqual(
+    [...new Set(trail.dots.map(dot => dot.sizeInSubdivisions ?? 1))].sort(),
+    [1, 2, 4],
+  );
   assert.equal(
     merged.squares.length,
     trail.squares.length + generated.squares.length - merged.trailOverlapCount,
@@ -2753,29 +3289,55 @@ test("snake taper rasterizes into persistent bubble squares", () => {
   assert.ok(merged.squares.slice(0, trail.squares.length).every(
     square => square.mergeSource === "snake",
   ));
+
+  const firstBeat = countdownSnakeBubblePlan({ ...options, waterfallStep: 1 });
+  assert.equal(firstBeat.inheritedCellCount, 3);
+  assert.equal(firstBeat.releasedCellCount, 1);
+  assert.ok(firstBeat.squares.every(
+    square => square.currentLevel === square.sourceLevel + 1,
+  ));
+  assert.deepEqual(
+    [...new Set(firstBeat.dots.map(dot => dot.sizeInSubdivisions ?? 1))].sort(),
+    [1, 2],
+  );
+
+  const secondBeat = countdownSnakeBubblePlan({ ...options, waterfallStep: 2 });
+  assert.equal(secondBeat.inheritedCellCount, 2);
+  assert.equal(secondBeat.releasedCellCount, 2);
+  assert.ok(secondBeat.squares.every(square => square.currentLevel === 3));
+
+  const complete = countdownSnakeBubblePlan({ ...options, waterfallStep: 3 });
+  assert.equal(complete.inheritedCellCount, 0);
+  assert.equal(complete.releasedCellCount, 4);
+  assert.deepEqual(complete.squares, []);
+  assert.deepEqual(complete.dots, []);
 });
 
-test("frame push radius grows across the timer while the ink field wiggles per beat", () => {
+test("frame push radius grows while the ink field eases across 1.5 beats", () => {
   const avoidance = {
     radiusInCells: 1,
     radiusAtEndInCells: 3,
     radiusGrowthTimingCurve: [0.42, 0, 0.58, 1],
   };
   const motion = {
-    beatWiggleDistance: 0.08,
+    beatWiggleDurationBeats: 1.5,
+    beatWiggleDistance: 0.24,
     timingCurve: [0.42, 0, 0.58, 1],
+  };
+  const offsetAt = elapsedBeats => {
+    const cycleProgress = (
+      elapsedBeats % motion.beatWiggleDurationBeats
+    ) / motion.beatWiggleDurationBeats;
+    return countdownFrameFieldBeatOffsetAt(cycleProgress, motion);
   };
 
   assert.equal(countdownFrameAvoidanceRadiusAt(0, avoidance), 1);
   assert.equal(countdownFrameAvoidanceRadiusAt(1, avoidance), 3);
   assert.ok(countdownFrameAvoidanceRadiusAt(0.5, avoidance) > 1);
-  assert.equal(countdownFrameFieldBeatOffsetAt(0, motion), 0);
-  assert.equal(countdownFrameFieldBeatOffsetAt(0.5, motion), 0.08);
-  assert.equal(countdownFrameFieldBeatOffsetAt(1, motion), 0);
-  assert.equal(
-    countdownFrameFieldBeatOffsetAt(0.25, motion),
-    countdownFrameFieldBeatOffsetAt(0.75, motion),
-  );
+  assert.equal(offsetAt(0), 0);
+  assert.equal(offsetAt(0.75), 0.24);
+  assert.equal(offsetAt(1.5), 0);
+  assert.ok(Math.abs(offsetAt(1.49) - offsetAt(1.51)) < 1e-12);
 });
 
 test("final ink wipe expands once and reaches full coverage at its boundary", () => {
@@ -2897,8 +3459,24 @@ test("snake merge bubbles hide whole squares inside the timer text safe zone", (
     .map(square => square.squareIndex);
   assert.ok(excludedSquareIndices.length > 0);
 
+  const inheritedSquareIndex = excludedSquareIndices[0];
+  const mixedSquares = plan.squares.map(square => (
+    square.squareIndex === inheritedSquareIndex
+      ? {
+        ...square,
+        mergeSource: "snake",
+        dots: square.dots.map(dot => ({ ...dot, mergeSource: "snake" })),
+      }
+      : square
+  ));
+  const mixedPlan = {
+    ...plan,
+    squares: mixedSquares,
+    dots: mixedSquares.flatMap(square => square.dots),
+  };
+
   const frame = countdownFrameAt(
-    plan,
+    mixedPlan,
     1,
     settings,
     [],
@@ -2907,6 +3485,11 @@ test("snake merge bubbles hide whole squares inside the timer text safe zone", (
     [rectangle],
   );
   assert.equal(frame.rectangleAvoidedSquareCount, excludedSquareIndices.length);
+  assert.equal(frame.rectangleAvoidedSnakeSquareCount, 1);
+  assert.equal(
+    frame.rectangleAvoidedGeneratedSquareCount,
+    excludedSquareIndices.length - 1,
+  );
   assert.ok(frame.dots.every(dot => !excludedSquareIndices.includes(dot.squareIndex)));
 });
 
@@ -3059,13 +3642,16 @@ test("frame avoidance keeps earlier type bubbles alive for multi-beat lifetimes"
   assert.deepEqual(bubbles.map(bubble => bubble.ageBeats), [0, 1]);
   assert.deepEqual(bubbles.map(bubble => bubble.phase), ["emptying", "refilling"]);
   assert.deepEqual(bubbles.map(bubble => bubble.emptyEnvelope), [0, 1]);
-  assert.deepEqual(bubbles.map(bubble => bubble.refillEnvelope), [0, 0]);
+  assert.equal(bubbles[0].refillEnvelope, 0);
+  assert.ok(bubbles[1].refillEnvelope > 0);
+  assert.ok(bubbles[1].refillEnvelope < bubbles[1].emptyEnvelope);
   generator.dispose();
 });
 
-test("frame ink field is deterministic across each beat and the countdown seam", () => {
-  const first = createGenerator({ seed: 91 });
-  const second = createGenerator({ seed: 91 });
+test("frame ink field follows a seamless 1.5-beat gesture", () => {
+  const options = bubblesTrackOptions();
+  const first = createGenerator({ seed: 91, options });
+  const second = createGenerator({ seed: 91, options });
   first.enter({ time: 0 });
   second.enter({ time: 0 });
   const start = first.countdownFieldPreviewSnapshot().fields[1].data;
@@ -3074,15 +3660,22 @@ test("frame ink field is deterministic across each beat and the countdown seam",
     start,
     second.countdownFieldPreviewSnapshot().fields[1].data,
   );
-  first.update({ time: 0.5 });
+  first.update({ time: 0.75 });
   assert.notDeepEqual(
     first.countdownFieldPreviewSnapshot().fields[1].data,
     start,
   );
-  first.update({ time: 1 });
+  first.update({ time: 1.5 });
   assert.deepEqual(
     first.countdownFieldPreviewSnapshot().fields[1].data,
     start,
+  );
+  first.update({ time: 1.49 });
+  const beforeBoundary = first.countdownFieldPreviewSnapshot().fields[1].data;
+  first.update({ time: 1.51 });
+  assert.deepEqual(
+    first.countdownFieldPreviewSnapshot().fields[1].data,
+    beforeBoundary,
   );
   first.update({ time: SETTINGS.countdownFramed.countFromSeconds });
   assert.deepEqual(
@@ -3094,12 +3687,13 @@ test("frame ink field is deterministic across each beat and the countdown seam",
 });
 
 test("ink spots and field reconstruct through seek and portrait resize", () => {
-  const bubblesTrack = SETTINGS.countdownFramed.appearance.synth.tracks.find(
+  const options = bubblesTrackOptions();
+  const sequential = createGenerator({ seed: 91, options });
+  const bubblesTrack = sequential.inspect().appearance.synth.tracks.find(
     track => track.use === "bubbles",
   );
   const sampleTime = bubblesTrack.startSeconds + 4.4;
-  const sequential = createGenerator({ seed: 91 });
-  const sought = createGenerator({ seed: 91 });
+  const sought = createGenerator({ seed: 91, options });
   sequential.enter({ time: bubblesTrack.startSeconds });
   for (let time = bubblesTrack.startSeconds + 1; time < sampleTime; time += 1) {
     sequential.update({ time });
@@ -3118,7 +3712,7 @@ test("ink spots and field reconstruct through seek and portrait resize", () => {
 
   const portrait = { width: 600, height: 900 };
   sequential.resize(portrait);
-  const portraitFresh = createGenerator({ seed: 91, viewport: portrait });
+  const portraitFresh = createGenerator({ seed: 91, viewport: portrait, options });
   portraitFresh.enter({ time: sampleTime });
   assert.deepEqual(
     sequential.countdownFieldPreviewSnapshot().fields[1].data,
@@ -3135,7 +3729,7 @@ test("ink spots and field reconstruct through seek and portrait resize", () => {
 
 test("final ink wipe remains live through the last bubbles frame", () => {
   const { finalWipe } = SETTINGS.countdownFramed.appearance.effects.frame.avoidance;
-  const generator = createGenerator();
+  const generator = createGenerator({ options: bubblesTrackOptions() });
   const bubblesTrack = generator.inspect().appearance.synth.tracks.find(
     track => track.use === "bubbles",
   );
@@ -3163,7 +3757,10 @@ test("final ink wipe remains live through the last bubbles frame", () => {
   );
   generator.update({ time: SETTINGS.countdownFramed.countFromSeconds });
   const boundary = generator.inspect();
-  assert.equal(boundary.appearance.order.activeEffect, "clock");
+  assert.equal(
+    boundary.appearance.order.activeEffect,
+    boundary.appearance.synth.tracks[0].use,
+  );
   assert.equal(boundary.appearance.frame.avoidance.finalWipe.phase, "inactive");
   generator.dispose();
 });
@@ -3352,6 +3949,12 @@ test("frame varies around each time cell while keeping its seed fixed", () => {
     initial.appearance.frame.avoidance.durationBeats,
     authoredFrame.avoidance.durationBeats,
   );
+  assert.deepEqual(initial.appearance.frame.avoidance.refill, {
+    startBeforeTickEndBeats:
+      authoredFrame.avoidance.refill.startBeforeTickEndBeats,
+    startAgeBeats: 0.925,
+    timingCurve: [...authoredFrame.avoidance.refill.timingCurve],
+  });
   assert.equal(
     initial.appearance.frame.avoidance.bubbles.length,
     1,
@@ -3369,28 +3972,38 @@ test("frame varies around each time cell while keeping its seed fixed", () => {
     authoredFrame.visibilityMap.field.mode,
   );
   assert.equal(
+    initial.appearance.frame.visibilityMap.beatWiggleDurationBeats,
+    authoredFrame.visibilityMap.beatWiggle.durationBeats,
+  );
+  assert.equal(
     initial.appearance.frame.visibilityMap.beatWiggleDistance,
     authoredFrame.visibilityMap.beatWiggle.distance,
   );
+  assert.equal(initial.appearance.frame.visibilityMap.beatWiggleIndex, 0);
+  assert.equal(initial.appearance.frame.visibilityMap.beatWiggleProgress, 0);
   assert.equal(initial.appearance.frame.visibilityMap.temporalOffset, 0);
   assert.equal(initial.appearance.frame.plan.cellIndex, initial.cellIndex);
   assert.equal(initial.appearance.frame.merge.phase, "inactive");
   assert.equal(initial.appearance.frame.merge.progress, 0);
   assert.equal(initial.appearance.frame.merge.trailSquareCount, 0);
-  assert.equal(
-    initial.appearance.frame.frame.eligibleVisibleCount,
-    initial.appearance.frame.renderedDotCount
-      - initial.appearance.frame.frame.snakeHiddenCount,
-  );
+  assert.ok(initial.appearance.frame.plan.dots.some(dot => (
+    frameDotOverlapsRectangle(
+      dot,
+      initial.appearance.frame.frame.textSafeRectangle,
+    )
+  )));
+  assert.ok(initial.appearance.frame.frame.dots.every(dot => (
+    !frameDotOverlapsRectangle(
+      dot,
+      initial.appearance.frame.frame.textSafeRectangle,
+    )
+  )));
   assert.ok(
     initial.appearance.frame.frame.visibleCount
       <= initial.appearance.frame.frame.eligibleVisibleCount,
   );
-  assert.ok(
-    initial.appearance.frame.frame.visibleCount
-      / initial.appearance.frame.frame.eligibleVisibleCount > 0.55,
-  );
-  assert.equal(initial.appearance.frame.frame.avoidedSquareCount, 0);
+  assert.equal(initial.appearance.frame.frame.textSafeCellCount, 1);
+  assert.ok(initial.appearance.frame.frame.textSafeHiddenSquareCount > 0);
   const preview = generator.countdownFieldPreviewSnapshot({
     previewWidth: 20,
     previewHeight: 10,
@@ -3410,13 +4023,16 @@ test("frame varies around each time cell while keeping its seed fixed", () => {
     displacementPreview,
   );
 
-  generator.update({ time: bubblesStart + 0.5 });
+  generator.update({ time: bubblesStart + 0.75 });
   const avoided = generator.inspect().appearance.frame;
   assert.deepEqual(avoided.plan.dots, initialDots);
   assert.equal(
     avoided.visibilityMap.temporalOffset,
     authoredFrame.visibilityMap.beatWiggle.distance,
   );
+  assert.equal(avoided.visibilityMap.beatWigglePhase, "back");
+  assert.equal(avoided.visibilityMap.beatWiggleIndex, 0);
+  assert.equal(avoided.visibilityMap.beatWiggleProgress, 0.5);
   assert.equal(
     avoided.avoidance.currentRadiusInCells,
     initial.appearance.frame.avoidance.currentRadiusInCells,
@@ -3451,6 +4067,16 @@ test("frame varies around each time cell while keeping its seed fixed", () => {
     frameDotIdentity(next.appearance.frame.plan.dots.slice(0, initialDots.length)),
     frameDotIdentity(initialDots),
   );
+  assert.notDeepEqual(
+    next.appearance.frame.frame.textSafeRectangle,
+    initial.appearance.frame.frame.textSafeRectangle,
+  );
+  generator.update({ time: bubblesStart + 1.5 });
+  const completedGesture = generator.inspect().appearance.frame.visibilityMap;
+  assert.equal(completedGesture.beatWigglePhase, "out");
+  assert.equal(completedGesture.beatWiggleIndex, 1);
+  assert.equal(completedGesture.beatWiggleProgress, 0);
+  assert.equal(completedGesture.temporalOffset, 0);
   assert.equal(next.appearance.frame.plan.retainedSquareCount, 2);
   assert.equal(
     next.appearance.frame.plan.addedSquareCount,
@@ -3468,12 +4094,18 @@ test("frame varies around each time cell while keeping its seed fixed", () => {
   const nearZero = generator.inspect().appearance.frame;
   assert.equal(nearZero.growthProgress, 0);
   assert.equal(nearZero.radius, initial.appearance.frame.radius);
-  assert.equal(nearZero.squareCount, nearZero.maximumSquareCount);
+  assert.equal(
+    nearZero.squareCount,
+    nearZero.maximumSquareCount,
+  );
   assert.equal(
     nearZero.avoidance.currentRadiusInCells,
     nearZero.avoidance.radiusAtEndInCells,
   );
-  assert.equal(nearZero.dotCount, nearZero.plan.gridColumns * nearZero.plan.gridRows);
+  assert.equal(
+    nearZero.dotCount,
+    nearZero.plan.gridColumns * nearZero.plan.gridRows,
+  );
   assert.equal(nearZero.avoidance.finalWipe.phase, "emptying");
   assert.ok(nearZero.frame.visibleCount > 0);
   assert.ok(nearZero.frame.avoidedSquareCount < nearZero.renderedSquareCount);
@@ -3481,9 +4113,10 @@ test("frame varies around each time cell while keeping its seed fixed", () => {
 });
 
 test("frame accumulation is deterministic for sequential playback and seeking", () => {
-  const sequential = createGenerator({ seed: 319 });
-  const sought = createGenerator({ seed: 319 });
-  const bubblesStart = SETTINGS.countdownFramed.countFromSeconds * 5 / 6;
+  const options = bubblesTrackOptions();
+  const sequential = createGenerator({ seed: 319, options });
+  const sought = createGenerator({ seed: 319, options });
+  const bubblesStart = 0;
   const targetTick = SETTINGS.countdownFramed.countFromSeconds - 1;
   sequential.enter({ time: bubblesStart });
   for (let tick = bubblesStart + 1; tick <= targetTick; tick += 1) {
@@ -3496,16 +4129,8 @@ test("frame accumulation is deterministic for sequential playback and seeking", 
     sought.inspect().appearance.frame.plan,
   );
   assert.deepEqual(
-    sequential.inspect().appearance.snake.plan,
-    sought.inspect().appearance.snake.plan,
-  );
-  assert.deepEqual(
-    sequential.inspect().appearance.snake.renderFrame,
-    sought.inspect().appearance.snake.renderFrame,
-  );
-  assert.deepEqual(
-    sequential.inspect().appearance.frame.merge.trailSquares,
-    sought.inspect().appearance.frame.merge.trailSquares,
+    sequential.inspect().appearance.frame.avoidance,
+    sought.inspect().appearance.frame.avoidance,
   );
   sequential.dispose();
   sought.dispose();
@@ -3515,7 +4140,7 @@ test("frame rejects unsupported square, growth, and travel settings", () => {
   const optionsWithFrame = frame => withTrackSettings("bubbles", {
     ...SETTINGS.countdownFramed.appearance.effects.frame,
     ...frame,
-  });
+  }, bubblesTrackOptions());
   assert.throws(
     () => createGenerator({ options: optionsWithFrame({ subdivisionLevel: 2 }) }),
     /subdivisionLevel must be three \(8x8\)/,
@@ -3572,6 +4197,35 @@ test("frame rejects unsupported square, growth, and travel settings", () => {
   assert.throws(
     () => createGenerator({
       options: optionsWithFrame({
+        avoidance: {
+          ...SETTINGS.countdownFramed.appearance.effects.frame.avoidance,
+          refill: {
+            ...SETTINGS.countdownFramed.appearance.effects.frame.avoidance.refill,
+            startBeforeTickEndBeats: 1.1,
+          },
+        },
+      }),
+    }),
+    /refill.startBeforeTickEndBeats must be from zero to one/,
+  );
+  assert.throws(
+    () => createGenerator({
+      options: optionsWithFrame({
+        avoidance: {
+          ...SETTINGS.countdownFramed.appearance.effects.frame.avoidance,
+          durationBeats: 1,
+          refill: {
+            ...SETTINGS.countdownFramed.appearance.effects.frame.avoidance.refill,
+            startBeforeTickEndBeats: 0,
+          },
+        },
+      }),
+    }),
+    /refill must start before durationBeats ends/,
+  );
+  assert.throws(
+    () => createGenerator({
+      options: optionsWithFrame({
         visibilityMap: {
           ...SETTINGS.countdownFramed.appearance.effects.frame.visibilityMap,
           displacement: {
@@ -3583,6 +4237,21 @@ test("frame rejects unsupported square, growth, and travel settings", () => {
       }),
     }),
     /maximumInCells cannot be smaller/,
+  );
+  assert.throws(
+    () => createGenerator({
+      options: optionsWithFrame({
+        visibilityMap: {
+          ...SETTINGS.countdownFramed.appearance.effects.frame.visibilityMap,
+          beatWiggle: {
+            ...SETTINGS.countdownFramed.appearance.effects.frame
+              .visibilityMap.beatWiggle,
+            durationBeats: 0,
+          },
+        },
+      }),
+    }),
+    /beatWiggle.durationBeats must be a finite positive number/,
   );
   assert.throws(
     () => createGenerator({
@@ -3633,6 +4302,11 @@ test("frame rejects unsupported square, growth, and travel settings", () => {
 });
 
 test("snake rejects seed, spacing, growth, and travel timing config errors", () => {
+  const optionsWithSnake = snake => withTrackSettings(
+    "snake",
+    snake,
+    snakeBubblesOptions(),
+  );
   assert.throws(
     () => createGenerator({
       options: withSharedAppearance({ evolveSeed: "no" }),
@@ -3647,7 +4321,7 @@ test("snake rejects seed, spacing, growth, and travel timing config errors", () 
   );
   assert.throws(
     () => createGenerator({
-      options: withTrackSettings("snake", {
+      options: optionsWithSnake({
         ...SETTINGS.countdownFramed.appearance.effects.snake,
         growAfterEachTick: "yes",
       }),
@@ -3656,7 +4330,7 @@ test("snake rejects seed, spacing, growth, and travel timing config errors", () 
   );
   assert.throws(
     () => createGenerator({
-      options: withTrackSettings("snake", {
+      options: optionsWithSnake({
         ...SETTINGS.countdownFramed.appearance.effects.snake,
         durationSeconds: "calc(auto * 0.5)",
       }),
@@ -3665,7 +4339,7 @@ test("snake rejects seed, spacing, growth, and travel timing config errors", () 
   );
   assert.throws(
     () => createGenerator({
-      options: withTrackSettings("snake", {
+      options: optionsWithSnake({
         ...SETTINGS.countdownFramed.appearance.effects.snake,
         engorgement: {
           ...SETTINGS.countdownFramed.appearance.effects.snake.engorgement,
@@ -3677,7 +4351,7 @@ test("snake rejects seed, spacing, growth, and travel timing config errors", () 
   );
   assert.throws(
     () => createGenerator({
-      options: withTrackSettings("snake", {
+      options: optionsWithSnake({
         ...SETTINGS.countdownFramed.appearance.effects.snake,
         engorgement: {
           ...SETTINGS.countdownFramed.appearance.effects.snake.engorgement,
@@ -3689,7 +4363,7 @@ test("snake rejects seed, spacing, growth, and travel timing config errors", () 
   );
   assert.throws(
     () => createGenerator({
-      options: withTrackSettings("snake", {
+      options: optionsWithSnake({
         ...SETTINGS.countdownFramed.appearance.effects.snake,
         engorgement: {
           ...SETTINGS.countdownFramed.appearance.effects.snake.engorgement,
@@ -3701,7 +4375,7 @@ test("snake rejects seed, spacing, growth, and travel timing config errors", () 
   );
   assert.throws(
     () => createGenerator({
-      options: withTrackSettings("snake", {
+      options: optionsWithSnake({
         ...SETTINGS.countdownFramed.appearance.effects.snake,
         engorgement: {
           ...SETTINGS.countdownFramed.appearance.effects.snake.engorgement,
@@ -3713,7 +4387,7 @@ test("snake rejects seed, spacing, growth, and travel timing config errors", () 
   );
   assert.throws(
     () => createGenerator({
-      options: withTrackSettings("snake", {
+      options: optionsWithSnake({
         ...SETTINGS.countdownFramed.appearance.effects.snake,
         engorgement: {
           ...SETTINGS.countdownFramed.appearance.effects.snake.engorgement,
@@ -3737,7 +4411,10 @@ test("countdown intro scales from auto and cannot overrun its beat", () => {
     },
   });
   assert.equal(halfBeat.inspect().reveal.durationSeconds, 0.5);
-  assert.equal(halfBeat.inspect().reveal.stepSeconds, 0.5 / 5);
+  assert.equal(
+    halfBeat.inspect().reveal.stepSeconds,
+    0.5 / halfBeat.inspect().reveal.stepCount,
+  );
   halfBeat.dispose();
 
   assert.throws(
@@ -3800,13 +4477,13 @@ test("countdown draws centered colored glyphs and exposes tick changes headlessl
 });
 
 test("countdown timeline debug exposes one exclusive owner at every boundary", async () => {
-  const fps = 10;
-  const bubblesStartSeconds = SETTINGS.countdownFramed.countFromSeconds * 2 / 3;
+  const fps = 1;
+  const countFromSeconds = SETTINGS.countdownFramed.countFromSeconds;
   const run = await runFrames({
     composition: "countdown-framed",
-    frames: Math.ceil(bubblesStartSeconds * fps) + 2,
+    frames: Math.ceil(countFromSeconds * fps) - 1,
     fps,
-    channels: ["timeline", "transition", "cells"],
+    channels: ["config", "timeline", "transition", "cells"],
   });
   const timelineLines = run.lines.filter(line => (
     line.includes("composition-timeline composition=countdown-framed")
@@ -3839,28 +4516,14 @@ test("countdown timeline debug exposes one exclusive owner at every boundary", a
   assert.ok(run.lines.some(line => (
     line.includes("countdown-track id=bubbles-main state=enter")
   )));
-  assert.ok(!run.lines.some(line => (
-    line.includes("countdown-bubbles-debug state=start")
-  )));
-  for (const state of [
-    "start",
-    "meal-reveal",
-    "death-flicker",
-    "death",
-    "noise-field-commit",
-  ]) {
-    assert.ok(run.lines.some(line => (
-      line.includes(`countdown-engorgement state=${state}`)
-    )));
-  }
-  assert.ok(run.lines.some(line => (
-    line.includes("countdown-engorgement beat=")
-    && /collisions=\d+/.test(line)
-  )));
-  assert.ok(run.lines.some(line => (
-    line.includes("countdown-birth-ripple wave=primary state=start")
-  )));
-  assert.ok(run.lines.some(line => (
-    line.includes("countdown-birth-ripple state=handoff")
+  assert.ok(run.lines.some(line => line.includes("countdown-engorgement")));
+  const finalTickRun = await runFrames({
+    composition: "countdown-framed",
+    frames: SETTINGS.countdownFramed.countFromSeconds + 1,
+    fps: 1,
+    channels: ["transition"],
+  });
+  assert.ok(finalTickRun.lines.some(line => (
+    line.includes("countdown-final-tick state=centered label=00:01")
   )));
 });

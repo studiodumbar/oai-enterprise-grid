@@ -53,6 +53,19 @@ function requireFraction(value, label) {
   return value;
 }
 
+function frameAvoidanceRefillTiming(refill, durationBeats, label) {
+  const settings = requireObject(refill, label);
+  const startBeforeTickEndBeats = requireFraction(
+    settings.startBeforeTickEndBeats,
+    `${label}.startBeforeTickEndBeats`,
+  );
+  const startAgeBeats = 1 - startBeforeTickEndBeats;
+  if (startAgeBeats >= durationBeats) {
+    throw new RangeError(`${label} must start before durationBeats ends.`);
+  }
+  return { settings, startBeforeTickEndBeats, startAgeBeats };
+}
+
 function requireString(value, label) {
   if (typeof value !== "string" || value.trim() === "") {
     throw new TypeError(`${label} must be a non-empty string.`);
@@ -130,6 +143,11 @@ export function resolveCountdownFrameSettings(appearance) {
       "countdownFramed.appearance.effects.frame.avoidance.durationBeats must be at least one.",
     );
   }
+  const refill = frameAvoidanceRefillTiming(
+    avoidance.refill,
+    avoidanceDurationBeats,
+    "countdownFramed.appearance.effects.frame.avoidance.refill",
+  );
   const finalWipe = requireObject(
     avoidance.finalWipe,
     "countdownFramed.appearance.effects.frame.avoidance.finalWipe",
@@ -184,6 +202,10 @@ export function resolveCountdownFrameSettings(appearance) {
     visibilityMap.beatWiggle,
     "countdownFramed.appearance.effects.frame.visibilityMap.beatWiggle",
   );
+  const beatWiggleDurationBeats = requireFinitePositive(
+    beatWiggle.durationBeats,
+    "countdownFramed.appearance.effects.frame.visibilityMap.beatWiggle.durationBeats",
+  );
   const displacement = requireObject(
     visibilityMap.displacement,
     "countdownFramed.appearance.effects.frame.visibilityMap.displacement",
@@ -237,6 +259,14 @@ export function resolveCountdownFrameSettings(appearance) {
         avoidance.timingCurve,
         "countdownFramed.appearance.effects.frame.avoidance.timingCurve",
       )),
+      refill: Object.freeze({
+        startBeforeTickEndBeats: refill.startBeforeTickEndBeats,
+        startAgeBeats: refill.startAgeBeats,
+        timingCurve: Object.freeze(normalizeBezierCurve(
+          refill.settings.timingCurve,
+          "countdownFramed.appearance.effects.frame.avoidance.refill.timingCurve",
+        )),
+      }),
       radiusGrowthTimingCurve: Object.freeze(normalizeBezierCurve(
         avoidance.radiusGrowthTimingCurve,
         "countdownFramed.appearance.effects.frame.avoidance.radiusGrowthTimingCurve",
@@ -263,6 +293,7 @@ export function resolveCountdownFrameSettings(appearance) {
     }),
     visibilityMap: Object.freeze({
       enabled: visibilityMap.enabled,
+      beatWiggleDurationBeats,
       beatWiggleDistance: requireFiniteNonNegative(
         beatWiggle.distance,
         "countdownFramed.appearance.effects.frame.visibilityMap.beatWiggle.distance",
@@ -307,6 +338,25 @@ function bubbleSquareDots(topLeftColumn, topLeftRow, gridColumns, squareIndex) {
     index: dot.row * gridColumns + dot.column,
     squareIndex,
   }));
+}
+
+function frameDotCenter(dot) {
+  return {
+    x: dot.xInSubdivisions ?? dot.column + 0.5,
+    y: dot.yInSubdivisions ?? dot.row + 0.5,
+  };
+}
+
+function frameTextCenter(columns, rows, subdivisions, textCellIndex, centered) {
+  if (typeof centered !== "boolean") {
+    throw new TypeError("Countdown frame centered text must be a boolean.");
+  }
+  return centered
+    ? { x: columns * subdivisions / 2, y: rows * subdivisions / 2 }
+    : {
+      x: (textCellIndex % columns + 0.5) * subdivisions,
+      y: (Math.floor(textCellIndex / columns) + 0.5) * subdivisions,
+    };
 }
 
 function dotDistanceToCircle(dot, circle) {
@@ -385,6 +435,7 @@ export function countdownSnakeBubblePlan({
   progress,
   appearanceTick = 0,
   subdivisionLevel = 3,
+  waterfallStep = 0,
 }) {
   const columns = requirePositiveInteger(layout?.columns, "Countdown snake-bubble columns");
   const rows = requirePositiveInteger(layout?.rows, "Countdown snake-bubble rows");
@@ -402,12 +453,18 @@ export function countdownSnakeBubblePlan({
     appearanceTick,
     "Countdown snake-bubble appearance tick",
   );
+  const requestedStep = requireNonNegativeInteger(
+    waterfallStep,
+    "Countdown snake-bubble waterfall step",
+  );
+  const step = Math.min(level + 1, requestedStep);
   const revealProgress = Math.max(0, Math.min(1, Number(progress) || 0));
   const subdivisions = 1 << level;
   const gridColumns = columns * subdivisions;
   const gridRows = rows * subdivisions;
   const tileColumns = gridColumns / 2;
-  const tilesByIndex = new Map();
+  const inheritedSquares = [];
+  let releasedCellCount = 0;
   for (const cell of cells) {
     const cellIndex = requireNonNegativeInteger(
       cell?.index,
@@ -423,45 +480,86 @@ export function countdownSnakeBubblePlan({
     if (cellLevel > level) {
       throw new RangeError("Countdown snake-bubble cell level exceeds its grid.");
     }
+    const currentLevel = Math.min(level, cellLevel + step);
+    if (step > level - cellLevel) {
+      releasedCellCount += 1;
+      continue;
+    }
     const cellColumn = cellIndex % columns;
     const cellRow = Math.floor(cellIndex / columns);
-    const cellSubdivisions = 1 << cellLevel;
-    for (let subRow = 0; subRow < cellSubdivisions; subRow += 1) {
-      for (let subColumn = 0; subColumn < cellSubdivisions; subColumn += 1) {
-        const localTileColumn = Math.min(
-          3,
-          Math.floor((subColumn + 0.5) * 4 / cellSubdivisions),
-        );
-        const localTileRow = Math.min(
-          3,
-          Math.floor((subRow + 0.5) * 4 / cellSubdivisions),
-        );
-        const tileColumn = cellColumn * 4 + localTileColumn;
-        const tileRow = cellRow * 4 + localTileRow;
-        const tileIndex = tileRow * tileColumns + tileColumn;
-        if (!tilesByIndex.has(tileIndex)) {
-          tilesByIndex.set(tileIndex, {
+    const currentSubdivisions = 1 << currentLevel;
+    const glyphSize = subdivisions / currentSubdivisions;
+    if (currentLevel === level) {
+      for (let tileRow = 0; tileRow < subdivisions / 2; tileRow += 1) {
+        for (let tileColumn = 0; tileColumn < subdivisions / 2; tileColumn += 1) {
+          const topLeftColumn = cellColumn * subdivisions + tileColumn * 2;
+          const topLeftRow = cellRow * subdivisions + tileRow * 2;
+          const tileIndex = (topLeftRow / 2) * tileColumns + topLeftColumn / 2;
+          inheritedSquares.push({
             tileIndex,
-            topLeftColumn: tileColumn * 2,
-            topLeftRow: tileRow * 2,
+            occupiedTileIndices: [tileIndex],
+            topLeftColumn,
+            topLeftRow,
             sourceCellIndex: cellIndex,
             sourceLevel: cellLevel,
+            currentLevel,
+            dots: bubbleSquareDots(topLeftColumn, topLeftRow, gridColumns, 0),
           });
         }
       }
+      continue;
+    }
+    for (let subRow = 0; subRow < currentSubdivisions; subRow += 1) {
+      for (let subColumn = 0; subColumn < currentSubdivisions; subColumn += 1) {
+        const topLeftColumn = cellColumn * subdivisions + subColumn * glyphSize;
+        const topLeftRow = cellRow * subdivisions + subRow * glyphSize;
+        const occupiedTileIndices = [];
+        for (let tileRow = topLeftRow; tileRow < topLeftRow + glyphSize; tileRow += 2) {
+          for (
+            let tileColumn = topLeftColumn;
+            tileColumn < topLeftColumn + glyphSize;
+            tileColumn += 2
+          ) {
+            occupiedTileIndices.push(
+              (tileRow / 2) * tileColumns + tileColumn / 2,
+            );
+          }
+        }
+        const xInSubdivisions = topLeftColumn + glyphSize / 2;
+        const yInSubdivisions = topLeftRow + glyphSize / 2;
+        inheritedSquares.push({
+          tileIndex: occupiedTileIndices[0],
+          occupiedTileIndices,
+          topLeftColumn,
+          topLeftRow,
+          sourceCellIndex: cellIndex,
+          sourceLevel: cellLevel,
+          currentLevel,
+          dots: [{
+            column: Math.floor(xInSubdivisions),
+            row: Math.floor(yInSubdivisions),
+            index: Math.floor(yInSubdivisions) * gridColumns
+              + Math.floor(xInSubdivisions),
+            squareIndex: 0,
+            xInSubdivisions,
+            yInSubdivisions,
+            sizeInSubdivisions: glyphSize,
+          }],
+        });
+      }
     }
   }
-  const availableTiles = [...tilesByIndex.values()];
+  const availableTiles = inheritedSquares;
   const visibleTileCount = revealProgress <= 0
     ? 0
     : Math.min(availableTiles.length, Math.ceil(revealProgress * availableTiles.length));
   const squares = availableTiles.slice(0, visibleTileCount).map((tile, squareIndex) => {
-    const dots = bubbleSquareDots(
-      tile.topLeftColumn,
-      tile.topLeftRow,
-      gridColumns,
+    const dots = tile.dots.map(dot => ({
+      ...dot,
       squareIndex,
-    ).map(dot => ({ ...dot, appearanceTick: tick }));
+      appearanceTick: tick,
+      mergeSource: "snake",
+    }));
     return {
       ...tile,
       squareIndex,
@@ -470,17 +568,24 @@ export function countdownSnakeBubblePlan({
       dots,
     };
   });
-  const edgedSquares = countdownFrameSquaresWithEdgeDistance(
-    squares,
-    gridColumns,
-    gridRows,
-  );
+  const edgedSquares = squares.map(square => ({
+    ...square,
+    edgeDistance: null,
+    dots: square.dots.map(dot => ({ ...dot, edgeDistance: null })),
+  }));
+  const occupiedTileCount = new Set(edgedSquares.flatMap(
+    square => square.occupiedTileIndices ?? [square.tileIndex],
+  )).size;
   return {
     tick,
     subdivisions,
     gridColumns,
     gridRows,
     progress: revealProgress,
+    waterfallStep: step,
+    inheritedCellCount: cells.length - releasedCellCount,
+    releasedCellCount,
+    occupiedTileCount,
     availableSquareCount: availableTiles.length,
     squares: edgedSquares,
     dots: edgedSquares.flatMap(square => square.dots),
@@ -575,7 +680,9 @@ export function countdownFramePlanWithSnakeTrail(plan, trailPlan) {
   ) {
     throw new RangeError("Countdown bubbles and snake trail grids must match.");
   }
-  const usedTiles = new Set(trailPlan.squares.map(square => square.tileIndex));
+  const usedTiles = new Set(trailPlan.squares.flatMap(
+    square => square.occupiedTileIndices ?? [square.tileIndex],
+  ));
   const generatedSquares = plan.squares.filter(square => !usedTiles.has(square.tileIndex));
   const combined = [...trailPlan.squares, ...generatedSquares];
   const reindexed = combined.map((square, squareIndex) => ({
@@ -583,11 +690,7 @@ export function countdownFramePlanWithSnakeTrail(plan, trailPlan) {
     squareIndex,
     dots: square.dots.map(dot => ({ ...dot, squareIndex })),
   }));
-  const squares = countdownFrameSquaresWithEdgeDistance(
-    reindexed,
-    plan.gridColumns,
-    plan.gridRows,
-  );
+  const squares = reindexed;
   return {
     ...plan,
     trailSquareCount: trailPlan.squares.length,
@@ -611,6 +714,7 @@ export function countdownFramePlan({
   numberSpacingInSubdivisions,
   excludedTileIndices = [],
   squareIndexOffset = 0,
+  centered = false,
 }) {
   const planSeed = requireNonNegativeInteger(seed, "Countdown frame seed") >>> 0;
   const appearanceTick = requireNonNegativeInteger(tick, "Countdown frame tick");
@@ -665,14 +769,17 @@ export function countdownFramePlan({
   const subdivisions = 1 << level;
   const gridColumns = columns * subdivisions;
   const gridRows = rows * subdivisions;
-  const textCellColumn = textCellIndex % columns;
-  const textCellRow = Math.floor(textCellIndex / columns);
-  const textCenterColumn = textCellColumn * subdivisions + subdivisions / 2;
-  const textCenterRow = textCellRow * subdivisions + subdivisions / 2;
+  const textCenter = frameTextCenter(
+    columns,
+    rows,
+    subdivisions,
+    textCellIndex,
+    centered,
+  );
   const digitCircles = [-2, -1, 1, 2].map((offset, digitIndex) => ({
     digitIndex,
-    x: textCenterColumn + offset * numberSpacing,
-    y: textCenterRow,
+    x: textCenter.x + offset * numberSpacing,
+    y: textCenter.y,
     radius: 0,
   }));
   const firstTarget = Math.min(
@@ -722,6 +829,8 @@ export function countdownFramePlan({
       gridColumns,
       gridRows,
       textCellIndex,
+      textCentered: centered,
+      textCenter,
       requestedSquareCount: 0,
       constrainedSquareCount: 0,
       maximumSquareCount: tiles.length,
@@ -803,6 +912,8 @@ export function countdownFramePlan({
     gridColumns,
     gridRows,
     textCellIndex,
+    textCentered: centered,
+    textCenter,
     requestedSquareCount: squaresRequested,
     constrainedSquareCount: squares.length,
     maximumSquareCount: tiles.length,
@@ -823,18 +934,29 @@ export function countdownFrameAvoidanceEnvelopesAt(ageBeats, avoidance) {
   if (durationBeats < 1) {
     throw new RangeError("Countdown frame avoidance duration must be at least one beat.");
   }
-  const progress = Math.min(1, ageBeats / durationBeats);
-  if (progress < 0.5) {
+  const refill = frameAvoidanceRefillTiming(
+    avoidance?.refill,
+    durationBeats,
+    "Countdown frame avoidance refill",
+  );
+  const sampledAgeBeats = Math.min(durationBeats, ageBeats);
+  const emptyProgress = Math.min(1, sampledAgeBeats / (durationBeats * 0.5));
+  const emptyEnvelope = cubicBezierAt(emptyProgress, avoidance.timingCurve);
+  if (sampledAgeBeats < refill.startAgeBeats) {
     return {
       phase: "emptying",
-      emptyEnvelope: cubicBezierAt(progress * 2, avoidance.timingCurve),
+      emptyEnvelope,
       refillEnvelope: 0,
     };
   }
+  const refillProgress = (
+    sampledAgeBeats - refill.startAgeBeats
+  ) / (durationBeats - refill.startAgeBeats);
+  const easedRefill = cubicBezierAt(refillProgress, refill.settings.timingCurve);
   return {
-    phase: progress < 1 ? "refilling" : "complete",
-    emptyEnvelope: 1,
-    refillEnvelope: cubicBezierAt((progress - 0.5) * 2, avoidance.timingCurve),
+    phase: sampledAgeBeats < durationBeats ? "refilling" : "complete",
+    emptyEnvelope,
+    refillEnvelope: Math.max(0, Math.min(emptyEnvelope, easedRefill)),
   };
 }
 
@@ -939,6 +1061,7 @@ export function countdownFrameDigitCircles({
   radiusInCells,
   emptyEnvelope,
   refillEnvelope,
+  centered = false,
 }) {
   const columns = requirePositiveInteger(layout?.columns, "Countdown bubble columns");
   const rows = requirePositiveInteger(layout?.rows, "Countdown bubble rows");
@@ -965,14 +1088,17 @@ export function countdownFrameDigitCircles({
     throw new RangeError("Countdown bubble refill cannot overtake its empty radius.");
   }
   const subdivisions = 1 << level;
-  const textCellColumn = textCellIndex % columns;
-  const textCellRow = Math.floor(textCellIndex / columns);
-  const centerColumn = textCellColumn * subdivisions + subdivisions / 2;
-  const centerRow = textCellRow * subdivisions + subdivisions / 2;
+  const center = frameTextCenter(
+    columns,
+    rows,
+    subdivisions,
+    textCellIndex,
+    centered,
+  );
   return [-2, -1, 1, 2].map((offset, digitIndex) => ({
     digitIndex,
-    x: centerColumn + offset * spacing,
-    y: centerRow,
+    x: center.x + offset * spacing,
+    y: center.y,
     radius: radiusCells * subdivisions * emptyEnvelope,
     refillRadius: radiusCells * subdivisions * refillEnvelope,
   }));
@@ -984,6 +1110,7 @@ export function countdownFrameTextSafeRectangle({
   cellIndex,
   subdivisionLevel,
   textSafeZone,
+  centered = false,
 }) {
   const columns = requirePositiveInteger(layout?.columns, "Countdown frame columns");
   const rows = requirePositiveInteger(layout?.rows, "Countdown frame rows");
@@ -1008,13 +1135,18 @@ export function countdownFrameTextSafeRectangle({
     "Countdown frame text safe-zone height",
   );
   const subdivisions = 1 << level;
-  const centerColumn = (textCellIndex % columns + 0.5) * subdivisions;
-  const centerRow = (Math.floor(textCellIndex / columns) + 0.5) * subdivisions;
+  const center = frameTextCenter(
+    columns,
+    rows,
+    subdivisions,
+    textCellIndex,
+    centered,
+  );
   return {
-    left: centerColumn - widthInCells * subdivisions / 2,
-    top: centerRow - heightInCells * subdivisions / 2,
-    right: centerColumn + widthInCells * subdivisions / 2,
-    bottom: centerRow + heightInCells * subdivisions / 2,
+    left: center.x - widthInCells * subdivisions / 2,
+    top: center.y - heightInCells * subdivisions / 2,
+    right: center.x + widthInCells * subdivisions / 2,
+    bottom: center.y + heightInCells * subdivisions / 2,
   };
 }
 
@@ -1088,8 +1220,9 @@ function resolveFrameVisibilityMap(plan, visibilityMap) {
 
 function frameFieldSampleAt(field, dot, columnOffset = 0, rowOffset = 0) {
   if (field === null) return 0.5;
-  const column = (dot.column + columnOffset) % field.width;
-  const row = (dot.row + rowOffset) % field.height;
+  const center = frameDotCenter(dot);
+  const column = Math.floor(center.x + columnOffset) % field.width;
+  const row = Math.floor(center.y + rowOffset) % field.height;
   return field.data[row * field.width + column] / 255;
 }
 
@@ -1105,10 +1238,12 @@ function displacedFrameRadius(field, radius, sample) {
 
 function frameAvoidedSquareIndices(plan, avoidanceCircles, field) {
   return plan.squares
+    .filter(square => square.mergeSource !== "snake")
     .filter(square => square.dots.some(dot => avoidanceCircles.some(circle => {
+      const center = frameDotCenter(dot);
       const distance = Math.hypot(
-        dot.column + 0.5 - circle.x,
-        dot.row + 0.5 - circle.y,
+        center.x - circle.x,
+        center.y - circle.y,
       );
       const outerRadius = displacedFrameRadius(
         field,
@@ -1159,7 +1294,10 @@ export function countdownFrameAt(
   dotExclusionCircles = [],
   squareExclusionRectangles = [],
 ) {
-  const totalDotCount = plan?.squares?.length * settings.dotsPerSquare;
+  const totalDotCount = plan?.squares?.reduce(
+    (count, square) => count + (square.dots?.length ?? 0),
+    0,
+  );
   if (!plan || !Array.isArray(plan.dots) || plan.dots.length !== totalDotCount) {
     throw new TypeError("Countdown frame plan requires its configured dots.");
   }
@@ -1205,14 +1343,27 @@ export function countdownFrameAt(
   );
   const rectangleAvoidedSquares = new Set(plan.squares
     .filter(square => square.dots.some(dot => (
-      squareExclusionRectangles.some(rectangle => (
-        dot.column < rectangle.right
-        && dot.column + 1 > rectangle.left
-        && dot.row < rectangle.bottom
-        && dot.row + 1 > rectangle.top
-      ))
+      squareExclusionRectangles.some(rectangle => {
+        const center = frameDotCenter(dot);
+        const radius = (dot.sizeInSubdivisions ?? 1) / 2;
+        return center.x - radius < rectangle.right
+          && center.x + radius > rectangle.left
+          && center.y - radius < rectangle.bottom
+          && center.y + radius > rectangle.top;
+      })
     )))
     .map(square => square.squareIndex));
+  const rectangleAvoidedSnakeSquares = new Set(plan.squares
+    .filter(square => square.mergeSource === "snake")
+    .filter(square => rectangleAvoidedSquares.has(square.squareIndex))
+    .map(square => square.squareIndex));
+  const rectangleAvoidedGeneratedSquares = new Set(plan.squares
+    .filter(square => square.mergeSource !== "snake")
+    .filter(square => rectangleAvoidedSquares.has(square.squareIndex))
+    .map(square => square.squareIndex));
+  const rectangleHiddenDotCount = plan.squares
+    .filter(square => rectangleAvoidedSquares.has(square.squareIndex))
+    .reduce((count, square) => count + square.dots.length, 0);
   const avoidedSquares = new Set([
     ...circleAvoidedSquares,
     ...rectangleAvoidedSquares,
@@ -1221,14 +1372,15 @@ export function countdownFrameAt(
     dot => !avoidedSquares.has(dot.squareIndex),
   );
   const eligibleDots = timerEligibleDots.filter(dot => !dotExclusionCircles.some(
-    circle => Math.hypot(
-      dot.column + 0.5 - circle.x,
-      dot.row + 0.5 - circle.y,
-    ) < circle.radius,
+    circle => {
+      const center = frameDotCenter(dot);
+      return Math.hypot(center.x - circle.x, center.y - circle.y) < circle.radius;
+    },
   ));
   let dots = eligibleDots;
   if (field !== null) {
     dots = eligibleDots.filter(dot => {
+      if (dot.mergeSource === "snake") return true;
       const sample = frameFieldSampleAt(field, dot);
       return noiseVisibilityFill(sample, field.layer) >= 0.5;
     });
@@ -1240,6 +1392,9 @@ export function countdownFrameAt(
     visibleCount: dots.length,
     avoidedSquareCount: avoidedSquares.size,
     rectangleAvoidedSquareCount: rectangleAvoidedSquares.size,
+    rectangleAvoidedSnakeSquareCount: rectangleAvoidedSnakeSquares.size,
+    rectangleAvoidedGeneratedSquareCount: rectangleAvoidedGeneratedSquares.size,
+    rectangleHiddenDotCount,
     eligibleVisibleCount: eligibleDots.length,
     snakeHiddenCount: timerEligibleDots.length - eligibleDots.length,
     fieldHiddenCount: eligibleDots.length - dots.length,
@@ -1355,14 +1510,16 @@ export function drawCountdownFrame(
   context.save();
   for (let index = 0; index < frame.dots.length; index += 1) {
     const dot = frame.dots[index];
+    const center = frameDotCenter(dot);
+    const dotRadius = radius * (dot.sizeInSubdivisions ?? 1);
     const x = layout.offsetX
-      + (dot.column + 0.5) * slot;
+      + center.x * slot;
     const y = layout.offsetY
-      + (dot.row + 0.5) * slot;
+      + center.y * slot;
     context.fillStyle = colors[index];
     context.beginPath();
-    context.moveTo(x + radius, y);
-    context.arc(x, y, radius, 0, Math.PI * 2);
+    context.moveTo(x + dotRadius, y);
+    context.arc(x, y, dotRadius, 0, Math.PI * 2);
     context.fill();
   }
   context.restore();

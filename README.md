@@ -697,8 +697,10 @@ Change `COUNT_FROM_SECONDS` once in
 `config/compositions/countdown-framed.js`; the composition body, beat count, and
 default synth schedule all use that same total.
 
-The shipped schedule keeps clock→snake normalized and expresses the final
-three-second connector against the complete countdown:
+The checked-in score includes all five exclusive phases: `clock-main`,
+`clock-snake`, `snake-main`, `snake-bubbles`, and `bubbles-main`. Clock→snake
+stays normalized to the complete duration, while the final snake→bubbles
+connector remains exactly three seconds:
 
 ```js
 synth: {
@@ -736,13 +738,28 @@ at canvas edges and passing behind the timer while it fills the canvas. The body
 may cross itself without ending the run; crossings are deterministic telemetry
 events. During the final half-beat the meal completes full coverage and pulses
 with the head while the registered `strobe-stack` flicker runs across the body.
-At `2T/3`, the meal and complete body atomically become
-the bubbles track's body-derived dot field, which persists through `T`.
+At `2T/3`, the bubbles track inherits the meal and complete body without
+flattening their subdivision levels. Once per beat, inherited cells subdivide
+one level; after holding level 3 they release their tiles to the generated
+bubbles field. The cascade finishes after four beats.
 
 The bubbles background is gated and contour-displaced by the deterministic
 `ink-shards` visibility field. Its regular spots use a faster reference
 ease-out, while a dense four-scale shard collage exposes more background dots.
-One off-centre final wipe reaches full coverage only at the loop boundary. Set
+The field now moves as a deliberate 1.5-beat out-and-back gesture: it eases from
+rest to a `0.24` temporal offset at 0.75 beats, then eases back to the identical
+starting sample. This replaces the former one-beat, `0.08` hitch.
+Each bubble's inner refill starts at age `0.925` beats—`0.075` beats before its
+source tick ends—and uses cubic Bézier `[0.25, 0.46, 0.45, 0.94]` through the
+end of its 2.5-beat lifetime. Its outward emptying radius uses cubic Bézier
+`[0.895, 0.03, 0.685, 0.22]`, keeping each opening compact until expansion.
+The `00:01` timer, its digit-avoidance bubbles, and one final wipe share the
+exact pattern center; the wipe reaches full coverage only at the loop boundary.
+Only the single parent cell containing the timer renders empty. The connector
+masks that cell from the rendered snake without changing its full death
+snapshot. Bubbles also mask it only while rendering, retaining the underlying
+dots so the old timer location rejoins the emptying/refilling contours as soon
+as the timer moves; neighboring cells remain available. Set
 `countdownFramed.ui.noisePreview` to `true` to open its opacity, displacement,
 and flicker-color previews automatically.
 
@@ -753,8 +770,17 @@ only the timer.
 
 During the clock→snake evolution, both clock grids grow through their configured
 sizes. One keeps its seeded reservation near the timer while the other moves
-progressively outward toward the canvas edge, then the pair resolves to the
-snake-origin dot.
+progressively outward toward the canvas edge. The anchored grid reveals
+clockwise, the traveling grid reveals counter-clockwise, then the pair resolves
+to the snake-origin dot.
+
+During the clock track, a far-separated traveling square can optionally run on
+a seeded cadence independent of the anchored one-second square. The shipped
+patterns are `0.75 × 4`, `1.25 × 4`, `1.5 × 2`, `2 × 1`, and `2.5 × 2`;
+each equation totals a whole number of main beats, so the squares resync at the
+end of the block. A pattern is attempted at 85% of resync boundaries and starts
+only when the complete block fits before the clock, birth-ripple, or loop
+boundary. The existing within-lifetime stagger remains active.
 
 To make a custom schedule, author numeric `startSeconds`, `durationSeconds`, and
 `evolution` on a track or connection. Explicit seconds override that item's
@@ -769,10 +795,9 @@ at its source track's end and finish at its destination track's start.
 - Two or more untimed tracks without connections divide the full countdown into
   equal consecutive slices in array order. Reorder the array to reorder the
   visuals; remove entries to render only the remaining visuals.
-- The shipped `clock > snake > bubbles` array automatically enables its two
-  handcrafted merge connectors and authored merge timing. Any other array
-  shape uses consecutive hard cuts unless exclusive connector windows are
-  explicitly authored.
+- A complete `clock > snake > bubbles` array uses its two handcrafted merge
+  connectors only when those exclusive connector windows are explicitly
+  authored.
 
 For example, this is a clock-only countdown of any configured length:
 

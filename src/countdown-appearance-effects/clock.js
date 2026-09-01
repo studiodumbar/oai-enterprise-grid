@@ -5,9 +5,9 @@ import {
 } from "../core/cubic-bezier.js";
 import { hashUnit } from "../generators/grid-scene-strategies.js";
 import {
+  counterClockwiseGridDots,
   clockwiseDotColors,
   clockwiseGridDots,
-  clockwiseSquareDots,
   clockwiseVisibleCountAt,
 } from "./clockwise-square.js";
 
@@ -16,6 +16,9 @@ const CLOCK_ROW_SALT = 2207;
 const CLOCK_CANDIDATE_SALT = 2213;
 const CLOCK_PAIR_SALT = 2219;
 const CLOCK_STAGGER_SALT = 2221;
+const CLOCK_BEAT_OFFSET_ACTIVE_SALT = 2227;
+const CLOCK_BEAT_OFFSET_CHOICE_SALT = 2231;
+const CLOCK_BEAT_OFFSET_PLAN_SALT = 2273;
 const CLOCK_WATERFALL_SALT = 2237;
 const CLOCK_FAR_SEPARATION_SALT = 2239;
 const CLOCK_FAR_POSITION_SALT = 2243;
@@ -56,6 +59,167 @@ function requireString(value, label) {
     throw new TypeError(`${label} must be a non-empty string.`);
   }
   return value;
+}
+
+function resolveClockTravelingBeatOffset(value, label) {
+  const authored = value ?? {
+    enabled: false,
+    probability: 0,
+    patterns: [{ id: "synced", durationBeats: 1, repeatCount: 1 }],
+  };
+  const offset = requireObject(authored, label);
+  if (typeof offset.enabled !== "boolean") {
+    throw new TypeError(`${label}.enabled must be a boolean.`);
+  }
+  if (
+    !Number.isFinite(offset.probability)
+    || offset.probability < 0
+    || offset.probability > 1
+  ) {
+    throw new RangeError(`${label}.probability must be from zero to one.`);
+  }
+  if (!Array.isArray(offset.patterns) || offset.patterns.length === 0) {
+    throw new TypeError(`${label}.patterns must be a non-empty array.`);
+  }
+  const seenIds = new Set();
+  const patterns = offset.patterns.map((authoredPattern, index) => {
+    const pattern = requireObject(authoredPattern, `${label}.patterns[${index}]`);
+    const id = requireString(pattern.id, `${label}.patterns[${index}].id`);
+    if (seenIds.has(id)) {
+      throw new RangeError(`${label}.patterns contains duplicate id "${id}".`);
+    }
+    seenIds.add(id);
+    const durationBeats = requireFinitePositive(
+      pattern.durationBeats,
+      `${label}.patterns[${index}].durationBeats`,
+    );
+    const repeatCount = requirePositiveInteger(
+      pattern.repeatCount,
+      `${label}.patterns[${index}].repeatCount`,
+    );
+    const totalBeats = durationBeats * repeatCount;
+    const resyncBeats = Math.round(totalBeats);
+    if (Math.abs(totalBeats - resyncBeats) > 1e-9) {
+      throw new RangeError(
+        `${label}.patterns[${index}] must resync on a whole main beat; `
+        + `${durationBeats} × ${repeatCount} = ${totalBeats}.`,
+      );
+    }
+    return Object.freeze({ id, durationBeats, repeatCount, totalBeats: resyncBeats });
+  });
+  return {
+    enabled: offset.enabled,
+    probability: offset.probability,
+    patterns,
+  };
+}
+
+export function countdownClockOffsetSchedule(seed, totalBeats, settings) {
+  const scheduleSeed = requireNonNegativeInteger(
+    seed,
+    "Countdown clock offset schedule seed",
+  ) >>> 0;
+  const beatCount = requirePositiveInteger(
+    totalBeats,
+    "Countdown clock offset schedule beat count",
+  );
+  const offset = resolveClockTravelingBeatOffset(
+    settings,
+    "Countdown clock offset schedule settings",
+  );
+  const blocks = [];
+  let cursor = 0;
+  let blockIndex = 0;
+  let instanceOrdinal = 0;
+  while (cursor < beatCount) {
+    const remainingBeats = beatCount - cursor;
+    const fittingPatterns = offset.patterns.filter(
+      pattern => pattern.totalBeats <= remainingBeats,
+    );
+    const active = offset.enabled
+      && fittingPatterns.length > 0
+      && hashUnit(
+        scheduleSeed ^ CLOCK_BEAT_OFFSET_PLAN_SALT,
+        cursor,
+        CLOCK_BEAT_OFFSET_ACTIVE_SALT,
+      ) < offset.probability;
+    const choiceIndex = fittingPatterns.length === 0
+      ? 0
+      : Math.min(
+        fittingPatterns.length - 1,
+        Math.floor(hashUnit(
+          scheduleSeed ^ CLOCK_BEAT_OFFSET_PLAN_SALT,
+          cursor,
+          CLOCK_BEAT_OFFSET_CHOICE_SALT,
+        ) * fittingPatterns.length),
+      );
+    const pattern = active
+      ? fittingPatterns[choiceIndex]
+      : { id: "synced", durationBeats: 1, repeatCount: 1, totalBeats: 1 };
+    const instances = Array.from({ length: pattern.repeatCount }, (_, index) => {
+      const startBeat = cursor + index * pattern.durationBeats;
+      return Object.freeze({
+        ordinal: instanceOrdinal + index,
+        index,
+        startBeat,
+        endBeat: startBeat + pattern.durationBeats,
+      });
+    });
+    blocks.push(Object.freeze({
+      index: blockIndex,
+      active,
+      patternId: pattern.id,
+      startBeat: cursor,
+      endBeat: cursor + pattern.totalBeats,
+      durationBeats: pattern.durationBeats,
+      repeatCount: pattern.repeatCount,
+      totalBeats: pattern.totalBeats,
+      instances: Object.freeze(instances),
+    }));
+    cursor += pattern.totalBeats;
+    instanceOrdinal += pattern.repeatCount;
+    blockIndex += 1;
+  }
+  return Object.freeze({
+    seed: scheduleSeed,
+    totalBeats: beatCount,
+    blocks: Object.freeze(blocks),
+  });
+}
+
+export function countdownClockOffsetStateAt(schedule, beatTime) {
+  if (!schedule || !Array.isArray(schedule.blocks)) {
+    throw new TypeError("Countdown clock offset state requires a schedule.");
+  }
+  if (!Number.isFinite(beatTime)) {
+    throw new TypeError("Countdown clock offset beat time must be finite.");
+  }
+  if (beatTime < 0 || beatTime >= schedule.totalBeats) return null;
+  const block = schedule.blocks.find(candidate => (
+    beatTime >= candidate.startBeat && beatTime < candidate.endBeat
+  ));
+  if (block === undefined) return null;
+  const elapsedBeats = beatTime - block.startBeat;
+  const instanceIndex = Math.min(
+    block.instances.length - 1,
+    Math.floor((elapsedBeats + 1e-9) / block.durationBeats),
+  );
+  const instance = block.instances[instanceIndex];
+  return {
+    active: block.active,
+    blockIndex: block.index,
+    patternId: block.patternId,
+    blockStartBeat: block.startBeat,
+    blockEndBeat: block.endBeat,
+    durationBeats: block.durationBeats,
+    repeatCount: block.repeatCount,
+    instanceOrdinal: instance.ordinal,
+    instanceIndex,
+    instanceStartBeat: instance.startBeat,
+    instanceEndBeat: instance.endBeat,
+    instanceAgeBeats: beatTime - instance.startBeat,
+    remainingBeats: schedule.totalBeats - block.startBeat,
+  };
 }
 
 function rectanglesOverlap(first, second, gap = 0) {
@@ -217,6 +381,7 @@ function selectFarClockReservation({
   tick,
   textSafeZone,
   minimumSquareGap,
+  minimumRadius,
   gridColumns,
   gridRows,
   size,
@@ -237,6 +402,7 @@ function selectFarClockReservation({
         (candidate.centerColumn - other.centerColumn) ** 2
         + (candidate.centerRow - other.centerRow) ** 2
       );
+      if (distance < minimumRadius ** 2) continue;
       const candidateId = top * gridColumns + left;
       const rank = hashUnit(
         seed ^ Math.imul(tick + 1, CLOCK_FAR_POSITION_SALT),
@@ -245,8 +411,7 @@ function selectFarClockReservation({
       );
       if (
         selected === null
-        || distance > selected.distance
-        || (distance === selected.distance && rank < selected.rank)
+        || rank < selected.rank
       ) {
         selected = { ...candidate, distance, rank };
       }
@@ -444,6 +609,10 @@ export function resolveCountdownClockSettings(appearance, beatSeconds) {
       + "must be from zero up to one.",
     );
   }
+  const travelingSquareBeatOffset = resolveClockTravelingBeatOffset(
+    clock.travelingSquareBeatOffset,
+    "countdownFramed.appearance.effects.clock.travelingSquareBeatOffset",
+  );
   const authoredSizeWaterfall = clock.sizeWaterfall ?? {
     enabled: false,
     bothCells: false,
@@ -476,6 +645,7 @@ export function resolveCountdownClockSettings(appearance, beatSeconds) {
   const authoredFarSeparation = clock.farSeparation ?? {
     enabled: false,
     probability: 0,
+    minimumRadiusInCells: 3,
   };
   const farSeparation = requireObject(
     authoredFarSeparation,
@@ -496,6 +666,11 @@ export function resolveCountdownClockSettings(appearance, beatSeconds) {
       + "must be from zero to one.",
     );
   }
+  const farSeparationMinimumRadiusInCells = requireFinitePositive(
+    farSeparation.minimumRadiusInCells ?? 3,
+    "countdownFramed.appearance.effects.clock.farSeparation."
+      + "minimumRadiusInCells",
+  );
   const authoredBirthRipple = clock.birthRipple ?? {
     enabled: false,
     startBeforeHandoffBeats: 1,
@@ -665,6 +840,13 @@ export function resolveCountdownClockSettings(appearance, beatSeconds) {
     squareCount,
     dotsPerSquare,
     travelingSquareStaggerBeats,
+    travelingSquareBeatOffset: Object.freeze({
+      enabled: travelingSquareBeatOffset.enabled,
+      probability: travelingSquareBeatOffset.probability,
+      patterns: Object.freeze(travelingSquareBeatOffset.patterns.map(
+        pattern => Object.freeze({ ...pattern }),
+      )),
+    }),
     sizeWaterfall: Object.freeze({
       enabled: sizeWaterfall.enabled,
       bothCells: sizeWaterfall.bothCells,
@@ -673,6 +855,7 @@ export function resolveCountdownClockSettings(appearance, beatSeconds) {
     farSeparation: Object.freeze({
       enabled: farSeparation.enabled,
       probability: farSeparation.probability,
+      minimumRadiusInCells: farSeparationMinimumRadiusInCells,
     }),
     birthRipple: Object.freeze({
       enabled: birthRipple.enabled,
@@ -753,7 +936,11 @@ export function countdownClockPlan({
   squareCount = 2,
   dotsPerSquare = 4,
   travelingSquareStaggerBeats = 0,
+  travelingBeatOffsetActive = false,
+  travelingBeatDurationBeats = 1,
+  forceFarSeparated = false,
   farSeparationProbability = 0,
+  farSeparationMinimumRadiusInCells = 3,
   evolutionSquareSizes = [3, 4, 8],
   evolutionEnabled = false,
   evolutionProgress = 0,
@@ -820,6 +1007,16 @@ export function countdownClockPlan({
       "Countdown clock traveling-square stagger must be from zero up to one beat.",
     );
   }
+  if (typeof travelingBeatOffsetActive !== "boolean") {
+    throw new TypeError("Countdown clock traveling beat-offset active must be a boolean.");
+  }
+  const resolvedTravelingBeatDuration = requireFinitePositive(
+    travelingBeatDurationBeats,
+    "Countdown clock traveling beat duration",
+  );
+  if (typeof forceFarSeparated !== "boolean") {
+    throw new TypeError("Countdown clock force-far separation must be a boolean.");
+  }
   if (
     !Number.isFinite(farSeparationProbability)
     || farSeparationProbability < 0
@@ -829,6 +1026,10 @@ export function countdownClockPlan({
       "Countdown clock far-separation probability must be from zero to one.",
     );
   }
+  const farSeparationMinimumRadius = requireFinitePositive(
+    farSeparationMinimumRadiusInCells,
+    "Countdown clock far-separation minimum radius in cells",
+  );
   const range = requireObject(rangeInSubdivisions, "Countdown clock range");
   const rangeX = requireNonNegativeInteger(range.x, "Countdown clock horizontal range");
   const rangeY = requireNonNegativeInteger(range.y, "Countdown clock vertical range");
@@ -1002,8 +1203,10 @@ export function countdownClockPlan({
     appearanceTick,
     CLOCK_FAR_SEPARATION_SALT,
   );
-  const farSeparated = farSeparationProbability > 0
-    && farSeparationSample < farSeparationProbability;
+  const farSeparated = forceFarSeparated || (
+    farSeparationProbability > 0
+    && farSeparationSample < farSeparationProbability
+  );
   const anchoredSquareIndex = 1 - travelingSquareIndex;
   if (farSeparated) {
     const farReservation = selectFarClockReservation({
@@ -1012,6 +1215,7 @@ export function countdownClockPlan({
       tick: appearanceTick,
       textSafeZone: resolvedTextSafeZone,
       minimumSquareGap,
+      minimumRadius: farSeparationMinimumRadius * subdivisions,
       ...travelGeometry,
     });
     if (farReservation === null) {
@@ -1052,27 +1256,33 @@ export function countdownClockPlan({
       : reservation;
     const topLeftColumn = resolvedReservation.left;
     const topLeftRow = resolvedReservation.top;
-    const clockDots = evolution.squareSize === 2
-      ? clockwiseSquareDots(
-        topLeftColumn,
-        topLeftRow,
-        gridColumns,
-        squareIndex,
-      )
-      : clockwiseGridDots(
-        topLeftColumn,
-        topLeftRow,
-        evolution.squareSize,
-        gridColumns,
-        squareIndex,
-      );
+    const rotationDirection = evolution.mode === "expanding"
+      && squareIndex === travelingSquareIndex
+      ? "counter-clockwise"
+      : "clockwise";
+    const gridDotsForRotation = rotationDirection === "counter-clockwise"
+      ? counterClockwiseGridDots
+      : clockwiseGridDots;
+    const clockDots = gridDotsForRotation(
+      topLeftColumn,
+      topLeftRow,
+      evolution.squareSize,
+      gridColumns,
+      squareIndex,
+    );
     return {
       squareIndex,
       motionRole: squareIndex === travelingSquareIndex ? "traveling" : "anchored",
+      rotationDirection,
       farSeparated: farSeparated && squareIndex === travelingSquareIndex,
       appearanceStaggerBeats: squareIndex === travelingSquareIndex
         ? travelingStaggerBeats
         : 0,
+      beatOffsetActive: squareIndex === travelingSquareIndex
+        && travelingBeatOffsetActive,
+      beatDurationBeats: squareIndex === travelingSquareIndex
+        ? resolvedTravelingBeatDuration
+        : 1,
       offsetX: resolvedReservation.centerColumn - textCenterColumn,
       offsetY: resolvedReservation.centerRow - textCenterRow,
       topLeftColumn,
@@ -1145,6 +1355,8 @@ export function validateCountdownClockLayout(layout, settings) {
         farSeparationProbability: settings.farSeparation.enabled
           ? settings.farSeparation.probability
           : 0,
+        farSeparationMinimumRadiusInCells:
+          settings.farSeparation.minimumRadiusInCells,
         evolutionSquareSizes: settings.evolutionSquareSizes,
         evolutionEnabled: evolutionProgress !== null,
         evolutionProgress: evolutionProgress ?? 0,
@@ -1655,18 +1867,22 @@ export function countdownClockFrame(
     settings.timingCurve,
   );
   const squareFrames = plan.squares.map(square => {
-    const stagger = square.appearanceStaggerBeats ?? 0;
+    const ageBeats = Math.max(0, Number(linearProgress) || 0);
+    const beatDurationBeats = square.beatDurationBeats ?? 1;
+    const active = ageBeats < beatDurationBeats;
+    const lifetimeLinearProgress = ageBeats / beatDurationBeats;
+    const stagger = (square.appearanceStaggerBeats ?? 0) / beatDurationBeats;
     const staggeredLinearProgress = stagger >= 0
-      ? (linearProgress - stagger) / (1 - stagger)
-      : linearProgress / (1 + stagger);
+      ? (lifetimeLinearProgress - stagger) / (1 - stagger)
+      : lifetimeLinearProgress / (1 + stagger);
     const squareProgress = clockwiseVisibleCountAt(
       staggeredLinearProgress,
       dotsPerSquare,
       settings.timingCurve,
     );
-    const sourceDots = square.dots.filter(
+    const sourceDots = active ? square.dots.filter(
       dot => dot.clockwiseIndex < squareProgress.visibleCount,
-    );
+    ) : [];
     const waterfallProbability = countdownClockWaterfallProbability(
       squareProgress.progress,
       plan,
@@ -1681,6 +1897,11 @@ export function countdownClockFrame(
     );
     return {
       square,
+      active,
+      sourceTick: plan.tick,
+      ageBeats,
+      beatDurationBeats,
+      totalDotCount: dotsPerSquare,
       linearProgress: squareProgress.linearProgress,
       progress: squareProgress.progress,
       sourceVisibleCount: squareProgress.visibleCount,
@@ -1703,7 +1924,8 @@ export function countdownClockFrame(
       0,
     ),
     renderSignature: dots.map(dot => (
-      `${dot.squareIndex}:${dot.index}:${dot.sizeInSubdivisions ?? 1}`
+      `${dot.appearanceTick}:${dot.squareIndex}:${dot.index}:`
+      + `${dot.sizeInSubdivisions ?? 1}`
     )).join(","),
     totalDotCount,
     evolutionMode: plan.evolutionMode,
@@ -1716,10 +1938,109 @@ export function countdownClockFrame(
       squareIndex: square.squareIndex,
       motionRole: square.motionRole,
       appearanceStaggerBeats: square.appearanceStaggerBeats ?? 0,
+      beatOffsetActive: square.beatOffsetActive ?? false,
+      beatDurationBeats: square.beatDurationBeats ?? 1,
       topLeftColumn: square.topLeftColumn,
       topLeftRow: square.topLeftRow,
       ...squareFrame,
     })),
+    dots,
+  };
+}
+
+export function countdownClockFrameByRoles(frame, roles) {
+  if (!frame || !Array.isArray(frame.squares) || !Array.isArray(frame.dots)) {
+    throw new TypeError("Countdown clock role filter requires a clock frame.");
+  }
+  if (!Array.isArray(roles) || roles.length === 0) {
+    throw new TypeError("Countdown clock role filter requires roles.");
+  }
+  if (frame.birthRipple !== null) return frame;
+  const roleSet = new Set(roles);
+  const squares = frame.squares.filter(square => roleSet.has(square.motionRole)).map(
+    square => ({ ...square }),
+  );
+  const squareKeys = new Set(squares.map(
+    square => `${square.sourceTick}:${square.squareIndex}`,
+  ));
+  const dots = frame.dots.filter(dot => squareKeys.has(
+    `${dot.appearanceTick}:${dot.squareIndex}`,
+  )).map(dot => ({ ...dot }));
+  return {
+    ...frame,
+    visibleCountsBySquare: squares.map(square => square.visibleCount),
+    sourceVisibleCountsBySquare: squares.map(square => square.sourceVisibleCount),
+    visibleCount: squares.reduce((sum, square) => sum + square.visibleCount, 0),
+    sourceVisibleCount: squares.reduce(
+      (sum, square) => sum + square.sourceVisibleCount,
+      0,
+    ),
+    totalDotCount: squares.reduce(
+      (sum, square) => sum + square.totalDotCount,
+      0,
+    ),
+    renderSignature: dots.map(dot => (
+      `${dot.appearanceTick}:${dot.squareIndex}:${dot.index}:`
+      + `${dot.sizeInSubdivisions ?? 1}`
+    )).join(","),
+    offsetSquareCount: 0,
+    squares,
+    dots,
+  };
+}
+
+export function combineCountdownClockRoleFrames(primaryFrame, offsetFrames = []) {
+  if (!primaryFrame || !Array.isArray(primaryFrame.squares)) {
+    throw new TypeError("Countdown clock frame combination requires a primary frame.");
+  }
+  if (!Array.isArray(offsetFrames)) {
+    throw new TypeError("Countdown clock offset frames must be an array.");
+  }
+  if (primaryFrame.birthRipple !== null) return primaryFrame;
+
+  const offsetSquares = [];
+  const offsetDots = [];
+  for (const frame of offsetFrames) {
+    if (!frame || !Array.isArray(frame.squares) || !Array.isArray(frame.dots)) {
+      throw new TypeError("Countdown clock offset frame is invalid.");
+    }
+    for (const square of frame.squares) {
+      if (square.motionRole !== "traveling" || !square.active) continue;
+      offsetSquares.push({ ...square });
+      offsetDots.push(...frame.dots.filter(dot => (
+        dot.appearanceTick === square.sourceTick
+        && dot.squareIndex === square.squareIndex
+      )).map(dot => ({ ...dot })));
+    }
+  }
+
+  const squares = [
+    ...offsetSquares,
+    ...primaryFrame.squares.map(square => ({ ...square })),
+  ];
+  const dots = [
+    ...offsetDots,
+    ...primaryFrame.dots.map(dot => ({ ...dot })),
+  ];
+  return {
+    ...primaryFrame,
+    visibleCountsBySquare: squares.map(square => square.visibleCount),
+    sourceVisibleCountsBySquare: squares.map(square => square.sourceVisibleCount),
+    visibleCount: squares.reduce((sum, square) => sum + square.visibleCount, 0),
+    sourceVisibleCount: squares.reduce(
+      (sum, square) => sum + square.sourceVisibleCount,
+      0,
+    ),
+    totalDotCount: squares.reduce(
+      (sum, square) => sum + square.totalDotCount,
+      0,
+    ),
+    renderSignature: dots.map(dot => (
+      `${dot.appearanceTick}:${dot.squareIndex}:${dot.index}:`
+      + `${dot.sizeInSubdivisions ?? 1}`
+    )).join(","),
+    offsetSquareCount: offsetSquares.length,
+    squares,
     dots,
   };
 }

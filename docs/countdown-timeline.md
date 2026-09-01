@@ -85,35 +85,41 @@ bubbles boundary.
 
 The five rows form one continuous, exclusive lane. During the snake→bubbles
 connector, the snake follows one deterministic toroidal coverage cycle. It
-wraps at canvas edges and passes behind the timer instead of diverting around
-each new label. The tail advances normally between growth steps, but the head
+wraps at canvas edges instead of diverting around each new label. The tail
+advances normally between growth steps, but the head
 may cross occupied body cells; a crossing is counted and never kills the snake.
 Normal snake motion continues until the connector boundary; the three-second
 connector is only the state transition. By its final half-beat the body occupies
 every parent cell except a reserved level-0 meal. The meal appears beside the
 head, completes full coverage, and pulses with the head while movement freezes
-and the registered `strobe-stack` flicker runs across the body. At `2T/3`, the meal joins the complete body and that death snapshot is
-atomically committed into the bubbles track's body-derived dot field. The connector
-never exposes bubbles early.
+and the registered `strobe-stack` flicker runs across the body. At `2T/3`, the
+meal joins the complete body and that death snapshot is atomically committed
+into the bubbles track. The first bubbles beat preserves every inherited snake
+cell at its death-snapshot level. Each beat then advances inherited cells one
+subdivision level (`0 → 1 → 2 → 3`); cells that have completed level 3 release
+their tiles to the generated bubbles field on the next beat. The cascade is
+complete after four beats. The connector never exposes bubbles early. The
+simulation and death snapshot retain full coverage, but the rendered snake and
+bubbles remove the single parent cell containing the current timer.
 
-For `T = 30`, the important boundaries are:
+For total duration `T`, the checked-in complete score resolves these boundaries:
 
 | Time | State |
 |---:|---|
 | 0 | clock begins |
-| 5 | clock→snake merge begins |
-| 10 | clock ends; snake begins growing at `00:20` |
-| 17 | snake→bubbles transition begins at `00:13` |
-| 20 | snake dies atomically; bubble-only phase begins at `00:10` |
-| 30 | loop returns to time 0 |
+| `T / 6` | clock→snake merge begins |
+| `T / 3` | clock ends; snake begins |
+| `2T / 3 - 3s` | snake→bubbles transition begins |
+| `2T / 3` | snake dies atomically; inherited-level bubble cascade begins |
+| `T` | loop returns to time 0 |
 
-### Current 180-second loop
+### Current complete score
 
-The checked-in track list exposes the complete score: clock `[0, 30)`,
-clock→snake `[30, 60)`, snake `[60, 117)`, snake→bubbles `[117, 120)`, and
-bubbles `[120, 180)`. The death flicker occupies `[119.5, 120)`. The countdown
-labels at those boundaries are `03:00`, `02:30`, `02:00`, `01:03`, and
-`01:00`.
+The checked-in score includes all five exclusive owners: `clock-main`,
+`clock-snake`, `snake-main`, `snake-bubbles`, and `bubbles-main`. Track timing
+is derived from the normalized connector boundaries above, so changing
+`COUNT_FROM_SECONDS` preserves the complete order and the final three-second
+snake→bubbles transition.
 
 `BUBBLES_SETTINGS.debug.visualizeBubbles` enables a translucent diagnostic
 overlay for every live timer-avoidance bubble. Each circle is drawn separately
@@ -124,10 +130,24 @@ change which production dots are visible.
 The bubbles background uses `visibilityMap.field` with the registered
 `ink-shards` mode. Its four-scale rectilinear matte exposes a denser field of
 background squares and independently displaces the emptying and refilling
-contours. New spots continue through nearly the complete track. One off-centre
-wipe starts during the final 1.4 seconds and reaches full coverage only at the
-exact loop boundary, so bubbles never sit on an empty hold. Set
-`countdownFramed.ui.noisePreview` to a boolean to auto-open or close the shared
+contours. New spots continue through nearly the complete track. The `00:01`
+timer and its digit-avoidance bubbles land on the exact pattern center, shared
+by the final wipe. The wipe starts during the final 1.4 seconds and reaches full
+coverage only at the exact loop boundary, so bubbles never sit on an empty hold.
+`visibilityMap.beatWiggle` moves the field through one smooth 1.5-beat
+out-and-back gesture. Its zero-velocity ease peaks at a `0.24` temporal offset
+after 0.75 beats and returns to the identical sample at 1.5 beats; motion time
+is local to the active bubbles track.
+Each spot's inner refill begins at age `0.925` beats, exactly `0.075` beats
+before its source tick ends, and grows with cubic Bézier
+`[0.25, 0.46, 0.45, 0.94]` until the spot's 2.5-beat lifetime ends. Its
+outward emptying radius uses cubic Bézier `[0.895, 0.03, 0.685, 0.22]`,
+holding the opening tighter before it expands.
+Only the single parent cell containing the timer renders bubble-free;
+neighboring cells remain available. Its dots stay in the underlying bubble
+plan, so after the timer moves they immediately respond to the existing
+emptying and refilling contours instead of leaving a square hole.
+Set `countdownFramed.ui.noisePreview` to a boolean to auto-open or close the shared
 field panel; the shipped value is `false`. For this composition the panel previews the opacity matte, contour
 displacement, and flicker color; `cg\`noise-preview toggle\`` remains the runtime
 override.
@@ -150,8 +170,8 @@ const COUNTDOWN_SYNTH_TRACKS = Object.freeze([
 ]);
 ```
 
-The existing `COUNTDOWN_SYNTH_CONNECTIONS` derivation becomes `[]` because the
-track list is no longer exactly `clock > snake > bubbles`.
+Set `COUNTDOWN_SYNTH_CONNECTIONS` to `[]`; connections are authored explicitly
+and are never inferred from the track list.
 
 ### 2. Reorder or remove visuals with equal hard-cut slices
 
@@ -281,7 +301,29 @@ connection window may overlap any other timeline item.
 Explicitly naming `clock-to-snake` or `snake-to-bubbles` for the wrong pair is a
 startup error. Required semantic ports are also checked at startup.
 
+During the clock→snake connector's expanding mode, the anchored block continues
+to reveal clockwise while the outward-traveling block reveals counter-clockwise.
+Both retain the same seeded stagger and converge on the shared snake origin.
+
 ### Clock-to-snake birth ripple
+
+During the clock track, only a far-separated traveling square can receive the
+optional `travelingSquareBeatOffset`. At each whole-beat resync boundary, the
+shipped score has an 85% chance to choose one fitting cadence block:
+`0.75 × 4 = 3`, `1.25 × 4 = 5`, `1.5 × 2 = 3`, `2 × 1 = 2`, or
+`2.5 × 2 = 5` beats. The anchored square stays on the main one-second clock;
+the traveling square starts independently at each fractional cadence boundary.
+The existing seeded `travelingSquareStaggerBeats` still shifts its reveal
+inside each independent lifetime. A block is selected only when its complete
+duration fits before the birth ripple, clock-track end, or countdown-loop end;
+otherwise the traveling square stays synced for that beat. The `config` channel
+reports the complete block schedule, and the `transition` channel reports each
+independent instance and its next resync beat.
+
+`CLOCK_SETTINGS.farSeparation.minimumRadiusInCells` is the minimum distance
+between the anchored and traveling square centers. A far square is selected
+deterministically from every legal position beyond that radius; it is not
+forced to the farthest canvas corner.
 
 `CLOCK_SETTINGS.birthRipple.startBeforeHandoffBeats` places the ripple relative
 to the clock-to-snake boundary, so countdown length changes do not move it away
@@ -308,6 +350,13 @@ strength decay exponentially with distance from the birthplace. The first crest
 cell intersecting the timer's safe zone starts one fixed-cell echo capped by
 `secondaryRadiusInCells`. The echo source stays fixed while the countdown text
 moves each beat.
+
+Parent-cell visibility during the trailing ripple has one strict priority:
+timer, then snake, then ripple. The ripple simulation keeps its complete cell
+set, but its render copy removes the current timer parent cell and every cell
+owned by the visible snake. The `transition` channel reports this mask through
+`countdown-ripple-priority` with source, timer-hidden, snake-hidden, and visible
+cell counts.
 
 ## Layers and ownership
 
@@ -368,6 +417,11 @@ The important stable events are:
 | `transition` | Connector enter/exit and clock/snake/bubble transitions |
 | `plan` | Effect plans and final connector-owned render layers |
 | `cells` | Countdown tick, label, and selected timer cell |
+
+The `transition` stream reports the exact render mask as
+`countdown-snake-text-clear ... cell=<index>` and
+`countdown-bubbles-text-clear state=active mode=render-only ... cell=<index>
+cells=1`.
 
 Inspect current ownership from the browser console:
 

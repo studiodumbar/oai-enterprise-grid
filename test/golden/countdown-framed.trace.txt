@@ -2,251 +2,349 @@
 # frames: 900
 
 [cg:timeline] f=0000 phase=core cycle=0 duration=- paused=no
-[cg:plan] f=0000 countdown-engorgement-plan state=created columns=11 rows=7 startLength=4 targetLength=77 capacityLength=77 meal=28 beats=3 routeSteps=90 growthStartProgress=0.000 growthStartStep=0 cruiseSteps=0 growthSteps=75 movementSteps=75 cycleCells=77 explored=75 collisions=0 wraps=7
 [cg:plan] f=0000 enter=countdownFramedGrid
-[cg:timeline] f=0000 composition-timeline composition=countdown-framed time=0.017 active=track:clock-main states=track:clock-main:on,connection:clock-snake:off,track:snake-main:off,connection:snake-bubbles:off,track:bubbles-main:off
-[cg:plan] f=0000 countdown-effect mode=clock tick=0 evolution=no evolutionTick=0 seed=1 cell=13 mode=clock size=2 handoff=59 squares=2 safeText=15:9:25:15 squareGap=1 reserveExpansion=0 farSeparated=no separation=6.708 motion=traveling,anchored staggerBeats=0.161,0.000 reservations=13:4,19:7 placements=13:4,19:7 dots=365,366,454,453,635,636,724,723
-[cg:plan] f=0000 countdown-bubbles-field state=created field=ink-shards columns=88 rows=56 seed=83 minimum=0 maximum=255 displacementMinCells=0.100 displacementRatio=0.160 displacementMaxCells=1.100
+[cg:timeline] f=0000 composition-timeline composition=countdown-framed time=0.017 active=track:clock-main states=track:clock-main:on,connection:clock-snake:off,track:snake-main:off
+[cg:plan] f=0000 countdown-snake-disappearance tick=0 sourceTick=28 selected=instant phase=emerge mode=tail-dive cells=12
+[cg:plan] f=0000 countdown-effect mode=clock tick=0 evolution=no evolutionTick=0 seed=1 cell=13 mode=clock size=2 handoff=5 squares=2 safeText=15:9:25:15 squareGap=1 reserveExpansion=0 farSeparated=no separation=6.708 motion=traveling,anchored beatOffset=no,no beatMultiplier=1.000,1.000 reservations=13:4,19:7 placements=13:4,19:7 dots=365,366,454,453,635,636,724,723
 [cg:timeline] f=0000 countdown-track id=clock-main state=enter
 [cg:plan] f=0000 countdown-synth plan=rebuilt tracks=clock-main connectors=none layers=behind-timer:10:track:clock-main:clock-main:main
-[cg:timeline] f=0000 countdown-order stage=clock index=0/3 next=snake phase=stable evolution=no stageProgress=0.001 evolutionProgress=0.000
+[cg:timeline] f=0000 countdown-order stage=clock index=0/2 next=snake phase=stable evolution=no stageProgress=0.002 evolutionProgress=0.000
 [cg:transition] f=0000 countdown-intro tick=0 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0000 countdown-clock tick=0 mode=clock size=2 visible=1 sourceVisible=1/8 visibleBySquare=0,1 dotSizes=1 waterfallProbability=0.000,0.001 handoff=59 progress=0.001
+[cg:transition] f=0000 countdown-clock tick=0 mode=clock size=2 visible=2 sourceVisible=2/8 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.001,0.001 beatMultiplier=1.000,1.000 handoff=5 progress=0.001
 [cg:plan] f=0000 render=[countdownFramedGrid@1.00]
-[cg:timeline] f=0001 phase=core cycle=0 duration=180.000 paused=no
-[cg:transition] f=0003 countdown-intro tick=0 step=1 colors=[0,0,1,0,0]
-[cg:transition] f=0007 countdown-intro tick=0 step=2 colors=[0,1,2,1,0]
-[cg:transition] f=0009 countdown-clock tick=0 mode=clock size=2 visible=2 sourceVisible=2/8 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.000,0.053 handoff=59 progress=0.056
-[cg:transition] f=0011 countdown-intro tick=0 step=3 colors=[1,2,3,2,1]
-[cg:transition] f=0015 countdown-intro tick=0 step=4 colors=[2,3,3,3,2]
-[cg:transition] f=0019 countdown-intro tick=0 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0020 countdown-clock tick=0 mode=clock size=2 visible=3 sourceVisible=3/8 visibleBySquare=1,2 dotSizes=1,1,1 waterfallProbability=0.099,0.243 handoff=59 progress=0.255
-[cg:transition] f=0027 countdown-clock tick=0 mode=clock size=2 visible=4 sourceVisible=4/8 visibleBySquare=2,2 dotSizes=1,1,1,1 waterfallProbability=0.262,0.421 handoff=59 progress=0.443
-[cg:transition] f=0030 countdown-clock tick=0 mode=clock size=2 visible=5 sourceVisible=5/8 visibleBySquare=2,3 dotSizes=1,1,1,1,1 waterfallProbability=0.352,0.502 handoff=59 progress=0.529
-[cg:transition] f=0034 countdown-clock tick=0 mode=clock size=2 visible=6 sourceVisible=6/8 visibleBySquare=3,3 dotSizes=1,1,1,1,1,1 waterfallProbability=0.480,0.609 handoff=59 progress=0.641
-[cg:transition] f=0039 countdown-clock tick=0 mode=clock size=2 visible=7 sourceVisible=7/8 visibleBySquare=3,4 dotSizes=1,1,1,1,1,1,1 waterfallProbability=0.639,0.730 handoff=59 progress=0.768
-[cg:transition] f=0042 countdown-clock tick=0 mode=clock size=2 visible=8 sourceVisible=8/8 visibleBySquare=4,4 dotSizes=1,1,1,1,1,1,1,1 waterfallProbability=0.724,0.792 handoff=59 progress=0.833
-[cg:plan] f=0059 countdown-effect mode=clock tick=1 evolution=no evolutionTick=0 seed=1 cell=38 mode=clock size=2 handoff=59 squares=2 safeText=39:25:49:31 squareGap=1 reserveExpansion=0 farSeparated=no separation=9.055 motion=anchored,traveling staggerBeats=0.000,-0.112 reservations=43:31,42:22 placements=43:31,42:22 dots=2771,2772,2860,2859,1978,1979,2067,2066
+[cg:timeline] f=0001 phase=core cycle=0 duration=30.000 paused=no
+[cg:transition] f=0002 countdown-intro tick=0 step=1 colors=[0,0,1,0,0]
+[cg:transition] f=0005 countdown-intro tick=0 step=2 colors=[0,1,2,1,0]
+[cg:transition] f=0008 countdown-intro tick=0 step=3 colors=[1,2,3,2,1]
+[cg:transition] f=0011 countdown-intro tick=0 step=4 colors=[2,3,4,3,2]
+[cg:transition] f=0014 countdown-intro tick=0 step=5 colors=[3,4,5,4,3]
+[cg:transition] f=0016 countdown-intro tick=0 step=6 colors=[4,5,5,5,4]
+[cg:transition] f=0019 countdown-intro tick=0 step=7 colors=[5,5,5,5,5]
+[cg:transition] f=0020 countdown-clock tick=0 mode=clock size=2 visible=4 sourceVisible=4/8 visibleBySquare=2,2 dotSizes=1,1,1,1 waterfallProbability=0.243,0.243 beatMultiplier=1.000,1.000 handoff=5 progress=0.255
+[cg:transition] f=0030 countdown-clock tick=0 mode=clock size=2 visible=6 sourceVisible=6/8 visibleBySquare=3,3 dotSizes=1,1,1,1,1,1 waterfallProbability=0.502,0.502 beatMultiplier=1.000,1.000 handoff=5 progress=0.529
+[cg:transition] f=0039 countdown-clock tick=0 mode=clock size=2 visible=8 sourceVisible=8/8 visibleBySquare=4,4 dotSizes=1,1,1,1,1,1,1,1 waterfallProbability=0.730,0.730 beatMultiplier=1.000,1.000 handoff=5 progress=0.768
+[cg:plan] f=0059 countdown-snake-disappearance tick=1 sourceTick=0 selected=instant phase=move mode=instant cells=4
+[cg:plan] f=0059 countdown-effect mode=clock tick=1 evolution=no evolutionTick=0 seed=1 cell=38 mode=clock size=2 handoff=5 squares=2 safeText=39:25:49:31 squareGap=1 reserveExpansion=0 farSeparated=no separation=9.055 motion=anchored,traveling beatOffset=no,no beatMultiplier=1.000,1.000 reservations=43:31,42:22 placements=43:31,42:22 dots=2771,2772,2860,2859,1978,1979,2067,2066
 [cg:transition] f=0059 countdown-intro tick=1 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0059 countdown-clock tick=1 mode=clock size=2 visible=2 sourceVisible=2/8 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.000,0.000 handoff=59 progress=0.000
+[cg:transition] f=0059 countdown-clock tick=1 mode=clock size=2 visible=2 sourceVisible=2/8 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.000,0.000 beatMultiplier=1.000,1.000 handoff=5 progress=0.000
 [cg:plan] f=0060 render=[countdownFramedGrid@1.00]
-[cg:transition] f=0063 countdown-intro tick=1 step=1 colors=[0,0,1,0,0]
-[cg:transition] f=0067 countdown-intro tick=1 step=2 colors=[0,1,2,1,0]
-[cg:transition] f=0071 countdown-intro tick=1 step=3 colors=[1,2,3,2,1]
-[cg:transition] f=0075 countdown-intro tick=1 step=4 colors=[2,3,3,3,2]
-[cg:transition] f=0078 countdown-clock tick=1 mode=clock size=2 visible=3 sourceVisible=3/8 visibleBySquare=1,2 dotSizes=1,1,1 waterfallProbability=0.199,0.252 handoff=59 progress=0.209
-[cg:transition] f=0079 countdown-intro tick=1 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0080 countdown-clock tick=1 mode=clock size=2 visible=4 sourceVisible=4/8 visibleBySquare=2,2 dotSizes=1,1,1,1 waterfallProbability=0.243,0.306 handoff=59 progress=0.255
-[cg:transition] f=0086 countdown-clock tick=1 mode=clock size=2 visible=5 sourceVisible=5/8 visibleBySquare=2,3 dotSizes=1,1,1,1,1 waterfallProbability=0.394,0.486 handoff=59 progress=0.414
-[cg:transition] f=0090 countdown-clock tick=1 mode=clock size=2 visible=6 sourceVisible=6/8 visibleBySquare=3,3 dotSizes=1,1,1,1,1,1 waterfallProbability=0.502,0.607 handoff=59 progress=0.529
-[cg:transition] f=0094 countdown-clock tick=1 mode=clock size=2 visible=4 sourceVisible=7/8 visibleBySquare=3,1 dotSizes=1,1,1,2 waterfallProbability=0.609,0.717 handoff=59 progress=0.641
-[cg:transition] f=0099 countdown-clock tick=1 mode=clock size=2 visible=5 sourceVisible=8/8 visibleBySquare=4,1 dotSizes=1,1,1,1,2 waterfallProbability=0.730,0.828 handoff=59 progress=0.768
-[cg:plan] f=0120 countdown-effect mode=clock tick=2 evolution=no evolutionTick=0 seed=1 cell=43 mode=clock size=2 handoff=59 squares=2 safeText=79:25:89:31 squareGap=1 reserveExpansion=0 farSeparated=no separation=9.220 motion=traveling,anchored staggerBeats=0.180,0.000 reservations=77:24,83:31 placements=77:24,83:31 dots=2189,2190,2278,2277,2811,2812,2900,2899
+[cg:transition] f=0062 countdown-intro tick=1 step=1 colors=[0,0,1,0,0]
+[cg:transition] f=0065 countdown-intro tick=1 step=2 colors=[0,1,2,1,0]
+[cg:transition] f=0068 countdown-intro tick=1 step=3 colors=[1,2,3,2,1]
+[cg:transition] f=0071 countdown-intro tick=1 step=4 colors=[2,3,4,3,2]
+[cg:transition] f=0074 countdown-intro tick=1 step=5 colors=[3,4,5,4,3]
+[cg:transition] f=0076 countdown-intro tick=1 step=6 colors=[4,5,5,5,4]
+[cg:transition] f=0079 countdown-intro tick=1 step=7 colors=[5,5,5,5,5]
+[cg:transition] f=0080 countdown-clock tick=1 mode=clock size=2 visible=4 sourceVisible=4/8 visibleBySquare=2,2 dotSizes=1,1,1,1 waterfallProbability=0.243,0.243 beatMultiplier=1.000,1.000 handoff=5 progress=0.255
+[cg:transition] f=0090 countdown-clock tick=1 mode=clock size=2 visible=6 sourceVisible=6/8 visibleBySquare=3,3 dotSizes=1,1,1,1,1,1 waterfallProbability=0.502,0.502 beatMultiplier=1.000,1.000 handoff=5 progress=0.529
+[cg:transition] f=0099 countdown-clock tick=1 mode=clock size=2 visible=5 sourceVisible=8/8 visibleBySquare=4,1 dotSizes=1,1,1,1,2 waterfallProbability=0.730,0.730 beatMultiplier=1.000,1.000 handoff=5 progress=0.768
+[cg:plan] f=0120 countdown-snake-disappearance tick=2 sourceTick=1 selected=instant phase=move mode=instant cells=4
+[cg:plan] f=0120 countdown-effect mode=clock tick=2 evolution=no evolutionTick=0 seed=1 cell=43 mode=clock size=2 handoff=5 squares=2 safeText=79:25:89:31 squareGap=1 reserveExpansion=0 farSeparated=no separation=9.220 motion=traveling,anchored beatOffset=no,no beatMultiplier=1.000,1.000 reservations=77:24,83:31 placements=77:24,83:31 dots=2189,2190,2278,2277,2811,2812,2900,2899
 [cg:transition] f=0120 countdown-intro tick=2 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0120 countdown-clock tick=2 mode=clock size=2 visible=1 sourceVisible=1/8 visibleBySquare=0,1 dotSizes=1 waterfallProbability=0.000,0.001 handoff=59 progress=0.001
+[cg:transition] f=0120 countdown-clock tick=2 mode=clock size=2 visible=2 sourceVisible=2/8 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.001,0.001 beatMultiplier=1.000,1.000 handoff=5 progress=0.001
 [cg:plan] f=0121 render=[countdownFramedGrid@1.00]
-[cg:transition] f=0123 countdown-intro tick=2 step=1 colors=[0,0,1,0,0]
-[cg:transition] f=0127 countdown-intro tick=2 step=2 colors=[0,1,2,1,0]
-[cg:transition] f=0130 countdown-clock tick=2 mode=clock size=2 visible=2 sourceVisible=2/8 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.000,0.065 handoff=59 progress=0.068
-[cg:transition] f=0131 countdown-intro tick=2 step=3 colors=[1,2,3,2,1]
-[cg:transition] f=0135 countdown-intro tick=2 step=4 colors=[2,3,3,3,2]
-[cg:transition] f=0139 countdown-intro tick=2 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0140 countdown-clock tick=2 mode=clock size=2 visible=3 sourceVisible=3/8 visibleBySquare=1,2 dotSizes=1,1,1 waterfallProbability=0.083,0.243 handoff=59 progress=0.255
-[cg:transition] f=0147 countdown-clock tick=2 mode=clock size=2 visible=4 sourceVisible=4/8 visibleBySquare=2,2 dotSizes=1,1,1,1 waterfallProbability=0.242,0.421 handoff=59 progress=0.443
-[cg:transition] f=0150 countdown-clock tick=2 mode=clock size=2 visible=5 sourceVisible=5/8 visibleBySquare=2,3 dotSizes=1,1,1,1,1 waterfallProbability=0.331,0.502 handoff=59 progress=0.529
-[cg:transition] f=0155 countdown-clock tick=2 mode=clock size=2 visible=6 sourceVisible=6/8 visibleBySquare=3,3 dotSizes=1,1,1,1,1,1 waterfallProbability=0.495,0.635 handoff=59 progress=0.668
-[cg:transition] f=0159 countdown-clock tick=2 mode=clock size=2 visible=7 sourceVisible=7/8 visibleBySquare=3,4 dotSizes=1,1,1,1,1,1,1 waterfallProbability=0.624,0.730 handoff=59 progress=0.768
-[cg:transition] f=0162 countdown-clock tick=2 mode=clock size=2 visible=8 sourceVisible=8/8 visibleBySquare=4,4 dotSizes=1,1,1,1,1,1,1,1 waterfallProbability=0.713,0.792 handoff=59 progress=0.833
-[cg:plan] f=0180 countdown-effect mode=clock tick=3 evolution=no evolutionTick=0 seed=1 cell=62 mode=clock size=2 handoff=59 squares=2 safeText=55:41:65:47 squareGap=1 reserveExpansion=0 farSeparated=no separation=10.630 motion=traveling,anchored staggerBeats=-0.147,0.000 reservations=51:46,59:39 placements=51:46,59:39 dots=4099,4100,4188,4187,3491,3492,3580,3579
+[cg:transition] f=0122 countdown-intro tick=2 step=1 colors=[0,0,1,0,0]
+[cg:transition] f=0125 countdown-intro tick=2 step=2 colors=[0,1,2,1,0]
+[cg:transition] f=0128 countdown-intro tick=2 step=3 colors=[1,2,3,2,1]
+[cg:transition] f=0131 countdown-intro tick=2 step=4 colors=[2,3,4,3,2]
+[cg:transition] f=0134 countdown-intro tick=2 step=5 colors=[3,4,5,4,3]
+[cg:transition] f=0136 countdown-intro tick=2 step=6 colors=[4,5,5,5,4]
+[cg:transition] f=0139 countdown-intro tick=2 step=7 colors=[5,5,5,5,5]
+[cg:transition] f=0140 countdown-clock tick=2 mode=clock size=2 visible=4 sourceVisible=4/8 visibleBySquare=2,2 dotSizes=1,1,1,1 waterfallProbability=0.243,0.243 beatMultiplier=1.000,1.000 handoff=5 progress=0.255
+[cg:transition] f=0150 countdown-clock tick=2 mode=clock size=2 visible=6 sourceVisible=6/8 visibleBySquare=3,3 dotSizes=1,1,1,1,1,1 waterfallProbability=0.502,0.502 beatMultiplier=1.000,1.000 handoff=5 progress=0.529
+[cg:transition] f=0159 countdown-clock tick=2 mode=clock size=2 visible=8 sourceVisible=8/8 visibleBySquare=4,4 dotSizes=1,1,1,1,1,1,1,1 waterfallProbability=0.730,0.730 beatMultiplier=1.000,1.000 handoff=5 progress=0.768
+[cg:plan] f=0180 countdown-snake-disappearance tick=3 sourceTick=2 selected=tail-dive phase=dive mode=tail-dive cells=7
+[cg:plan] f=0180 countdown-effect mode=clock tick=3 evolution=no evolutionTick=0 seed=1 cell=62 mode=clock size=2 handoff=5 squares=2 safeText=55:41:65:47 squareGap=1 reserveExpansion=0 farSeparated=no separation=10.630 motion=traveling,anchored beatOffset=no,no beatMultiplier=1.000,1.000 reservations=51:46,59:39 placements=51:46,59:39 dots=4099,4100,4188,4187,3491,3492,3580,3579
 [cg:transition] f=0180 countdown-intro tick=3 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0180 countdown-clock tick=3 mode=clock size=2 visible=2 sourceVisible=2/8 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.001,0.001 handoff=59 progress=0.001
+[cg:transition] f=0180 countdown-clock tick=3 mode=clock size=2 visible=2 sourceVisible=2/8 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.001,0.001 beatMultiplier=1.000,1.000 handoff=5 progress=0.001
 [cg:plan] f=0181 render=[countdownFramedGrid@1.00]
-[cg:transition] f=0183 countdown-intro tick=3 step=1 colors=[0,0,1,0,0]
-[cg:transition] f=0187 countdown-intro tick=3 step=2 colors=[0,1,2,1,0]
-[cg:transition] f=0191 countdown-intro tick=3 step=3 colors=[1,2,3,2,1]
-[cg:transition] f=0195 countdown-intro tick=3 step=4 colors=[2,3,3,3,2]
-[cg:transition] f=0197 countdown-clock tick=3 mode=clock size=2 visible=3 sourceVisible=3/8 visibleBySquare=2,1 dotSizes=1,1,1 waterfallProbability=0.245,0.178 handoff=59 progress=0.187
-[cg:transition] f=0199 countdown-intro tick=3 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0200 countdown-clock tick=3 mode=clock size=2 visible=4 sourceVisible=4/8 visibleBySquare=2,2 dotSizes=1,1,1,1 waterfallProbability=0.331,0.243 handoff=59 progress=0.255
-[cg:transition] f=0205 countdown-clock tick=3 mode=clock size=2 visible=5 sourceVisible=5/8 visibleBySquare=3,2 dotSizes=1,1,1,1,1 waterfallProbability=0.488,0.367 handoff=59 progress=0.386
-[cg:transition] f=0210 countdown-clock tick=3 mode=clock size=2 visible=6 sourceVisible=6/8 visibleBySquare=3,3 dotSizes=1,1,1,1,1,1 waterfallProbability=0.643,0.502 handoff=59 progress=0.529
-[cg:transition] f=0213 countdown-clock tick=3 mode=clock size=2 visible=7 sourceVisible=7/8 visibleBySquare=4,3 dotSizes=1,1,1,1,1,1,1 waterfallProbability=0.727,0.583 handoff=59 progress=0.614
-[cg:transition] f=0219 countdown-clock tick=3 mode=clock size=2 visible=8 sourceVisible=8/8 visibleBySquare=4,4 dotSizes=1,1,1,1,1,1,1,1 waterfallProbability=0.857,0.730 handoff=59 progress=0.768
-[cg:plan] f=0240 countdown-effect mode=clock tick=4 evolution=no evolutionTick=0 seed=1 cell=19 mode=clock size=2 handoff=59 squares=2 safeText=63:9:73:15 squareGap=1 reserveExpansion=0 farSeparated=no separation=8.944 motion=anchored,traveling staggerBeats=0.000,-0.122 reservations=67:15,59:19 placements=67:15,59:19 dots=1387,1388,1476,1475,1731,1732,1820,1819
+[cg:transition] f=0182 countdown-intro tick=3 step=1 colors=[0,0,1,0,0]
+[cg:transition] f=0185 countdown-intro tick=3 step=2 colors=[0,1,2,1,0]
+[cg:transition] f=0188 countdown-intro tick=3 step=3 colors=[1,2,3,2,1]
+[cg:transition] f=0191 countdown-intro tick=3 step=4 colors=[2,3,4,3,2]
+[cg:transition] f=0194 countdown-intro tick=3 step=5 colors=[3,4,5,4,3]
+[cg:transition] f=0196 countdown-intro tick=3 step=6 colors=[4,5,5,5,4]
+[cg:transition] f=0199 countdown-intro tick=3 step=7 colors=[5,5,5,5,5]
+[cg:transition] f=0200 countdown-clock tick=3 mode=clock size=2 visible=4 sourceVisible=4/8 visibleBySquare=2,2 dotSizes=1,1,1,1 waterfallProbability=0.243,0.243 beatMultiplier=1.000,1.000 handoff=5 progress=0.255
+[cg:transition] f=0210 countdown-clock tick=3 mode=clock size=2 visible=6 sourceVisible=6/8 visibleBySquare=3,3 dotSizes=1,1,1,1,1,1 waterfallProbability=0.502,0.502 beatMultiplier=1.000,1.000 handoff=5 progress=0.529
+[cg:transition] f=0219 countdown-clock tick=3 mode=clock size=2 visible=8 sourceVisible=8/8 visibleBySquare=4,4 dotSizes=1,1,1,1,1,1,1,1 waterfallProbability=0.730,0.730 beatMultiplier=1.000,1.000 handoff=5 progress=0.768
+[cg:plan] f=0240 countdown-snake-disappearance tick=4 sourceTick=2 selected=tail-dive phase=emerge mode=tail-dive cells=7
+[cg:plan] f=0240 countdown-effect mode=clock tick=4 evolution=no evolutionTick=0 seed=1 cell=19 mode=clock size=2 handoff=5 squares=2 safeText=63:9:73:15 squareGap=1 reserveExpansion=0 farSeparated=no separation=8.944 motion=anchored,traveling beatOffset=no,no beatMultiplier=1.000,1.000 reservations=67:15,59:19 placements=67:15,59:19 dots=1387,1388,1476,1475,1731,1732,1820,1819
 [cg:transition] f=0240 countdown-intro tick=4 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0240 countdown-clock tick=4 mode=clock size=2 visible=2 sourceVisible=2/8 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.001,0.001 handoff=59 progress=0.001
+[cg:transition] f=0240 countdown-clock tick=4 mode=clock size=2 visible=2 sourceVisible=2/8 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.001,0.001 beatMultiplier=1.000,1.000 handoff=5 progress=0.001
 [cg:plan] f=0241 render=[countdownFramedGrid@1.00]
-[cg:transition] f=0243 countdown-intro tick=4 step=1 colors=[0,0,1,0,0]
-[cg:transition] f=0247 countdown-intro tick=4 step=2 colors=[0,1,2,1,0]
-[cg:transition] f=0251 countdown-intro tick=4 step=3 colors=[1,2,3,2,1]
-[cg:transition] f=0255 countdown-intro tick=4 step=4 colors=[2,3,3,3,2]
-[cg:transition] f=0258 countdown-clock tick=4 mode=clock size=2 visible=3 sourceVisible=3/8 visibleBySquare=1,2 dotSizes=1,1,1 waterfallProbability=0.199,0.258 handoff=59 progress=0.209
-[cg:transition] f=0259 countdown-intro tick=4 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0260 countdown-clock tick=4 mode=clock size=2 visible=4 sourceVisible=4/8 visibleBySquare=2,2 dotSizes=1,1,1,1 waterfallProbability=0.243,0.313 handoff=59 progress=0.255
-[cg:transition] f=0266 countdown-clock tick=4 mode=clock size=2 visible=5 sourceVisible=5/8 visibleBySquare=2,3 dotSizes=1,1,1,1,1 waterfallProbability=0.394,0.496 handoff=59 progress=0.414
-[cg:transition] f=0270 countdown-clock tick=4 mode=clock size=2 visible=6 sourceVisible=6/8 visibleBySquare=3,3 dotSizes=1,1,1,1,1,1 waterfallProbability=0.502,0.617 handoff=59 progress=0.529
-[cg:transition] f=0274 countdown-clock tick=4 mode=clock size=2 visible=7 sourceVisible=7/8 visibleBySquare=3,4 dotSizes=1,1,1,1,1,1,1 waterfallProbability=0.609,0.727 handoff=59 progress=0.641
-[cg:transition] f=0279 countdown-clock tick=4 mode=clock size=2 visible=8 sourceVisible=8/8 visibleBySquare=4,4 dotSizes=1,1,1,1,1,1,1,1 waterfallProbability=0.730,0.837 handoff=59 progress=0.768
-[cg:plan] f=0300 countdown-effect mode=clock tick=5 evolution=no evolutionTick=0 seed=1 cell=26 mode=clock size=2 handoff=59 squares=2 safeText=31:17:41:23 squareGap=1 reserveExpansion=0 farSeparated=yes separation=59.682 motion=anchored,traveling staggerBeats=0.000,0.166 reservations=35:23,86:54 placements=35:23,86:54 dots=2059,2060,2148,2147,4838,4839,4927,4926
+[cg:transition] f=0242 countdown-intro tick=4 step=1 colors=[0,0,1,0,0]
+[cg:transition] f=0245 countdown-intro tick=4 step=2 colors=[0,1,2,1,0]
+[cg:transition] f=0248 countdown-intro tick=4 step=3 colors=[1,2,3,2,1]
+[cg:transition] f=0251 countdown-intro tick=4 step=4 colors=[2,3,4,3,2]
+[cg:transition] f=0254 countdown-intro tick=4 step=5 colors=[3,4,5,4,3]
+[cg:transition] f=0256 countdown-intro tick=4 step=6 colors=[4,5,5,5,4]
+[cg:transition] f=0259 countdown-intro tick=4 step=7 colors=[5,5,5,5,5]
+[cg:transition] f=0260 countdown-clock tick=4 mode=clock size=2 visible=4 sourceVisible=4/8 visibleBySquare=2,2 dotSizes=1,1,1,1 waterfallProbability=0.243,0.243 beatMultiplier=1.000,1.000 handoff=5 progress=0.255
+[cg:transition] f=0270 countdown-clock tick=4 mode=clock size=2 visible=6 sourceVisible=6/8 visibleBySquare=3,3 dotSizes=1,1,1,1,1,1 waterfallProbability=0.502,0.502 beatMultiplier=1.000,1.000 handoff=5 progress=0.529
+[cg:transition] f=0279 countdown-clock tick=4 mode=clock size=2 visible=8 sourceVisible=8/8 visibleBySquare=4,4 dotSizes=1,1,1,1,1,1,1,1 waterfallProbability=0.730,0.730 beatMultiplier=1.000,1.000 handoff=5 progress=0.768
+[cg:plan] f=0300 countdown-snake-disappearance tick=5 sourceTick=4 selected=tail-dive phase=move mode=instant cells=7
+[cg:plan] f=0300 countdown-effect mode=clock tick=5 evolution=no evolutionTick=0 seed=1 cell=26 mode=clock size=2 handoff=5 squares=2 safeText=31:17:41:23 squareGap=1 reserveExpansion=0 farSeparated=yes separation=59.682 motion=anchored,traveling beatOffset=no,no beatMultiplier=1.000,1.000 reservations=35:23,86:54 placements=35:23,86:54 dots=2059,2060,2148,2147,4838,4839,4927,4926
 [cg:transition] f=0300 countdown-intro tick=5 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0300 countdown-clock tick=5 mode=clock size=2 visible=1 sourceVisible=1/8 visibleBySquare=1,0 dotSizes=1 waterfallProbability=0.001,0.000 handoff=59 progress=0.001
+[cg:transition] f=0300 countdown-clock tick=5 mode=clock size=2 visible=2 sourceVisible=2/8 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.001,0.001 beatMultiplier=1.000,1.000 handoff=5 progress=0.001
 [cg:plan] f=0301 render=[countdownFramedGrid@1.00]
-[cg:transition] f=0303 countdown-intro tick=5 step=1 colors=[0,0,1,0,0]
-[cg:transition] f=0307 countdown-intro tick=5 step=2 colors=[0,1,2,1,0]
-[cg:transition] f=0309 countdown-clock tick=5 mode=clock size=2 visible=2 sourceVisible=2/8 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.053,0.000 handoff=59 progress=0.056
-[cg:transition] f=0311 countdown-intro tick=5 step=3 colors=[1,2,3,2,1]
-[cg:transition] f=0315 countdown-intro tick=5 step=4 colors=[2,3,3,3,2]
-[cg:transition] f=0319 countdown-intro tick=5 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0320 countdown-clock tick=5 mode=clock size=2 visible=3 sourceVisible=3/8 visibleBySquare=2,1 dotSizes=1,1,1 waterfallProbability=0.243,0.095 handoff=59 progress=0.255
-[cg:transition] f=0327 countdown-clock tick=5 mode=clock size=2 visible=4 sourceVisible=4/8 visibleBySquare=2,2 dotSizes=1,1,1,1 waterfallProbability=0.421,0.258 handoff=59 progress=0.443
-[cg:transition] f=0330 countdown-clock tick=5 mode=clock size=2 visible=5 sourceVisible=5/8 visibleBySquare=3,2 dotSizes=1,1,1,1,1 waterfallProbability=0.502,0.347 handoff=59 progress=0.529
-[cg:transition] f=0334 countdown-clock tick=5 mode=clock size=2 visible=6 sourceVisible=6/8 visibleBySquare=3,3 dotSizes=1,1,1,1,1,1 waterfallProbability=0.609,0.476 handoff=59 progress=0.641
-[cg:transition] f=0339 countdown-clock tick=5 mode=clock size=2 visible=7 sourceVisible=7/8 visibleBySquare=4,3 dotSizes=1,1,1,1,1,1,1 waterfallProbability=0.730,0.635 handoff=59 progress=0.768
-[cg:transition] f=0342 countdown-clock tick=5 mode=clock size=2 visible=5 sourceVisible=8/8 visibleBySquare=4,1 dotSizes=1,1,1,1,2 waterfallProbability=0.792,0.721 handoff=59 progress=0.833
-[cg:plan] f=0360 countdown-effect mode=clock tick=6 evolution=no evolutionTick=0 seed=1 cell=31 mode=clock size=2 handoff=59 squares=2 safeText=71:17:81:23 squareGap=1 reserveExpansion=0 farSeparated=no separation=6.083 motion=traveling,anchored staggerBeats=0.141,0.000 reservations=81:24,75:23 placements=81:24,75:23 dots=2193,2194,2282,2281,2099,2100,2188,2187
+[cg:transition] f=0302 countdown-intro tick=5 step=1 colors=[0,0,1,0,0]
+[cg:transition] f=0305 countdown-intro tick=5 step=2 colors=[0,1,2,1,0]
+[cg:transition] f=0308 countdown-intro tick=5 step=3 colors=[1,2,3,2,1]
+[cg:transition] f=0311 countdown-intro tick=5 step=4 colors=[2,3,4,3,2]
+[cg:transition] f=0314 countdown-intro tick=5 step=5 colors=[3,4,5,4,3]
+[cg:transition] f=0316 countdown-intro tick=5 step=6 colors=[4,5,5,5,4]
+[cg:transition] f=0319 countdown-intro tick=5 step=7 colors=[5,5,5,5,5]
+[cg:transition] f=0320 countdown-clock tick=5 mode=clock size=2 visible=4 sourceVisible=4/8 visibleBySquare=2,2 dotSizes=1,1,1,1 waterfallProbability=0.243,0.243 beatMultiplier=1.000,1.000 handoff=5 progress=0.255
+[cg:transition] f=0330 countdown-clock tick=5 mode=clock size=2 visible=6 sourceVisible=6/8 visibleBySquare=3,3 dotSizes=1,1,1,1,1,1 waterfallProbability=0.502,0.502 beatMultiplier=1.000,1.000 handoff=5 progress=0.529
+[cg:transition] f=0339 countdown-clock tick=5 mode=clock size=2 visible=5 sourceVisible=8/8 visibleBySquare=4,1 dotSizes=1,1,1,1,2 waterfallProbability=0.730,0.730 beatMultiplier=1.000,1.000 handoff=5 progress=0.768
+[cg:plan] f=0360 countdown-snake-disappearance tick=6 sourceTick=5 selected=tail-dive phase=dive mode=tail-dive cells=4
+[cg:plan] f=0360 countdown-effect mode=clock tick=6 evolution=no evolutionTick=0 seed=1 cell=31 mode=clock size=2 handoff=5 squares=2 safeText=71:17:81:23 squareGap=1 reserveExpansion=0 farSeparated=no separation=6.083 motion=traveling,anchored beatOffset=no,no beatMultiplier=1.000,1.000 reservations=81:24,75:23 placements=81:24,75:23 dots=2193,2194,2282,2281,2099,2100,2188,2187
 [cg:transition] f=0360 countdown-intro tick=6 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0360 countdown-clock tick=6 mode=clock size=2 visible=1 sourceVisible=1/8 visibleBySquare=0,1 dotSizes=1 waterfallProbability=0.000,0.001 handoff=59 progress=0.001
+[cg:transition] f=0360 countdown-clock tick=6 mode=clock size=2 visible=2 sourceVisible=2/8 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.001,0.001 beatMultiplier=1.000,1.000 handoff=5 progress=0.001
 [cg:plan] f=0361 render=[countdownFramedGrid@1.00]
-[cg:transition] f=0363 countdown-intro tick=6 step=1 colors=[0,0,1,0,0]
-[cg:transition] f=0367 countdown-intro tick=6 step=2 colors=[0,1,2,1,0]
-[cg:transition] f=0368 countdown-clock tick=6 mode=clock size=2 visible=2 sourceVisible=2/8 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.000,0.043 handoff=59 progress=0.045
-[cg:transition] f=0371 countdown-intro tick=6 step=3 colors=[1,2,3,2,1]
-[cg:transition] f=0375 countdown-intro tick=6 step=4 colors=[2,3,3,3,2]
-[cg:transition] f=0379 countdown-intro tick=6 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0380 countdown-clock tick=6 mode=clock size=2 visible=3 sourceVisible=3/8 visibleBySquare=1,2 dotSizes=1,1,1 waterfallProbability=0.116,0.243 handoff=59 progress=0.255
-[cg:transition] f=0386 countdown-clock tick=6 mode=clock size=2 visible=4 sourceVisible=4/8 visibleBySquare=2,2 dotSizes=1,1,1,1 waterfallProbability=0.257,0.394 handoff=59 progress=0.414
-[cg:transition] f=0390 countdown-clock tick=6 mode=clock size=2 visible=5 sourceVisible=5/8 visibleBySquare=2,3 dotSizes=1,1,1,1,1 waterfallProbability=0.374,0.502 handoff=59 progress=0.529
-[cg:transition] f=0394 countdown-clock tick=6 mode=clock size=2 visible=6 sourceVisible=6/8 visibleBySquare=3,3 dotSizes=1,1,1,1,1,1 waterfallProbability=0.500,0.609 handoff=59 progress=0.641
-[cg:transition] f=0399 countdown-clock tick=6 mode=clock size=2 visible=7 sourceVisible=7/8 visibleBySquare=3,4 dotSizes=1,1,1,1,1,1,1 waterfallProbability=0.653,0.730 handoff=59 progress=0.768
-[cg:transition] f=0402 countdown-clock tick=6 mode=clock size=2 visible=8 sourceVisible=8/8 visibleBySquare=4,4 dotSizes=1,1,1,1,1,1,1,1 waterfallProbability=0.735,0.792 handoff=59 progress=0.833
-[cg:plan] f=0420 countdown-effect mode=clock tick=7 evolution=no evolutionTick=0 seed=1 cell=57 mode=clock size=2 handoff=59 squares=2 safeText=15:41:25:47 squareGap=1 reserveExpansion=0 farSeparated=yes separation=81.841 motion=anchored,traveling staggerBeats=0.000,-0.149 reservations=19:47,86:0 placements=19:47,86:0 dots=4155,4156,4244,4243,86,87,175,174
+[cg:transition] f=0362 countdown-intro tick=6 step=1 colors=[0,0,1,0,0]
+[cg:transition] f=0365 countdown-intro tick=6 step=2 colors=[0,1,2,1,0]
+[cg:transition] f=0368 countdown-intro tick=6 step=3 colors=[1,2,3,2,1]
+[cg:transition] f=0371 countdown-intro tick=6 step=4 colors=[2,3,4,3,2]
+[cg:transition] f=0374 countdown-intro tick=6 step=5 colors=[3,4,5,4,3]
+[cg:transition] f=0376 countdown-intro tick=6 step=6 colors=[4,5,5,5,4]
+[cg:transition] f=0379 countdown-intro tick=6 step=7 colors=[5,5,5,5,5]
+[cg:transition] f=0380 countdown-clock tick=6 mode=clock size=2 visible=4 sourceVisible=4/8 visibleBySquare=2,2 dotSizes=1,1,1,1 waterfallProbability=0.243,0.243 beatMultiplier=1.000,1.000 handoff=5 progress=0.255
+[cg:transition] f=0390 countdown-clock tick=6 mode=clock size=2 visible=6 sourceVisible=6/8 visibleBySquare=3,3 dotSizes=1,1,1,1,1,1 waterfallProbability=0.502,0.502 beatMultiplier=1.000,1.000 handoff=5 progress=0.529
+[cg:transition] f=0399 countdown-clock tick=6 mode=clock size=2 visible=8 sourceVisible=8/8 visibleBySquare=4,4 dotSizes=1,1,1,1,1,1,1,1 waterfallProbability=0.730,0.730 beatMultiplier=1.000,1.000 handoff=5 progress=0.768
+[cg:plan] f=0420 countdown-snake-disappearance tick=7 sourceTick=5 selected=instant phase=emerge mode=tail-dive cells=4
+[cg:plan] f=0420 countdown-effect mode=clock tick=7 evolution=no evolutionTick=0 seed=1 cell=57 mode=clock size=2 handoff=5 squares=2 safeText=15:41:25:47 squareGap=1 reserveExpansion=0 farSeparated=yes separation=81.841 motion=anchored,traveling beatOffset=no,yes beatMultiplier=1.000,1.500 reservations=19:47,86:0 placements=19:47,86:0 dots=4155,4156,4244,4243,86,87,175,174
 [cg:transition] f=0420 countdown-intro tick=7 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0420 countdown-clock tick=7 mode=clock size=2 visible=2 sourceVisible=2/8 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.001,0.001 handoff=59 progress=0.001
+[cg:transition] f=0420 countdown-clock tick=7 mode=clock size=2 visible=2 sourceVisible=2/8 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.001,0.000 beatMultiplier=1.000,1.500 handoff=5 progress=0.001
 [cg:plan] f=0421 render=[countdownFramedGrid@1.00]
-[cg:transition] f=0423 countdown-intro tick=7 step=1 colors=[0,0,1,0,0]
-[cg:transition] f=0427 countdown-intro tick=7 step=2 colors=[0,1,2,1,0]
-[cg:transition] f=0431 countdown-intro tick=7 step=3 colors=[1,2,3,2,1]
-[cg:transition] f=0435 countdown-intro tick=7 step=4 colors=[2,3,3,3,2]
-[cg:transition] f=0437 countdown-clock tick=7 mode=clock size=2 visible=3 sourceVisible=3/8 visibleBySquare=1,2 dotSizes=1,1,1 waterfallProbability=0.178,0.246 handoff=59 progress=0.187
-[cg:transition] f=0439 countdown-intro tick=7 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0440 countdown-clock tick=7 mode=clock size=2 visible=4 sourceVisible=4/8 visibleBySquare=2,2 dotSizes=1,1,1,1 waterfallProbability=0.243,0.332 handoff=59 progress=0.255
-[cg:transition] f=0445 countdown-clock tick=7 mode=clock size=2 visible=5 sourceVisible=5/8 visibleBySquare=2,3 dotSizes=1,1,1,1,1 waterfallProbability=0.367,0.490 handoff=59 progress=0.386
-[cg:transition] f=0450 countdown-clock tick=7 mode=clock size=2 visible=6 sourceVisible=6/8 visibleBySquare=3,3 dotSizes=1,1,1,1,1,1 waterfallProbability=0.502,0.645 handoff=59 progress=0.529
-[cg:transition] f=0453 countdown-clock tick=7 mode=clock size=2 visible=4 sourceVisible=7/8 visibleBySquare=3,1 dotSizes=1,1,1,2 waterfallProbability=0.583,0.728 handoff=59 progress=0.614
-[cg:transition] f=0459 countdown-clock tick=7 mode=clock size=2 visible=5 sourceVisible=8/8 visibleBySquare=4,1 dotSizes=1,1,1,1,2 waterfallProbability=0.730,0.858 handoff=59 progress=0.768
-[cg:plan] f=0480 countdown-effect mode=clock tick=8 evolution=no evolutionTick=0 seed=1 cell=54 mode=clock size=2 handoff=59 squares=2 safeText=79:33:89:39 squareGap=1 reserveExpansion=0 farSeparated=yes separation=91.706 motion=anchored,traveling staggerBeats=0.000,-0.165 reservations=83:39,0:0 placements=83:39,0:0 dots=3515,3516,3604,3603,0,1,89,88
+[cg:transition] f=0422 countdown-intro tick=7 step=1 colors=[0,0,1,0,0]
+[cg:transition] f=0425 countdown-intro tick=7 step=2 colors=[0,1,2,1,0]
+[cg:transition] f=0428 countdown-intro tick=7 step=3 colors=[1,2,3,2,1]
+[cg:transition] f=0431 countdown-intro tick=7 step=4 colors=[2,3,4,3,2]
+[cg:transition] f=0434 countdown-intro tick=7 step=5 colors=[3,4,5,4,3]
+[cg:transition] f=0436 countdown-intro tick=7 step=6 colors=[4,5,5,5,4]
+[cg:transition] f=0439 countdown-intro tick=7 step=7 colors=[5,5,5,5,5]
+[cg:transition] f=0440 countdown-clock tick=7 mode=clock size=2 visible=3 sourceVisible=3/8 visibleBySquare=2,1 dotSizes=1,1,1 waterfallProbability=0.243,0.083 beatMultiplier=1.000,1.500 handoff=5 progress=0.255
+[cg:transition] f=0449 countdown-clock tick=7 mode=clock size=2 visible=4 sourceVisible=4/8 visibleBySquare=2,2 dotSizes=1,1,1,1 waterfallProbability=0.475,0.248 beatMultiplier=1.000,1.500 handoff=5 progress=0.500
+[cg:transition] f=0450 countdown-clock tick=7 mode=clock size=2 visible=5 sourceVisible=5/8 visibleBySquare=3,2 dotSizes=1,1,1,1,1 waterfallProbability=0.502,0.273 beatMultiplier=1.000,1.500 handoff=5 progress=0.529
+[cg:transition] f=0457 countdown-clock tick=7 mode=clock size=2 visible=6 sourceVisible=6/8 visibleBySquare=3,3 dotSizes=1,1,1,1,1,1 waterfallProbability=0.684,0.482 beatMultiplier=1.000,1.500 handoff=5 progress=0.720
+[cg:transition] f=0459 countdown-clock tick=7 mode=clock size=2 visible=7 sourceVisible=7/8 visibleBySquare=4,3 dotSizes=1,1,1,1,1,1,1 waterfallProbability=0.730,0.547 beatMultiplier=1.000,1.500 handoff=5 progress=0.768
+[cg:transition] f=0465 countdown-clock tick=7 mode=clock size=2 visible=5 sourceVisible=8/8 visibleBySquare=4,1 dotSizes=1,1,1,1,2 waterfallProbability=0.843,0.736 beatMultiplier=1.000,1.500 handoff=5 progress=0.888
+[cg:plan] f=0480 countdown-snake-disappearance tick=8 sourceTick=7 selected=tail-dive phase=move mode=instant cells=7
+[cg:plan] f=0480 countdown-effect mode=clock tick=8 evolution=no evolutionTick=0 seed=1 cell=54 mode=clock size=2 handoff=5 squares=2 safeText=79:33:89:39 squareGap=1 reserveExpansion=0 farSeparated=yes separation=91.706 motion=anchored,traveling beatOffset=no,yes beatMultiplier=1.000,0.500 reservations=83:39,0:0 placements=83:39,0:0 dots=3515,3516,3604,3603,0,1,89,88
 [cg:transition] f=0480 countdown-intro tick=8 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0480 countdown-clock tick=8 mode=clock size=2 visible=2 sourceVisible=2/8 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.001,0.001 handoff=59 progress=0.001
+[cg:transition] f=0480 countdown-clock tick=8 mode=clock size=2 visible=2 sourceVisible=2/8 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.001,0.032 beatMultiplier=1.000,0.500 handoff=5 progress=0.001
 [cg:plan] f=0481 render=[countdownFramedGrid@1.00]
-[cg:transition] f=0483 countdown-intro tick=8 step=1 colors=[0,0,1,0,0]
-[cg:transition] f=0487 countdown-intro tick=8 step=2 colors=[0,1,2,1,0]
-[cg:transition] f=0491 countdown-intro tick=8 step=3 colors=[1,2,3,2,1]
-[cg:transition] f=0495 countdown-intro tick=8 step=4 colors=[2,3,3,3,2]
-[cg:transition] f=0497 countdown-clock tick=8 mode=clock size=2 visible=3 sourceVisible=3/8 visibleBySquare=1,2 dotSizes=1,1,1 waterfallProbability=0.178,0.256 handoff=59 progress=0.187
-[cg:transition] f=0499 countdown-intro tick=8 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0500 countdown-clock tick=8 mode=clock size=2 visible=4 sourceVisible=4/8 visibleBySquare=2,2 dotSizes=1,1,1,1 waterfallProbability=0.243,0.345 handoff=59 progress=0.255
-[cg:transition] f=0505 countdown-clock tick=8 mode=clock size=2 visible=5 sourceVisible=5/8 visibleBySquare=2,3 dotSizes=1,1,1,1,1 waterfallProbability=0.367,0.506 handoff=59 progress=0.386
-[cg:transition] f=0509 countdown-clock tick=8 mode=clock size=2 visible=6 sourceVisible=6/8 visibleBySquare=3,3 dotSizes=1,1,1,1,1,1 waterfallProbability=0.475,0.633 handoff=59 progress=0.500
-[cg:transition] f=0512 countdown-clock tick=8 mode=clock size=2 visible=7 sourceVisible=7/8 visibleBySquare=3,4 dotSizes=1,1,1,1,1,1,1 waterfallProbability=0.556,0.720 handoff=59 progress=0.586
-[cg:transition] f=0519 countdown-clock tick=8 mode=clock size=2 visible=5 sourceVisible=8/8 visibleBySquare=4,1 dotSizes=1,1,1,1,2 waterfallProbability=0.730,0.871 handoff=59 progress=0.768
-[cg:plan] f=0539 countdown-effect mode=clock tick=9 evolution=no evolutionTick=0 seed=1 cell=67 mode=clock size=2 handoff=59 squares=2 safeText=7:49:17:55 squareGap=1 reserveExpansion=0 farSeparated=no separation=6.708 motion=traveling,anchored staggerBeats=0.121,0.000 reservations=17:44,11:47 placements=17:44,11:47 dots=3889,3890,3978,3977,4147,4148,4236,4235
+[cg:transition] f=0482 countdown-intro tick=8 step=1 colors=[0,0,1,0,0]
+[cg:transition] f=0485 countdown-intro tick=8 step=2 colors=[0,1,2,1,0]
+[cg:transition] f=0487 countdown-clock tick=8 mode=clock size=2 visible=3 sourceVisible=3/8 visibleBySquare=1,2 dotSizes=1,1,1 waterfallProbability=0.034,0.264 beatMultiplier=1.000,0.500 handoff=5 progress=0.036
+[cg:transition] f=0488 countdown-intro tick=8 step=3 colors=[1,2,3,2,1]
+[cg:transition] f=0491 countdown-intro tick=8 step=4 colors=[2,3,4,3,2]
+[cg:transition] f=0494 countdown-intro tick=8 step=5 colors=[3,4,5,4,3]
+[cg:transition] f=0495 countdown-clock tick=8 mode=clock size=2 visible=4 sourceVisible=4/8 visibleBySquare=1,3 dotSizes=1,1,1,1 waterfallProbability=0.140,0.502 beatMultiplier=1.000,0.500 handoff=5 progress=0.147
+[cg:transition] f=0496 countdown-intro tick=8 step=6 colors=[4,5,5,5,4]
+[cg:transition] f=0499 countdown-intro tick=8 step=7 colors=[5,5,5,5,5]
+[cg:transition] f=0500 countdown-clock tick=8 mode=clock size=2 visible=5 sourceVisible=5/8 visibleBySquare=2,3 dotSizes=1,1,1,1,1 waterfallProbability=0.243,0.622 beatMultiplier=1.000,0.500 handoff=5 progress=0.255
+[cg:transition] f=0505 countdown-clock tick=8 mode=clock size=2 visible=6 sourceVisible=6/8 visibleBySquare=2,4 dotSizes=1,1,1,1,1,1 waterfallProbability=0.367,0.719 beatMultiplier=1.000,0.500 handoff=5 progress=0.386
+[cg:transition] f=0509 countdown-clock tick=8 mode=clock size=2 visible=7 sourceVisible=7/8 visibleBySquare=3,4 dotSizes=1,1,1,1,1,1,1 waterfallProbability=0.475,0.780 beatMultiplier=1.000,0.500 handoff=5 progress=0.500
+[cg:transition] f=0517 countdown-clock tick=8 mode=clock size=2 visible=4 sourceVisible=7/8 visibleBySquare=3,1 dotSizes=1,1,1,2 waterfallProbability=0.684,0.869 beatMultiplier=1.000,0.500 handoff=5 progress=0.720
+[cg:transition] f=0519 countdown-clock tick=8 mode=clock size=2 visible=5 sourceVisible=8/8 visibleBySquare=4,1 dotSizes=1,1,1,1,2 waterfallProbability=0.730,0.885 beatMultiplier=1.000,0.500 handoff=5 progress=0.768
+[cg:plan] f=0539 countdown-snake-disappearance tick=9 sourceTick=8 selected=instant phase=move mode=instant cells=7
+[cg:plan] f=0539 countdown-effect mode=clock tick=9 evolution=no evolutionTick=0 seed=1 cell=67 mode=clock size=2 handoff=5 squares=2 safeText=7:49:17:55 squareGap=1 reserveExpansion=0 farSeparated=no separation=6.708 motion=traveling,anchored beatOffset=no,no beatMultiplier=1.000,1.000 reservations=17:44,11:47 placements=17:44,11:47 dots=3889,3890,3978,3977,4147,4148,4236,4235
 [cg:transition] f=0539 countdown-intro tick=9 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0539 countdown-clock tick=9 mode=clock size=2 visible=1 sourceVisible=1/8 visibleBySquare=0,1 dotSizes=1 waterfallProbability=0.000,0.000 handoff=59 progress=0.000
+[cg:transition] f=0539 countdown-clock tick=9 mode=clock size=2 visible=2 sourceVisible=2/8 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.000,0.000 beatMultiplier=1.000,1.000 handoff=5 progress=0.000
 [cg:plan] f=0540 render=[countdownFramedGrid@1.00]
-[cg:transition] f=0543 countdown-intro tick=9 step=1 colors=[0,0,1,0,0]
-[cg:transition] f=0547 countdown-intro tick=9 step=2 colors=[0,1,2,1,0]
-[cg:transition] f=0547 countdown-clock tick=9 mode=clock size=2 visible=2 sourceVisible=2/8 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.000,0.034 handoff=59 progress=0.036
-[cg:transition] f=0551 countdown-intro tick=9 step=3 colors=[1,2,3,2,1]
-[cg:transition] f=0555 countdown-intro tick=9 step=4 colors=[2,3,3,3,2]
-[cg:transition] f=0559 countdown-intro tick=9 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0560 countdown-clock tick=9 mode=clock size=2 visible=3 sourceVisible=3/8 visibleBySquare=1,2 dotSizes=1,1,1 waterfallProbability=0.133,0.243 handoff=59 progress=0.255
-[cg:transition] f=0565 countdown-clock tick=9 mode=clock size=2 visible=4 sourceVisible=4/8 visibleBySquare=2,2 dotSizes=1,1,1,1 waterfallProbability=0.250,0.367 handoff=59 progress=0.386
-[cg:transition] f=0569 countdown-clock tick=9 mode=clock size=2 visible=5 sourceVisible=5/8 visibleBySquare=2,3 dotSizes=1,1,1,1,1 waterfallProbability=0.363,0.475 handoff=59 progress=0.500
-[cg:transition] f=0573 countdown-clock tick=9 mode=clock size=2 visible=6 sourceVisible=6/8 visibleBySquare=3,3 dotSizes=1,1,1,1,1,1 waterfallProbability=0.486,0.583 handoff=59 progress=0.614
-[cg:transition] f=0579 countdown-clock tick=9 mode=clock size=2 visible=7 sourceVisible=7/8 visibleBySquare=3,4 dotSizes=1,1,1,1,1,1,1 waterfallProbability=0.666,0.730 handoff=59 progress=0.768
-[cg:transition] f=0581 countdown-clock tick=9 mode=clock size=2 visible=8 sourceVisible=8/8 visibleBySquare=4,4 dotSizes=1,1,1,1,1,1,1,1 waterfallProbability=0.719,0.772 handoff=59 progress=0.813
-[cg:plan] f=0599 countdown-effect mode=clock tick=10 evolution=no evolutionTick=0 seed=1 cell=40 mode=clock size=2 handoff=59 squares=2 safeText=55:25:65:31 squareGap=1 reserveExpansion=0 farSeparated=no separation=3.606 motion=traveling,anchored staggerBeats=-0.132,0.000 reservations=62:33,59:31 placements=62:33,59:31 dots=2966,2967,3055,3054,2787,2788,2876,2875
+[cg:transition] f=0542 countdown-intro tick=9 step=1 colors=[0,0,1,0,0]
+[cg:transition] f=0545 countdown-intro tick=9 step=2 colors=[0,1,2,1,0]
+[cg:transition] f=0548 countdown-intro tick=9 step=3 colors=[1,2,3,2,1]
+[cg:transition] f=0551 countdown-intro tick=9 step=4 colors=[2,3,4,3,2]
+[cg:transition] f=0554 countdown-intro tick=9 step=5 colors=[3,4,5,4,3]
+[cg:transition] f=0556 countdown-intro tick=9 step=6 colors=[4,5,5,5,4]
+[cg:transition] f=0559 countdown-intro tick=9 step=7 colors=[5,5,5,5,5]
+[cg:transition] f=0560 countdown-clock tick=9 mode=clock size=2 visible=4 sourceVisible=4/8 visibleBySquare=2,2 dotSizes=1,1,1,1 waterfallProbability=0.243,0.243 beatMultiplier=1.000,1.000 handoff=5 progress=0.255
+[cg:transition] f=0569 countdown-clock tick=9 mode=clock size=2 visible=6 sourceVisible=6/8 visibleBySquare=3,3 dotSizes=1,1,1,1,1,1 waterfallProbability=0.475,0.475 beatMultiplier=1.000,1.000 handoff=5 progress=0.500
+[cg:transition] f=0579 countdown-clock tick=9 mode=clock size=2 visible=8 sourceVisible=8/8 visibleBySquare=4,4 dotSizes=1,1,1,1,1,1,1,1 waterfallProbability=0.730,0.730 beatMultiplier=1.000,1.000 handoff=5 progress=0.768
+[cg:timeline] f=0599 composition-timeline composition=countdown-framed time=10.000 active=connection:clock-snake states=track:clock-main:off,connection:clock-snake:on,track:snake-main:off
+[cg:plan] f=0599 countdown-snake-disappearance tick=10 sourceTick=9 selected=tail-dive phase=dive mode=tail-dive cells=7
+[cg:plan] f=0599 countdown-effect mode=clock tick=10 evolution=yes evolutionTick=0 seed=1 cell=40 mode=expanding size=3 handoff=5 squares=2 safeText=55:25:65:31 squareGap=1 reserveExpansion=0 farSeparated=no separation=4.123 motion=traveling,anchored beatOffset=no,no beatMultiplier=1.000,1.000 reservations=57:35,58:31 placements=57:35,58:31 dots=3137,3138,3139,3227,3315,3314,3313,3225,3226,2786,2787,2788,2876,2964,2963,2962,2874,2875
+[cg:timeline] f=0599 countdown-track id=clock-main state=exit
+[cg:transition] f=0599 countdown-connector id=clock-snake use=clock-to-snake state=enter
+[cg:plan] f=0599 countdown-synth plan=rebuilt tracks=none connectors=clock-snake layers=behind-timer:10:connector:clock-snake:clock-snake:clock
+[cg:timeline] f=0599 countdown-order stage=clock index=0/2 next=snake phase=evolving evolution=yes stageProgress=0.000 evolutionProgress=0.000
 [cg:transition] f=0599 countdown-intro tick=10 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0599 countdown-clock tick=10 mode=clock size=2 visible=2 sourceVisible=2/8 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.000,0.000 handoff=59 progress=0.000
+[cg:transition] f=0599 countdown-clock tick=10 mode=expanding size=3 visible=2 sourceVisible=2/18 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.000,0.000 beatMultiplier=1.000,1.000 handoff=5 progress=0.000
+[cg:timeline] f=0600 phase=core cycle=0 duration=30.000 paused=no
 [cg:plan] f=0600 render=[countdownFramedGrid@1.00]
-[cg:transition] f=0603 countdown-intro tick=10 step=1 colors=[0,0,1,0,0]
-[cg:transition] f=0607 countdown-intro tick=10 step=2 colors=[0,1,2,1,0]
-[cg:transition] f=0611 countdown-intro tick=10 step=3 colors=[1,2,3,2,1]
-[cg:transition] f=0615 countdown-intro tick=10 step=4 colors=[2,3,3,3,2]
-[cg:transition] f=0618 countdown-clock tick=10 mode=clock size=2 visible=3 sourceVisible=3/8 visibleBySquare=2,1 dotSizes=1,1,1 waterfallProbability=0.264,0.199 handoff=59 progress=0.209
-[cg:transition] f=0619 countdown-intro tick=10 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0620 countdown-clock tick=10 mode=clock size=2 visible=4 sourceVisible=4/8 visibleBySquare=2,2 dotSizes=1,1,1,1 waterfallProbability=0.321,0.243 handoff=59 progress=0.255
-[cg:transition] f=0626 countdown-clock tick=10 mode=clock size=2 visible=5 sourceVisible=5/8 visibleBySquare=3,2 dotSizes=1,1,1,1,1 waterfallProbability=0.506,0.394 handoff=59 progress=0.414
-[cg:transition] f=0629 countdown-clock tick=10 mode=clock size=2 visible=6 sourceVisible=6/8 visibleBySquare=3,3 dotSizes=1,1,1,1,1,1 waterfallProbability=0.598,0.475 handoff=59 progress=0.500
-[cg:transition] f=0634 countdown-clock tick=10 mode=clock size=2 visible=7 sourceVisible=7/8 visibleBySquare=4,3 dotSizes=1,1,1,1,1,1,1 waterfallProbability=0.737,0.609 handoff=59 progress=0.641
-[cg:transition] f=0639 countdown-clock tick=10 mode=clock size=2 visible=8 sourceVisible=8/8 visibleBySquare=4,4 dotSizes=1,1,1,1,1,1,1,1 waterfallProbability=0.845,0.730 handoff=59 progress=0.768
-[cg:plan] f=0659 countdown-effect mode=clock tick=11 evolution=no evolutionTick=0 seed=1 cell=14 mode=clock size=2 handoff=59 squares=2 safeText=23:9:33:15 squareGap=1 reserveExpansion=0 farSeparated=yes separation=75.432 motion=traveling,anchored staggerBeats=-0.176,0.000 reservations=86:54,27:7 placements=86:54,27:7 dots=4838,4839,4927,4926,643,644,732,731
+[cg:transition] f=0602 countdown-intro tick=10 step=1 colors=[0,0,1,0,0]
+[cg:transition] f=0605 countdown-intro tick=10 step=2 colors=[0,1,2,1,0]
+[cg:transition] f=0608 countdown-intro tick=10 step=3 colors=[1,2,3,2,1]
+[cg:transition] f=0611 countdown-intro tick=10 step=4 colors=[2,3,4,3,2]
+[cg:transition] f=0613 countdown-clock tick=10 mode=expanding size=3 visible=4 sourceVisible=4/18 visibleBySquare=2,2 dotSizes=1,1,1,1 waterfallProbability=0.107,0.107 beatMultiplier=1.000,1.000 handoff=5 progress=0.112
+[cg:transition] f=0614 countdown-intro tick=10 step=5 colors=[3,4,5,4,3]
+[cg:transition] f=0616 countdown-intro tick=10 step=6 colors=[4,5,5,5,4]
+[cg:transition] f=0619 countdown-intro tick=10 step=7 colors=[5,5,5,5,5]
+[cg:transition] f=0619 countdown-clock tick=10 mode=expanding size=3 visible=6 sourceVisible=6/18 visibleBySquare=3,3 dotSizes=1,1,1,1,1,1 waterfallProbability=0.220,0.220 beatMultiplier=1.000,1.000 handoff=5 progress=0.232
+[cg:transition] f=0624 countdown-clock tick=10 mode=expanding size=3 visible=8 sourceVisible=8/18 visibleBySquare=4,4 dotSizes=1,1,1,1,1,1,1,1 waterfallProbability=0.341,0.341 beatMultiplier=1.000,1.000 handoff=5 progress=0.359
+[cg:transition] f=0628 countdown-clock tick=10 mode=expanding size=3 visible=10 sourceVisible=10/18 visibleBySquare=5,5 dotSizes=1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.448,0.448 beatMultiplier=1.000,1.000 handoff=5 progress=0.471
+[cg:transition] f=0631 countdown-clock tick=10 mode=expanding size=3 visible=12 sourceVisible=12/18 visibleBySquare=6,6 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.529,0.529 beatMultiplier=1.000,1.000 handoff=5 progress=0.557
+[cg:transition] f=0635 countdown-clock tick=10 mode=expanding size=3 visible=14 sourceVisible=14/18 visibleBySquare=7,7 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.635,0.635 beatMultiplier=1.000,1.000 handoff=5 progress=0.668
+[cg:transition] f=0640 countdown-clock tick=10 mode=expanding size=3 visible=16 sourceVisible=16/18 visibleBySquare=8,8 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.751,0.751 beatMultiplier=1.000,1.000 handoff=5 progress=0.791
+[cg:transition] f=0646 countdown-clock tick=10 mode=expanding size=3 visible=18 sourceVisible=18/18 visibleBySquare=9,9 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.859,0.859 beatMultiplier=1.000,1.000 handoff=5 progress=0.904
+[cg:plan] f=0659 countdown-snake-disappearance tick=11 sourceTick=9 selected=tail-dive phase=emerge mode=tail-dive cells=7
+[cg:plan] f=0659 countdown-effect mode=clock tick=11 evolution=yes evolutionTick=1 seed=1 cell=14 mode=expanding size=4 handoff=5 squares=2 safeText=23:9:33:15 squareGap=1 reserveExpansion=0 farSeparated=yes separation=68.797 motion=traveling,anchored beatOffset=yes,no beatMultiplier=1.500,1.000 reservations=84:52,26:15 placements=84:52,26:15 dots=4660,4661,4662,4663,4751,4839,4927,4926,4925,4924,4836,4748,4749,4750,4838,4837,1346,1347,1348,1349,1437,1525,1613,1612,1611,1610,1522,1434,1435,1436,1524,1523
 [cg:transition] f=0659 countdown-intro tick=11 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0659 countdown-clock tick=11 mode=clock size=2 visible=2 sourceVisible=2/8 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.000,0.000 handoff=59 progress=0.000
+[cg:transition] f=0659 countdown-clock tick=11 mode=expanding size=4 visible=2 sourceVisible=2/32 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.000,0.000 beatMultiplier=1.500,1.000 handoff=5 progress=0.000
 [cg:plan] f=0660 render=[countdownFramedGrid@1.00]
-[cg:transition] f=0663 countdown-intro tick=11 step=1 colors=[0,0,1,0,0]
-[cg:transition] f=0667 countdown-intro tick=11 step=2 colors=[0,1,2,1,0]
-[cg:transition] f=0671 countdown-intro tick=11 step=3 colors=[1,2,3,2,1]
-[cg:transition] f=0675 countdown-intro tick=11 step=4 colors=[2,3,3,3,2]
-[cg:transition] f=0677 countdown-clock tick=11 mode=clock size=2 visible=3 sourceVisible=3/8 visibleBySquare=2,1 dotSizes=1,1,1 waterfallProbability=0.262,0.178 handoff=59 progress=0.187
-[cg:transition] f=0679 countdown-intro tick=11 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0680 countdown-clock tick=11 mode=clock size=2 visible=4 sourceVisible=4/8 visibleBySquare=2,2 dotSizes=1,1,1,1 waterfallProbability=0.353,0.243 handoff=59 progress=0.255
-[cg:transition] f=0684 countdown-clock tick=11 mode=clock size=2 visible=5 sourceVisible=5/8 visibleBySquare=3,2 dotSizes=1,1,1,1,1 waterfallProbability=0.484,0.341 handoff=59 progress=0.359
-[cg:transition] f=0689 countdown-clock tick=11 mode=clock size=2 visible=6 sourceVisible=6/8 visibleBySquare=3,3 dotSizes=1,1,1,1,1,1 waterfallProbability=0.645,0.475 handoff=59 progress=0.500
-[cg:transition] f=0692 countdown-clock tick=11 mode=clock size=2 visible=4 sourceVisible=7/8 visibleBySquare=1,3 dotSizes=2,1,1,1 waterfallProbability=0.731,0.556 handoff=59 progress=0.586
-[cg:transition] f=0699 countdown-clock tick=11 mode=clock size=2 visible=5 sourceVisible=8/8 visibleBySquare=1,4 dotSizes=2,1,1,1,1 waterfallProbability=0.879,0.730 handoff=59 progress=0.768
-[cg:plan] f=0719 countdown-effect mode=clock tick=12 evolution=no evolutionTick=0 seed=1 cell=70 mode=clock size=2 handoff=59 squares=2 safeText=31:49:41:55 squareGap=1 reserveExpansion=0 farSeparated=no separation=8.944 motion=traveling,anchored staggerBeats=0.153,0.000 reservations=43:43,35:47 placements=43:43,35:47 dots=3827,3828,3916,3915,4171,4172,4260,4259
+[cg:transition] f=0662 countdown-intro tick=11 step=1 colors=[0,0,1,0,0]
+[cg:transition] f=0665 countdown-intro tick=11 step=2 colors=[0,1,2,1,0]
+[cg:transition] f=0668 countdown-intro tick=11 step=3 colors=[1,2,3,2,1]
+[cg:transition] f=0670 countdown-clock tick=11 mode=expanding size=4 visible=3 sourceVisible=3/32 visibleBySquare=1,2 dotSizes=1,1,1 waterfallProbability=0.012,0.065 beatMultiplier=1.500,1.000 handoff=5 progress=0.068
+[cg:transition] f=0671 countdown-intro tick=11 step=4 colors=[2,3,4,3,2]
+[cg:transition] f=0674 countdown-intro tick=11 step=5 colors=[3,4,5,4,3]
+[cg:transition] f=0674 countdown-clock tick=11 mode=expanding size=4 visible=4 sourceVisible=4/32 visibleBySquare=1,3 dotSizes=1,1,1,1 waterfallProbability=0.030,0.123 beatMultiplier=1.500,1.000 handoff=5 progress=0.129
+[cg:transition] f=0676 countdown-intro tick=11 step=6 colors=[4,5,5,5,4]
+[cg:transition] f=0678 countdown-clock tick=11 mode=expanding size=4 visible=6 sourceVisible=6/32 visibleBySquare=2,4 dotSizes=1,1,1,1,1,1 waterfallProbability=0.062,0.200 beatMultiplier=1.500,1.000 handoff=5 progress=0.209
+[cg:transition] f=0679 countdown-intro tick=11 step=7 colors=[5,5,5,5,5]
+[cg:transition] f=0680 countdown-clock tick=11 mode=expanding size=4 visible=7 sourceVisible=7/32 visibleBySquare=2,5 dotSizes=1,1,1,1,1,1,1 waterfallProbability=0.084,0.244 beatMultiplier=1.500,1.000 handoff=5 progress=0.255
+[cg:transition] f=0683 countdown-clock tick=11 mode=expanding size=4 visible=9 sourceVisible=9/32 visibleBySquare=3,6 dotSizes=1,1,1,1,1,1,1,1,1 waterfallProbability=0.126,0.317 beatMultiplier=1.500,1.000 handoff=5 progress=0.332
+[cg:transition] f=0685 countdown-clock tick=11 mode=expanding size=4 visible=10 sourceVisible=10/32 visibleBySquare=3,7 dotSizes=1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.162,0.369 beatMultiplier=1.500,1.000 handoff=5 progress=0.386
+[cg:transition] f=0686 countdown-clock tick=11 mode=expanding size=4 visible=11 sourceVisible=11/32 visibleBySquare=4,7 dotSizes=1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.181,0.396 beatMultiplier=1.500,1.000 handoff=5 progress=0.414
+[cg:transition] f=0687 countdown-clock tick=11 mode=expanding size=4 visible=12 sourceVisible=12/32 visibleBySquare=4,8 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.202,0.423 beatMultiplier=1.500,1.000 handoff=5 progress=0.443
+[cg:transition] f=0689 countdown-clock tick=11 mode=expanding size=4 visible=14 sourceVisible=14/32 visibleBySquare=5,9 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.249,0.478 beatMultiplier=1.500,1.000 handoff=5 progress=0.500
+[cg:transition] f=0691 countdown-clock tick=11 mode=expanding size=4 visible=15 sourceVisible=15/32 visibleBySquare=6,9 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.301,0.533 beatMultiplier=1.500,1.000 handoff=5 progress=0.557
+[cg:transition] f=0692 countdown-clock tick=11 mode=expanding size=4 visible=16 sourceVisible=16/32 visibleBySquare=6,10 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.329,0.560 beatMultiplier=1.500,1.000 handoff=5 progress=0.586
+[cg:transition] f=0693 countdown-clock tick=11 mode=expanding size=4 visible=17 sourceVisible=17/32 visibleBySquare=7,10 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.358,0.586 beatMultiplier=1.500,1.000 handoff=5 progress=0.614
+[cg:transition] f=0694 countdown-clock tick=11 mode=expanding size=4 visible=18 sourceVisible=18/32 visibleBySquare=7,11 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.389,0.613 beatMultiplier=1.500,1.000 handoff=5 progress=0.641
+[cg:transition] f=0695 countdown-clock tick=11 mode=expanding size=4 visible=19 sourceVisible=19/32 visibleBySquare=8,11 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.420,0.638 beatMultiplier=1.500,1.000 handoff=5 progress=0.668
+[cg:transition] f=0696 countdown-clock tick=11 mode=expanding size=4 visible=20 sourceVisible=20/32 visibleBySquare=8,12 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.452,0.664 beatMultiplier=1.500,1.000 handoff=5 progress=0.694
+[cg:transition] f=0697 countdown-clock tick=11 mode=expanding size=4 visible=21 sourceVisible=21/32 visibleBySquare=9,12 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.484,0.688 beatMultiplier=1.500,1.000 handoff=5 progress=0.720
+[cg:transition] f=0699 countdown-clock tick=11 mode=expanding size=4 visible=23 sourceVisible=23/32 visibleBySquare=10,13 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.550,0.734 beatMultiplier=1.500,1.000 handoff=5 progress=0.768
+[cg:transition] f=0701 countdown-clock tick=11 mode=expanding size=4 visible=25 sourceVisible=25/32 visibleBySquare=11,14 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.616,0.776 beatMultiplier=1.500,1.000 handoff=5 progress=0.813
+[cg:transition] f=0703 countdown-clock tick=11 mode=expanding size=4 visible=26 sourceVisible=26/32 visibleBySquare=12,14 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.680,0.815 beatMultiplier=1.500,1.000 handoff=5 progress=0.853
+[cg:transition] f=0705 countdown-clock tick=11 mode=expanding size=4 visible=25 sourceVisible=28/32 visibleBySquare=10,15 dotSizes=1,1,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.740,0.848 beatMultiplier=1.500,1.000 handoff=5 progress=0.888
+[cg:transition] f=0707 countdown-clock tick=11 mode=expanding size=4 visible=23 sourceVisible=29/32 visibleBySquare=8,15 dotSizes=1,1,1,1,1,1,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.795,0.878 beatMultiplier=1.500,1.000 handoff=5 progress=0.918
+[cg:transition] f=0709 countdown-clock tick=11 mode=expanding size=4 visible=22 sourceVisible=31/32 visibleBySquare=6,16 dotSizes=1,1,1,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.843,0.902 beatMultiplier=1.500,1.000 handoff=5 progress=0.944
+[cg:transition] f=0712 countdown-clock tick=11 mode=expanding size=4 visible=17 sourceVisible=32/32 visibleBySquare=1,16 dotSizes=4,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.900,0.930 beatMultiplier=1.500,1.000 handoff=5 progress=0.973
+[cg:plan] f=0719 countdown-snake-disappearance tick=12 sourceTick=11 selected=instant phase=move mode=instant cells=5
+[cg:plan] f=0719 countdown-effect mode=clock tick=12 evolution=yes evolutionTick=2 seed=1 cell=70 mode=expanding size=4 handoff=5 squares=2 safeText=31:49:41:55 squareGap=1 reserveExpansion=0 farSeparated=no separation=6.000 motion=anchored,traveling beatOffset=no,no beatMultiplier=1.000,1.000 reservations=34:45,49.77777777777778:36.85185185185185 placements=34:45,49.77777777777778:36.85185185185185 dots=3994,3995,3996,3997,4085,4173,4261,4260,4259,4258,4170,4082,4083,4084,4172,4171,3292.7407407407404,3293.7407407407404,3294.7407407407404,3295.7407407407404,3383.7407407407404,3471.7407407407404,3559.7407407407404,3558.7407407407404,3557.7407407407404,3556.7407407407404,3468.7407407407404,3380.7407407407404,3381.7407407407404,3382.7407407407404,3470.7407407407404,3469.7407407407404
 [cg:transition] f=0719 countdown-intro tick=12 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0719 countdown-clock tick=12 mode=clock size=2 visible=1 sourceVisible=1/8 visibleBySquare=0,1 dotSizes=1 waterfallProbability=0.000,0.000 handoff=59 progress=0.000
+[cg:transition] f=0719 countdown-clock tick=12 mode=expanding size=4 visible=2 sourceVisible=2/32 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.000,0.000 beatMultiplier=1.000,1.000 handoff=5 progress=0.000
 [cg:plan] f=0720 render=[countdownFramedGrid@1.00]
-[cg:transition] f=0723 countdown-intro tick=12 step=1 colors=[0,0,1,0,0]
-[cg:transition] f=0727 countdown-intro tick=12 step=2 colors=[0,1,2,1,0]
-[cg:transition] f=0729 countdown-clock tick=12 mode=clock size=2 visible=2 sourceVisible=2/8 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.000,0.053 handoff=59 progress=0.056
-[cg:transition] f=0731 countdown-intro tick=12 step=3 colors=[1,2,3,2,1]
-[cg:transition] f=0735 countdown-intro tick=12 step=4 colors=[2,3,3,3,2]
-[cg:transition] f=0739 countdown-intro tick=12 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0740 countdown-clock tick=12 mode=clock size=2 visible=3 sourceVisible=3/8 visibleBySquare=1,2 dotSizes=1,1,1 waterfallProbability=0.106,0.243 handoff=59 progress=0.255
-[cg:transition] f=0746 countdown-clock tick=12 mode=clock size=2 visible=4 sourceVisible=4/8 visibleBySquare=2,2 dotSizes=1,1,1,1 waterfallProbability=0.244,0.394 handoff=59 progress=0.414
-[cg:transition] f=0749 countdown-clock tick=12 mode=clock size=2 visible=5 sourceVisible=5/8 visibleBySquare=2,3 dotSizes=1,1,1,1,1 waterfallProbability=0.330,0.475 handoff=59 progress=0.500
-[cg:transition] f=0754 countdown-clock tick=12 mode=clock size=2 visible=6 sourceVisible=6/8 visibleBySquare=3,3 dotSizes=1,1,1,1,1,1 waterfallProbability=0.488,0.609 handoff=59 progress=0.641
-[cg:transition] f=0759 countdown-clock tick=12 mode=clock size=2 visible=7 sourceVisible=7/8 visibleBySquare=3,4 dotSizes=1,1,1,1,1,1,1 waterfallProbability=0.644,0.730 handoff=59 progress=0.768
-[cg:transition] f=0762 countdown-clock tick=12 mode=clock size=2 visible=8 sourceVisible=8/8 visibleBySquare=4,4 dotSizes=1,1,1,1,1,1,1,1 waterfallProbability=0.728,0.792 handoff=59 progress=0.833
-[cg:plan] f=0779 countdown-effect mode=clock tick=13 evolution=no evolutionTick=0 seed=1 cell=3 mode=clock size=2 handoff=59 squares=2 safeText=23:1:33:7 squareGap=1 reserveExpansion=0 farSeparated=yes separation=75.432 motion=traveling,anchored staggerBeats=0.156,0.000 reservations=86:54,27:7 placements=86:54,27:7 dots=4838,4839,4927,4926,643,644,732,731
+[cg:transition] f=0722 countdown-intro tick=12 step=1 colors=[0,0,1,0,0]
+[cg:transition] f=0725 countdown-intro tick=12 step=2 colors=[0,1,2,1,0]
+[cg:transition] f=0728 countdown-intro tick=12 step=3 colors=[1,2,3,2,1]
+[cg:transition] f=0730 countdown-clock tick=12 mode=expanding size=4 visible=4 sourceVisible=4/32 visibleBySquare=2,2 dotSizes=1,1,1,1 waterfallProbability=0.066,0.066 beatMultiplier=1.000,1.000 handoff=5 progress=0.068
+[cg:transition] f=0731 countdown-intro tick=12 step=4 colors=[2,3,4,3,2]
+[cg:transition] f=0734 countdown-intro tick=12 step=5 colors=[3,4,5,4,3]
+[cg:transition] f=0734 countdown-clock tick=12 mode=expanding size=4 visible=6 sourceVisible=6/32 visibleBySquare=3,3 dotSizes=1,1,1,1,1,1 waterfallProbability=0.124,0.124 beatMultiplier=1.000,1.000 handoff=5 progress=0.129
+[cg:transition] f=0736 countdown-intro tick=12 step=6 colors=[4,5,5,5,4]
+[cg:transition] f=0738 countdown-clock tick=12 mode=expanding size=4 visible=8 sourceVisible=8/32 visibleBySquare=4,4 dotSizes=1,1,1,1,1,1,1,1 waterfallProbability=0.201,0.201 beatMultiplier=1.000,1.000 handoff=5 progress=0.209
+[cg:transition] f=0739 countdown-intro tick=12 step=7 colors=[5,5,5,5,5]
+[cg:transition] f=0740 countdown-clock tick=12 mode=expanding size=4 visible=10 sourceVisible=10/32 visibleBySquare=5,5 dotSizes=1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.246,0.246 beatMultiplier=1.000,1.000 handoff=5 progress=0.255
+[cg:transition] f=0743 countdown-clock tick=12 mode=expanding size=4 visible=12 sourceVisible=12/32 visibleBySquare=6,6 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.319,0.319 beatMultiplier=1.000,1.000 handoff=5 progress=0.332
+[cg:transition] f=0745 countdown-clock tick=12 mode=expanding size=4 visible=14 sourceVisible=14/32 visibleBySquare=7,7 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.371,0.371 beatMultiplier=1.000,1.000 handoff=5 progress=0.386
+[cg:transition] f=0747 countdown-clock tick=12 mode=expanding size=4 visible=16 sourceVisible=16/32 visibleBySquare=8,8 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.425,0.425 beatMultiplier=1.000,1.000 handoff=5 progress=0.443
+[cg:transition] f=0749 countdown-clock tick=12 mode=expanding size=4 visible=18 sourceVisible=18/32 visibleBySquare=9,9 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.481,0.481 beatMultiplier=1.000,1.000 handoff=5 progress=0.500
+[cg:transition] f=0752 countdown-clock tick=12 mode=expanding size=4 visible=20 sourceVisible=20/32 visibleBySquare=10,10 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.563,0.563 beatMultiplier=1.000,1.000 handoff=5 progress=0.586
+[cg:transition] f=0754 countdown-clock tick=12 mode=expanding size=4 visible=22 sourceVisible=22/32 visibleBySquare=11,11 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.616,0.616 beatMultiplier=1.000,1.000 handoff=5 progress=0.641
+[cg:transition] f=0756 countdown-clock tick=12 mode=expanding size=4 visible=24 sourceVisible=24/32 visibleBySquare=12,12 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.667,0.667 beatMultiplier=1.000,1.000 handoff=5 progress=0.694
+[cg:transition] f=0759 countdown-clock tick=12 mode=expanding size=4 visible=26 sourceVisible=26/32 visibleBySquare=13,13 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.738,0.738 beatMultiplier=1.000,1.000 handoff=5 progress=0.768
+[cg:transition] f=0761 countdown-clock tick=12 mode=expanding size=4 visible=28 sourceVisible=28/32 visibleBySquare=14,14 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.781,0.781 beatMultiplier=1.000,1.000 handoff=5 progress=0.813
+[cg:transition] f=0765 countdown-clock tick=12 mode=expanding size=4 visible=30 sourceVisible=30/32 visibleBySquare=15,15 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.853,0.853 beatMultiplier=1.000,1.000 handoff=5 progress=0.888
+[cg:transition] f=0769 countdown-clock tick=12 mode=expanding size=4 visible=32 sourceVisible=32/32 visibleBySquare=16,16 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.907,0.907 beatMultiplier=1.000,1.000 handoff=5 progress=0.944
+[cg:plan] f=0779 countdown-snake-disappearance tick=13 sourceTick=12 selected=tail-dive phase=dive mode=tail-dive cells=6
+[cg:plan] f=0779 countdown-effect mode=clock tick=13 evolution=yes evolutionTick=3 seed=1 cell=3 mode=expanding size=4 handoff=5 squares=2 safeText=23:1:33:7 squareGap=1 reserveExpansion=0 farSeparated=yes separation=73.410 motion=traveling,anchored beatOffset=no,no beatMultiplier=1.000,1.000 reservations=84:52,26:7 placements=84:52,26:7 dots=4660,4661,4662,4663,4751,4839,4927,4926,4925,4924,4836,4748,4749,4750,4838,4837,642,643,644,645,733,821,909,908,907,906,818,730,731,732,820,819
 [cg:transition] f=0779 countdown-intro tick=13 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0779 countdown-clock tick=13 mode=clock size=2 visible=1 sourceVisible=1/8 visibleBySquare=0,1 dotSizes=1 waterfallProbability=0.000,0.000 handoff=59 progress=0.000
+[cg:transition] f=0779 countdown-clock tick=13 mode=expanding size=4 visible=2 sourceVisible=2/32 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.000,0.000 beatMultiplier=1.000,1.000 handoff=5 progress=0.000
 [cg:plan] f=0780 render=[countdownFramedGrid@1.00]
-[cg:transition] f=0783 countdown-intro tick=13 step=1 colors=[0,0,1,0,0]
-[cg:transition] f=0787 countdown-intro tick=13 step=2 colors=[0,1,2,1,0]
-[cg:transition] f=0789 countdown-clock tick=13 mode=clock size=2 visible=2 sourceVisible=2/8 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.000,0.053 handoff=59 progress=0.056
-[cg:transition] f=0791 countdown-intro tick=13 step=3 colors=[1,2,3,2,1]
-[cg:transition] f=0795 countdown-intro tick=13 step=4 colors=[2,3,3,3,2]
-[cg:transition] f=0799 countdown-intro tick=13 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0800 countdown-clock tick=13 mode=clock size=2 visible=3 sourceVisible=3/8 visibleBySquare=1,2 dotSizes=1,1,1 waterfallProbability=0.104,0.243 handoff=59 progress=0.255
-[cg:transition] f=0806 countdown-clock tick=13 mode=clock size=2 visible=4 sourceVisible=4/8 visibleBySquare=2,2 dotSizes=1,1,1,1 waterfallProbability=0.241,0.394 handoff=59 progress=0.414
-[cg:transition] f=0809 countdown-clock tick=13 mode=clock size=2 visible=5 sourceVisible=5/8 visibleBySquare=2,3 dotSizes=1,1,1,1,1 waterfallProbability=0.327,0.475 handoff=59 progress=0.500
-[cg:transition] f=0814 countdown-clock tick=13 mode=clock size=2 visible=6 sourceVisible=6/8 visibleBySquare=3,3 dotSizes=1,1,1,1,1,1 waterfallProbability=0.486,0.609 handoff=59 progress=0.641
-[cg:transition] f=0819 countdown-clock tick=13 mode=clock size=2 visible=7 sourceVisible=7/8 visibleBySquare=3,4 dotSizes=1,1,1,1,1,1,1 waterfallProbability=0.643,0.730 handoff=59 progress=0.768
-[cg:transition] f=0822 countdown-clock tick=13 mode=clock size=2 visible=5 sourceVisible=8/8 visibleBySquare=1,4 dotSizes=2,1,1,1,1 waterfallProbability=0.727,0.792 handoff=59 progress=0.833
-[cg:plan] f=0839 countdown-effect mode=clock tick=14 evolution=no evolutionTick=0 seed=1 cell=76 mode=clock size=2 handoff=59 squares=2 safeText=79:49:89:55 squareGap=1 reserveExpansion=0 farSeparated=no separation=5.000 motion=traveling,anchored staggerBeats=-0.158,0.000 reservations=80:43,83:47 placements=80:43,83:47 dots=3864,3865,3953,3952,4219,4220,4308,4307
+[cg:transition] f=0782 countdown-intro tick=13 step=1 colors=[0,0,1,0,0]
+[cg:transition] f=0785 countdown-intro tick=13 step=2 colors=[0,1,2,1,0]
+[cg:transition] f=0788 countdown-intro tick=13 step=3 colors=[1,2,3,2,1]
+[cg:transition] f=0790 countdown-clock tick=13 mode=expanding size=4 visible=4 sourceVisible=4/32 visibleBySquare=2,2 dotSizes=1,1,1,1 waterfallProbability=0.066,0.066 beatMultiplier=1.000,1.000 handoff=5 progress=0.068
+[cg:transition] f=0791 countdown-intro tick=13 step=4 colors=[2,3,4,3,2]
+[cg:transition] f=0794 countdown-intro tick=13 step=5 colors=[3,4,5,4,3]
+[cg:transition] f=0794 countdown-clock tick=13 mode=expanding size=4 visible=6 sourceVisible=6/32 visibleBySquare=3,3 dotSizes=1,1,1,1,1,1 waterfallProbability=0.125,0.125 beatMultiplier=1.000,1.000 handoff=5 progress=0.129
+[cg:transition] f=0796 countdown-intro tick=13 step=6 colors=[4,5,5,5,4]
+[cg:transition] f=0798 countdown-clock tick=13 mode=expanding size=4 visible=8 sourceVisible=8/32 visibleBySquare=4,4 dotSizes=1,1,1,1,1,1,1,1 waterfallProbability=0.202,0.202 beatMultiplier=1.000,1.000 handoff=5 progress=0.209
+[cg:transition] f=0799 countdown-intro tick=13 step=7 colors=[5,5,5,5,5]
+[cg:transition] f=0800 countdown-clock tick=13 mode=expanding size=4 visible=10 sourceVisible=10/32 visibleBySquare=5,5 dotSizes=1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.247,0.247 beatMultiplier=1.000,1.000 handoff=5 progress=0.255
+[cg:transition] f=0803 countdown-clock tick=13 mode=expanding size=4 visible=12 sourceVisible=12/32 visibleBySquare=6,6 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.321,0.321 beatMultiplier=1.000,1.000 handoff=5 progress=0.332
+[cg:transition] f=0805 countdown-clock tick=13 mode=expanding size=4 visible=14 sourceVisible=14/32 visibleBySquare=7,7 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.373,0.373 beatMultiplier=1.000,1.000 handoff=5 progress=0.386
+[cg:transition] f=0807 countdown-clock tick=13 mode=expanding size=4 visible=16 sourceVisible=16/32 visibleBySquare=8,8 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.428,0.428 beatMultiplier=1.000,1.000 handoff=5 progress=0.443
+[cg:transition] f=0809 countdown-clock tick=13 mode=expanding size=4 visible=18 sourceVisible=18/32 visibleBySquare=9,9 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.483,0.483 beatMultiplier=1.000,1.000 handoff=5 progress=0.500
+[cg:transition] f=0812 countdown-clock tick=13 mode=expanding size=4 visible=20 sourceVisible=20/32 visibleBySquare=10,10 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.566,0.566 beatMultiplier=1.000,1.000 handoff=5 progress=0.586
+[cg:transition] f=0814 countdown-clock tick=13 mode=expanding size=4 visible=22 sourceVisible=22/32 visibleBySquare=11,11 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.620,0.620 beatMultiplier=1.000,1.000 handoff=5 progress=0.641
+[cg:transition] f=0816 countdown-clock tick=13 mode=expanding size=4 visible=24 sourceVisible=24/32 visibleBySquare=12,12 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.671,0.671 beatMultiplier=1.000,1.000 handoff=5 progress=0.694
+[cg:transition] f=0819 countdown-clock tick=13 mode=expanding size=4 visible=26 sourceVisible=26/32 visibleBySquare=13,13 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.743,0.743 beatMultiplier=1.000,1.000 handoff=5 progress=0.768
+[cg:transition] f=0821 countdown-clock tick=13 mode=expanding size=4 visible=25 sourceVisible=28/32 visibleBySquare=11,14 dotSizes=1,1,1,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.786,0.786 beatMultiplier=1.000,1.000 handoff=5 progress=0.813
+[cg:transition] f=0825 countdown-clock tick=13 mode=expanding size=4 visible=24 sourceVisible=30/32 visibleBySquare=9,15 dotSizes=1,1,1,1,1,1,1,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.858,0.858 beatMultiplier=1.000,1.000 handoff=5 progress=0.888
+[cg:transition] f=0829 countdown-clock tick=13 mode=expanding size=4 visible=23 sourceVisible=32/32 visibleBySquare=7,16 dotSizes=1,1,1,1,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.912,0.912 beatMultiplier=1.000,1.000 handoff=5 progress=0.944
+[cg:transition] f=0830 countdown-clock tick=13 mode=expanding size=4 visible=17 sourceVisible=32/32 visibleBySquare=1,16 dotSizes=4,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.923,0.923 beatMultiplier=1.000,1.000 handoff=5 progress=0.955
+[cg:plan] f=0839 countdown-snake-disappearance tick=14 sourceTick=12 selected=tail-dive phase=emerge mode=tail-dive cells=6
+[cg:plan] f=0839 countdown-effect mode=clock tick=14 evolution=yes evolutionTick=4 seed=1 cell=76 mode=expanding size=8 handoff=5 squares=2 safeText=79:49:89:55 squareGap=1 reserveExpansion=1 farSeparated=no separation=9.220 motion=traveling,anchored beatOffset=no,no beatMultiplier=1.000,1.000 reservations=39.44444444444444:25.469135802469136,80:41 placements=39.44444444444444:25.469135802469136,80:41 dots=2280.7283950617284,2281.7283950617284,2282.7283950617284,2283.7283950617284,2284.7283950617284,2285.7283950617284,2286.7283950617284,2287.7283950617284,2375.7283950617284,2463.7283950617284,2551.7283950617284,2639.7283950617284,2727.7283950617284,2815.7283950617284,2903.7283950617284,2902.7283950617284,2901.7283950617284,2900.7283950617284,2899.7283950617284,2898.7283950617284,2897.7283950617284,2896.7283950617284,2808.7283950617284,2720.7283950617284,2632.7283950617284,2544.7283950617284,2456.7283950617284,2368.7283950617284,2369.7283950617284,2370.7283950617284,2371.7283950617284,2372.7283950617284,2373.7283950617284,2374.7283950617284,2462.7283950617284,2550.7283950617284,2638.7283950617284,2726.7283950617284,2814.7283950617284,2813.7283950617284,2812.7283950617284,2811.7283950617284,2810.7283950617284,2809.7283950617284,2721.7283950617284,2633.7283950617284,2545.7283950617284,2457.7283950617284,2458.7283950617284,2459.7283950617284,2460.7283950617284,2461.7283950617284,2549.7283950617284,2637.7283950617284,2725.7283950617284,2724.7283950617284,2723.7283950617284,2722.7283950617284,2634.7283950617284,2546.7283950617284,2547.7283950617284,2548.7283950617284,2636.7283950617284,2635.7283950617284,3688,3689,3690,3691,3692,3693,3694,3695,3783,3871,3959,4047,4135,4223,4311,4310,4309,4308,4307,4306,4305,4304,4216,4128,4040,3952,3864,3776,3777,3778,3779,3780,3781,3782,3870,3958,4046,4134,4222,4221,4220,4219,4218,4217,4129,4041,3953,3865,3866,3867,3868,3869,3957,4045,4133,4132,4131,4130,4042,3954,3955,3956,4044,4043
 [cg:transition] f=0839 countdown-intro tick=14 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0839 countdown-clock tick=14 mode=clock size=2 visible=2 sourceVisible=2/8 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.000,0.000 handoff=59 progress=0.000
+[cg:transition] f=0839 countdown-clock tick=14 mode=expanding size=8 visible=2 sourceVisible=2/128 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.000,0.000 beatMultiplier=1.000,1.000 handoff=5 progress=0.000
 [cg:plan] f=0840 render=[countdownFramedGrid@1.00]
-[cg:transition] f=0843 countdown-intro tick=14 step=1 colors=[0,0,1,0,0]
-[cg:transition] f=0847 countdown-intro tick=14 step=2 colors=[0,1,2,1,0]
-[cg:transition] f=0851 countdown-intro tick=14 step=3 colors=[1,2,3,2,1]
-[cg:transition] f=0855 countdown-intro tick=14 step=4 colors=[2,3,3,3,2]
-[cg:transition] f=0857 countdown-clock tick=14 mode=clock size=2 visible=3 sourceVisible=3/8 visibleBySquare=2,1 dotSizes=1,1,1 waterfallProbability=0.252,0.178 handoff=59 progress=0.187
-[cg:transition] f=0859 countdown-intro tick=14 step=5 colors=[3,3,3,3,3]
-[cg:transition] f=0860 countdown-clock tick=14 mode=clock size=2 visible=4 sourceVisible=4/8 visibleBySquare=2,2 dotSizes=1,1,1,1 waterfallProbability=0.340,0.243 handoff=59 progress=0.255
-[cg:transition] f=0865 countdown-clock tick=14 mode=clock size=2 visible=5 sourceVisible=5/8 visibleBySquare=3,2 dotSizes=1,1,1,1,1 waterfallProbability=0.499,0.367 handoff=59 progress=0.386
-[cg:transition] f=0869 countdown-clock tick=14 mode=clock size=2 visible=6 sourceVisible=6/8 visibleBySquare=3,3 dotSizes=1,1,1,1,1,1 waterfallProbability=0.626,0.475 handoff=59 progress=0.500
-[cg:transition] f=0873 countdown-clock tick=14 mode=clock size=2 visible=7 sourceVisible=7/8 visibleBySquare=4,3 dotSizes=1,1,1,1,1,1,1 waterfallProbability=0.739,0.583 handoff=59 progress=0.614
-[cg:transition] f=0879 countdown-clock tick=14 mode=clock size=2 visible=8 sourceVisible=8/8 visibleBySquare=4,4 dotSizes=1,1,1,1,1,1,1,1 waterfallProbability=0.866,0.730 handoff=59 progress=0.768
-[cg:plan] f=0899 countdown-effect mode=clock tick=15 evolution=no evolutionTick=0 seed=1 cell=26 mode=clock size=2 handoff=59 squares=2 safeText=31:17:41:23 squareGap=1 reserveExpansion=0 farSeparated=yes separation=59.682 motion=anchored,traveling staggerBeats=0.000,-0.158 reservations=35:23,86:54 placements=35:23,86:54 dots=2059,2060,2148,2147,4838,4839,4927,4926
+[cg:transition] f=0842 countdown-intro tick=14 step=1 colors=[0,0,1,0,0]
+[cg:transition] f=0845 countdown-intro tick=14 step=2 colors=[0,1,2,1,0]
+[cg:transition] f=0845 countdown-clock tick=14 mode=expanding size=8 visible=4 sourceVisible=4/128 visibleBySquare=2,2 dotSizes=1,1,1,1 waterfallProbability=0.019,0.019 beatMultiplier=1.000,1.000 handoff=5 progress=0.020
+[cg:transition] f=0847 countdown-clock tick=14 mode=expanding size=8 visible=6 sourceVisible=6/128 visibleBySquare=3,3 dotSizes=1,1,1,1,1,1 waterfallProbability=0.035,0.035 beatMultiplier=1.000,1.000 handoff=5 progress=0.036
+[cg:transition] f=0848 countdown-intro tick=14 step=3 colors=[1,2,3,2,1]
+[cg:transition] f=0849 countdown-clock tick=14 mode=expanding size=8 visible=8 sourceVisible=8/128 visibleBySquare=4,4 dotSizes=1,1,1,1,1,1,1,1 waterfallProbability=0.055,0.055 beatMultiplier=1.000,1.000 handoff=5 progress=0.056
+[cg:transition] f=0850 countdown-clock tick=14 mode=expanding size=8 visible=10 sourceVisible=10/128 visibleBySquare=5,5 dotSizes=1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.066,0.066 beatMultiplier=1.000,1.000 handoff=5 progress=0.068
+[cg:transition] f=0851 countdown-intro tick=14 step=4 colors=[2,3,4,3,2]
+[cg:transition] f=0851 countdown-clock tick=14 mode=expanding size=8 visible=12 sourceVisible=12/128 visibleBySquare=6,6 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.079,0.079 beatMultiplier=1.000,1.000 handoff=5 progress=0.082
+[cg:transition] f=0852 countdown-clock tick=14 mode=expanding size=8 visible=14 sourceVisible=14/128 visibleBySquare=7,7 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.094,0.094 beatMultiplier=1.000,1.000 handoff=5 progress=0.096
+[cg:transition] f=0853 countdown-clock tick=14 mode=expanding size=8 visible=16 sourceVisible=16/128 visibleBySquare=8,8 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.109,0.109 beatMultiplier=1.000,1.000 handoff=5 progress=0.112
+[cg:transition] f=0854 countdown-intro tick=14 step=5 colors=[3,4,5,4,3]
+[cg:transition] f=0854 countdown-clock tick=14 mode=expanding size=8 visible=18 sourceVisible=18/128 visibleBySquare=9,9 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.126,0.126 beatMultiplier=1.000,1.000 handoff=5 progress=0.129
+[cg:transition] f=0855 countdown-clock tick=14 mode=expanding size=8 visible=20 sourceVisible=20/128 visibleBySquare=10,10 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.143,0.143 beatMultiplier=1.000,1.000 handoff=5 progress=0.147
+[cg:transition] f=0856 countdown-intro tick=14 step=6 colors=[4,5,5,5,4]
+[cg:transition] f=0856 countdown-clock tick=14 mode=expanding size=8 visible=22 sourceVisible=22/128 visibleBySquare=11,11 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.162,0.162 beatMultiplier=1.000,1.000 handoff=5 progress=0.167
+[cg:transition] f=0857 countdown-clock tick=14 mode=expanding size=8 visible=24 sourceVisible=24/128 visibleBySquare=12,12 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.182,0.182 beatMultiplier=1.000,1.000 handoff=5 progress=0.187
+[cg:transition] f=0858 countdown-clock tick=14 mode=expanding size=8 visible=28 sourceVisible=28/128 visibleBySquare=14,14 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.203,0.203 beatMultiplier=1.000,1.000 handoff=5 progress=0.209
+[cg:transition] f=0859 countdown-intro tick=14 step=7 colors=[5,5,5,5,5]
+[cg:transition] f=0859 countdown-clock tick=14 mode=expanding size=8 visible=30 sourceVisible=30/128 visibleBySquare=15,15 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.225,0.225 beatMultiplier=1.000,1.000 handoff=5 progress=0.232
+[cg:transition] f=0860 countdown-clock tick=14 mode=expanding size=8 visible=34 sourceVisible=34/128 visibleBySquare=17,17 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.248,0.248 beatMultiplier=1.000,1.000 handoff=5 progress=0.255
+[cg:transition] f=0861 countdown-clock tick=14 mode=expanding size=8 visible=36 sourceVisible=36/128 visibleBySquare=18,18 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.272,0.272 beatMultiplier=1.000,1.000 handoff=5 progress=0.280
+[cg:transition] f=0862 countdown-clock tick=14 mode=expanding size=8 visible=40 sourceVisible=40/128 visibleBySquare=20,20 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.297,0.297 beatMultiplier=1.000,1.000 handoff=5 progress=0.306
+[cg:transition] f=0863 countdown-clock tick=14 mode=expanding size=8 visible=44 sourceVisible=44/128 visibleBySquare=22,22 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.323,0.323 beatMultiplier=1.000,1.000 handoff=5 progress=0.332
+[cg:transition] f=0864 countdown-clock tick=14 mode=expanding size=8 visible=46 sourceVisible=46/128 visibleBySquare=23,23 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.349,0.349 beatMultiplier=1.000,1.000 handoff=5 progress=0.359
+[cg:transition] f=0865 countdown-clock tick=14 mode=expanding size=8 visible=50 sourceVisible=50/128 visibleBySquare=25,25 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.376,0.376 beatMultiplier=1.000,1.000 handoff=5 progress=0.386
+[cg:transition] f=0866 countdown-clock tick=14 mode=expanding size=8 visible=54 sourceVisible=54/128 visibleBySquare=27,27 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.403,0.403 beatMultiplier=1.000,1.000 handoff=5 progress=0.414
+[cg:transition] f=0867 countdown-clock tick=14 mode=expanding size=8 visible=58 sourceVisible=58/128 visibleBySquare=29,29 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.430,0.430 beatMultiplier=1.000,1.000 handoff=5 progress=0.443
+[cg:transition] f=0868 countdown-clock tick=14 mode=expanding size=8 visible=62 sourceVisible=62/128 visibleBySquare=31,31 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.458,0.458 beatMultiplier=1.000,1.000 handoff=5 progress=0.471
+[cg:transition] f=0869 countdown-clock tick=14 mode=expanding size=8 visible=66 sourceVisible=66/128 visibleBySquare=33,33 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.486,0.486 beatMultiplier=1.000,1.000 handoff=5 progress=0.500
+[cg:transition] f=0870 countdown-clock tick=14 mode=expanding size=8 visible=68 sourceVisible=68/128 visibleBySquare=34,34 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.514,0.514 beatMultiplier=1.000,1.000 handoff=5 progress=0.529
+[cg:transition] f=0871 countdown-clock tick=14 mode=expanding size=8 visible=72 sourceVisible=72/128 visibleBySquare=36,36 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.542,0.542 beatMultiplier=1.000,1.000 handoff=5 progress=0.557
+[cg:transition] f=0872 countdown-clock tick=14 mode=expanding size=8 visible=76 sourceVisible=76/128 visibleBySquare=38,38 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.569,0.569 beatMultiplier=1.000,1.000 handoff=5 progress=0.586
+[cg:transition] f=0873 countdown-clock tick=14 mode=expanding size=8 visible=80 sourceVisible=80/128 visibleBySquare=40,40 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.597,0.597 beatMultiplier=1.000,1.000 handoff=5 progress=0.614
+[cg:transition] f=0874 countdown-clock tick=14 mode=expanding size=8 visible=84 sourceVisible=84/128 visibleBySquare=42,42 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.623,0.623 beatMultiplier=1.000,1.000 handoff=5 progress=0.641
+[cg:transition] f=0875 countdown-clock tick=14 mode=expanding size=8 visible=86 sourceVisible=86/128 visibleBySquare=43,43 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.650,0.650 beatMultiplier=1.000,1.000 handoff=5 progress=0.668
+[cg:transition] f=0876 countdown-clock tick=14 mode=expanding size=8 visible=90 sourceVisible=90/128 visibleBySquare=45,45 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.675,0.675 beatMultiplier=1.000,1.000 handoff=5 progress=0.694
+[cg:transition] f=0877 countdown-clock tick=14 mode=expanding size=8 visible=94 sourceVisible=94/128 visibleBySquare=47,47 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.700,0.700 beatMultiplier=1.000,1.000 handoff=5 progress=0.720
+[cg:transition] f=0878 countdown-clock tick=14 mode=expanding size=8 visible=96 sourceVisible=96/128 visibleBySquare=48,48 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.724,0.724 beatMultiplier=1.000,1.000 handoff=5 progress=0.745
+[cg:transition] f=0879 countdown-clock tick=14 mode=expanding size=8 visible=100 sourceVisible=100/128 visibleBySquare=50,50 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.747,0.747 beatMultiplier=1.000,1.000 handoff=5 progress=0.768
+[cg:transition] f=0880 countdown-clock tick=14 mode=expanding size=8 visible=102 sourceVisible=102/128 visibleBySquare=51,51 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.769,0.769 beatMultiplier=1.000,1.000 handoff=5 progress=0.791
+[cg:transition] f=0881 countdown-clock tick=14 mode=expanding size=8 visible=106 sourceVisible=106/128 visibleBySquare=53,53 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.790,0.790 beatMultiplier=1.000,1.000 handoff=5 progress=0.813
+[cg:transition] f=0882 countdown-clock tick=14 mode=expanding size=8 visible=108 sourceVisible=108/128 visibleBySquare=54,54 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.810,0.810 beatMultiplier=1.000,1.000 handoff=5 progress=0.833
+[cg:transition] f=0883 countdown-clock tick=14 mode=expanding size=8 visible=110 sourceVisible=110/128 visibleBySquare=55,55 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.829,0.829 beatMultiplier=1.000,1.000 handoff=5 progress=0.853
+[cg:transition] f=0884 countdown-clock tick=14 mode=expanding size=8 visible=112 sourceVisible=112/128 visibleBySquare=56,56 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.847,0.847 beatMultiplier=1.000,1.000 handoff=5 progress=0.871
+[cg:transition] f=0885 countdown-clock tick=14 mode=expanding size=8 visible=114 sourceVisible=114/128 visibleBySquare=57,57 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.863,0.863 beatMultiplier=1.000,1.000 handoff=5 progress=0.888
+[cg:transition] f=0886 countdown-clock tick=14 mode=expanding size=8 visible=116 sourceVisible=116/128 visibleBySquare=58,58 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.879,0.879 beatMultiplier=1.000,1.000 handoff=5 progress=0.904
+[cg:transition] f=0887 countdown-clock tick=14 mode=expanding size=8 visible=118 sourceVisible=118/128 visibleBySquare=59,59 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.893,0.893 beatMultiplier=1.000,1.000 handoff=5 progress=0.918
+[cg:transition] f=0888 countdown-clock tick=14 mode=expanding size=8 visible=120 sourceVisible=120/128 visibleBySquare=60,60 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.906,0.906 beatMultiplier=1.000,1.000 handoff=5 progress=0.932
+[cg:transition] f=0889 countdown-clock tick=14 mode=expanding size=8 visible=122 sourceVisible=122/128 visibleBySquare=61,61 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.918,0.918 beatMultiplier=1.000,1.000 handoff=5 progress=0.944
+[cg:transition] f=0890 countdown-clock tick=14 mode=expanding size=8 visible=124 sourceVisible=124/128 visibleBySquare=62,62 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.928,0.928 beatMultiplier=1.000,1.000 handoff=5 progress=0.955
+[cg:transition] f=0892 countdown-clock tick=14 mode=expanding size=8 visible=126 sourceVisible=126/128 visibleBySquare=63,63 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.946,0.946 beatMultiplier=1.000,1.000 handoff=5 progress=0.973
+[cg:transition] f=0894 countdown-clock tick=14 mode=expanding size=8 visible=128 sourceVisible=128/128 visibleBySquare=64,64 dotSizes=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 waterfallProbability=0.959,0.959 beatMultiplier=1.000,1.000 handoff=5 progress=0.986
+[cg:plan] f=0899 countdown-snake-disappearance tick=15 sourceTick=14 selected=instant phase=move mode=instant cells=7
+[cg:plan] f=0899 countdown-effect mode=clock tick=15 evolution=yes evolutionTick=5 seed=1 cell=26 mode=expanding size=8 handoff=5 squares=2 safeText=31:17:41:23 squareGap=1 reserveExpansion=0 farSeparated=yes separation=61.847 motion=anchored,traveling beatOffset=no,yes beatMultiplier=1.000,0.250 reservations=32:9,80:48 placements=32:9,80:48 dots=824,825,826,827,828,829,830,831,919,1007,1095,1183,1271,1359,1447,1446,1445,1444,1443,1442,1441,1440,1352,1264,1176,1088,1000,912,913,914,915,916,917,918,1006,1094,1182,1270,1358,1357,1356,1355,1354,1353,1265,1177,1089,1001,1002,1003,1004,1005,1093,1181,1269,1268,1267,1266,1178,1090,1091,1092,1180,1179,4304,4305,4306,4307,4308,4309,4310,4311,4399,4487,4575,4663,4751,4839,4927,4926,4925,4924,4923,4922,4921,4920,4832,4744,4656,4568,4480,4392,4393,4394,4395,4396,4397,4398,4486,4574,4662,4750,4838,4837,4836,4835,4834,4833,4745,4657,4569,4481,4482,4483,4484,4485,4573,4661,4749,4748,4747,4746,4658,4570,4571,4572,4660,4659
 [cg:transition] f=0899 countdown-intro tick=15 step=0 colors=[0,0,0,0,0]
-[cg:transition] f=0899 countdown-clock tick=15 mode=clock size=2 visible=2 sourceVisible=2/8 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.000,0.000 handoff=59 progress=0.000
+[cg:transition] f=0899 countdown-clock tick=15 mode=expanding size=8 visible=2 sourceVisible=2/128 visibleBySquare=1,1 dotSizes=1,1 waterfallProbability=0.000,0.000 beatMultiplier=1.000,0.250 handoff=5 progress=0.000
 
 # draw volume
 blankFrames=0
 firstDrawnFrame=0
-totalFill=4034
+totalFill=9800

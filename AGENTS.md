@@ -314,30 +314,56 @@ and the console command.
 **Countdown synth timing.** `appearance.synth.defaultTiming.merges` authors
 `startProgress` and `endProgress` for `clock-to-snake` and
 `snake-to-bubbles`. Clock→snake is normalized to the complete countdown; the
-shipped snake→bubbles connector is explicitly three seconds and ends at the
-bubbles boundary. The resolver produces one exclusive lane: clock track,
+canonical snake→bubbles connector is explicitly three seconds and ends at the
+bubbles boundary. A complete score produces one exclusive lane: clock track,
 clock-to-snake connector, snake track, snake-to-bubbles connector, then bubbles
 track. Normal snake ownership continues until that connector begins. The
 connector follows one deterministic toroidal coverage cycle, wrapping at canvas
-edges and passing behind the timer while the snake fills the canvas. Crossing
+edges while the snake fills the canvas. Crossing
 an occupied snake cell is legal and only increments collision telemetry. By the
 final half-beat the body occupies every parent cell except its reserved level-0
 meal; the meal appears, completes full canvas coverage, and pulses with the
-head while the registered `strobe-stack` flicker runs across the complete body. At the connector end, the
+head while the registered `strobe-stack` flicker runs across the complete body.
+The simulation and death snapshot keep that complete coverage, while the render
+copy render-masks the single parent cell containing the current timer while
+retaining its underlying dots for later bubble refill. At the connector end, the
 meal joins the body and the complete death snapshot is atomically committed
-into the bubbles track's body-derived dot field. The bubbles background uses
+into the bubbles track. Its mixed subdivision levels render unchanged for the
+first bubbles beat. On each following beat, inherited cells subdivide by one
+level; cells already shown at level 3 hand ownership to the generated bubbles
+field. After four beats only generated bubbles remain. The bubbles background uses
 the deterministic `ink-shards` visibility map for both near-binary square
-gating and independent outer/refill contour displacement. Its regular spots
-stop before one off-centre final wipe clears and holds the board. The boolean
+gating and independent outer/refill contour displacement. Its field motion is
+one smooth out-and-back gesture every 1.5 beats: a zero-velocity ease reaches
+`0.24` temporal distance at the midpoint and returns to its exact starting
+sample. Its regular spots
+stop before one centered final wipe clears and holds the board. The `00:01`
+timer and its digit-avoidance bubbles share that exact pattern center.
+That same single timer parent cell excludes inherited snake particles and
+generated bubbles throughout the bubbles track; neighboring cells remain available.
+During the clock-to-snake birth ripple, parent-cell visibility resolves in the
+same explicit order: timer over snake over ripple. The ripple's simulation copy
+stays complete; only its render copy removes the timer and visible-snake cells.
+During the connector's expanding mode, the anchored clock block reveals
+clockwise and the outward-traveling block reveals counter-clockwise before both
+resolve to the snake origin.
+During the clock track, a far-separated traveling square may deterministically
+run independently from the anchored one-second square. Its shipped cadence
+blocks are `0.75 × 4`, `1.25 × 4`, `1.5 × 2`, `2 × 1`, and `2.5 × 2`.
+Each complete block resyncs on a whole main beat and keeps the existing seeded
+within-lifetime stagger. Selection is deterministic with an 85% attempt at each
+resync boundary, and a block starts only if it fully fits before the birth
+ripple, clock-track, or countdown-loop boundary.
+The boolean
 `countdownFramed.ui.noisePreview` controls the opacity, displacement, and
 flicker-color field previews; the shipped value is `false`.
 Numeric `startSeconds`, `durationSeconds`, and `evolution` remain
-explicit per-item overrides. `COUNTDOWN_SYNTH_TRACKS` is the visual timeline:
-one untimed entry fills the complete countdown, while any reduced or reordered
-untimed list without connections receives equal consecutive slices in array
-order. Only the exact shipped `clock > snake > bubbles` preset derives the two
-handcrafted connections; editing its track list makes `connections` empty and
-therefore produces hard cuts. An explicit short track may leave a gap, during
+explicit per-item overrides. `COUNTDOWN_SYNTH_TRACKS` is the visual timeline.
+The checked-in score includes the complete exclusive lane: clock track,
+clock-to-snake connector, snake track, snake-to-bubbles connector, then bubbles
+track. Its two handcrafted connections are authored explicitly. Any reduced or
+reordered untimed list without connections receives equal consecutive slices
+in array order. An explicit short track may leave a gap, during
 which only the timer renders. All windows are half-open `[start, end)`; overlaps
 are startup errors, and a connector must exactly bridge its source track's end
 to its destination track's start. Read `docs/countdown-timeline.md` before

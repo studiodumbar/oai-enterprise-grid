@@ -1,5 +1,5 @@
 // Timeline editing guide: docs/countdown-timeline.md
-const COUNT_FROM_SECONDS = 30;
+const COUNT_FROM_SECONDS = 180;
 const APPEARANCE_SLOT_SECONDS = COUNT_FROM_SECONDS / 3;
 const BUBBLES_START_SECONDS = APPEARANCE_SLOT_SECONDS * 2;
 const SNAKE_TO_BUBBLES_DURATION_SECONDS = 3;
@@ -15,12 +15,22 @@ const COUNTDOWN_SHARED_APPEARANCE = Object.freeze({
 
 const CLOCK_SETTINGS = Object.freeze({
   enabled: true,
-  palette: "flicker",
   durationSeconds: "auto",
   subdivisionLevel: 3,
   squareCount: 2,
   dotsPerSquare: 4,
   travelingSquareStaggerBeats: 0.2,
+  travelingSquareBeatOffset: Object.freeze({
+    enabled: true,
+    probability: 0.85,
+    patterns: Object.freeze([
+      Object.freeze({ id: "quick-four", durationBeats: 0.75, repeatCount: 4 }),
+      Object.freeze({ id: "five-four", durationBeats: 1.25, repeatCount: 4 }),
+      Object.freeze({ id: "slow-two", durationBeats: 1.5, repeatCount: 2 }),
+      Object.freeze({ id: "double-hold", durationBeats: 2, repeatCount: 1 }),
+      Object.freeze({ id: "long-two", durationBeats: 2.5, repeatCount: 2 }),
+    ]),
+  }),
   sizeWaterfall: Object.freeze({
     enabled: true,
     bothCells: true,
@@ -29,6 +39,7 @@ const CLOCK_SETTINGS = Object.freeze({
   farSeparation: Object.freeze({
     enabled: true,
     probability: 0.5,
+    minimumRadiusInCells: 3,
   }),
   birthRipple: Object.freeze({
     enabled: true,
@@ -56,7 +67,6 @@ const CLOCK_SETTINGS = Object.freeze({
 
 const SNAKE_SETTINGS = Object.freeze({
   enabled: true,
-  palette: "flicker",
   durationSeconds: "auto",
   lengthCells: 7,
   growAfterEachTick: true,
@@ -99,7 +109,6 @@ const SNAKE_SETTINGS = Object.freeze({
 
 const BUBBLES_SETTINGS = Object.freeze({
   enabled: true,
-  palette: "flicker",
   debug: Object.freeze({
     visualizeBubbles: false,
     opacity: 0.12,
@@ -113,21 +122,26 @@ const BUBBLES_SETTINGS = Object.freeze({
     radiusInCells: 1,
     radiusAtEndInCells: 6,
     durationBeats: 2.5,
-    timingCurve: Object.freeze([0.08, 0.82, 0.22, 1]),
+    timingCurve: Object.freeze([0.895, 0.03, 0.685, 0.22]),
+    refill: Object.freeze({
+      startBeforeTickEndBeats: 0.075,
+      timingCurve: Object.freeze([0.25, 0.46, 0.45, 0.94]),
+    }),
     radiusGrowthTimingCurve: Object.freeze([0.42, 0, 1, 1]),
     finalWipe: Object.freeze({
       enabled: true,
       startProgress: 0.9766666667,
       endProgress: 1,
       timingCurve: Object.freeze([0.8, 0, 1, 0]),
-      center: Object.freeze({ xProgress: 0.18, yProgress: 0.55 }),
+      center: Object.freeze({ xProgress: 0.5, yProgress: 0.5 }),
     }),
   }),
   visibilityMap: Object.freeze({
     enabled: true,
     beatWiggle: Object.freeze({
-      distance: 0.08,
-      timingCurve: Object.freeze([0.08, 0.82, 0.22, 1]),
+      durationBeats: 1.5,
+      distance: 0.24,
+      timingCurve: Object.freeze([0.42, 0, 0.58, 1]),
     }),
     displacement: Object.freeze({
       minimumInCells: 0.1,
@@ -155,17 +169,42 @@ const BUBBLES_SETTINGS = Object.freeze({
   dotMargin: 0,
 });
 
-// The complete effect score; defaultTiming resolves every exclusive window.
+// The complete score lets the synth resolve every exclusive track and connector.
 const COUNTDOWN_SYNTH_TRACKS = Object.freeze([
+  Object.freeze({
+    id: "clock-main",
+    use: "clock",
+    zIndex: 10,
+    settings: CLOCK_SETTINGS,
+  }),
   Object.freeze({
     id: "snake-main",
     use: "snake",
     zIndex: 20,
     settings: SNAKE_SETTINGS,
   }),
+  Object.freeze({
+    id: "bubbles-main",
+    use: "bubbles",
+    zIndex: 30,
+    settings: BUBBLES_SETTINGS,
+  }),
 ]);
 
-const COUNTDOWN_SYNTH_CONNECTIONS = Object.freeze([]);
+const COUNTDOWN_SYNTH_CONNECTIONS = Object.freeze([
+  Object.freeze({
+    id: "clock-snake",
+    from: "clock-main",
+    to: "snake-main",
+    use: "auto",
+  }),
+  Object.freeze({
+    id: "snake-bubbles",
+    from: "snake-main",
+    to: "bubbles-main",
+    use: "auto",
+  }),
+]);
 
 export const COUNTDOWN_FRAMED_CONFIG = {
   settings: {
@@ -173,7 +212,8 @@ export const COUNTDOWN_FRAMED_CONFIG = {
       ui: {
         noisePreview: false,
       },
-      palette: "countdown",
+      // palette: "mono",
+      timerFinalColor: "#ffffff",
       longSideCells: 12,
       // This composition has no center-cell endpoint, so even short sides can
       // use a complete extra row or column when the combined margins fit one.

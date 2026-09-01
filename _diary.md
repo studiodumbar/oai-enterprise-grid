@@ -2,7 +2,7 @@
 [ === tbd== ]
 
 [] throw errors by design if a setting is picked which was not ported for the composition
-
+[] progress bar on the 
 
 
 [ === wip === ]
@@ -14,19 +14,19 @@
 - other block to be offset, like in terms of timing 
 
 ## snake
-snake feels too repetitive
+[x]snake feels too repetitive
     > more vatiation
     > secondary movement
     > interesting details
 
 ## bubbles 
-- fill the composition completely
-- blocks feel a bit jumpy / jittery, before the explosion
-- more rhythm in the composition with grid block size
-- end at the center
+[x] fill the composition completely
+[x] blocks feel a bit jumpy / jittery, before the explosion
+[x] end at the center
+[] more rhythm in the composition with grid block size
 
 ## snake -> bubbles
-[] adjust decay transition
+[x] adjust decay transition
 
 
 [ === arc === ]

@@ -1,19 +1,16 @@
-import { populatePalettes } from "./palettes.js";
-
-const PALETTE_FAMILIES = {
+const PALETTES = {
     blue: ["#013566", "#004F99", "#0169CC", "#0285FF", "#48AAFF"],
     green: ["#003415", "#00692a", "#00a240", "#04b84c", "#8cdfad"],
     daybreak: ["#FF8201", "#FF9610", "#FFAF2F", "#FFC454", "#FFDC87"],
     mono: ["#303030", "#666666", "#aaaaaa", "#d5d5d5", "#ffffff"],
 };
-// Change this one value to recolor the app and every effect palette.
-const PALETTE_FAMILY = "blue";
+const DEFAULT_PALETTE = "mono";
 
 export const GLOBAL_CONFIG = {
     canvas: {
         background: "#000",
         // Initial preview and export frame. The Export panel may change it live.
-        aspectRatio: "2:1",
+        aspectRatio: "16:9",
         frameRate: 60,
     },
 
@@ -82,8 +79,8 @@ export const GLOBAL_CONFIG = {
         },
     },
 
-    // App-wide palette order; compositions can select another derived order.
-    palette: "mono",
+    // App-wide palette; compositions can select another authored ramp.
+    palette: DEFAULT_PALETTE,
 
     noiseFields: {
         enabled: true,
@@ -242,5 +239,5 @@ export const GLOBAL_CONFIG = {
         },
     },
 
-    palettes: populatePalettes(PALETTE_FAMILIES, PALETTE_FAMILY),
+    palettes: PALETTES,
 };

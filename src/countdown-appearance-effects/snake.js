@@ -547,11 +547,10 @@ function normalizedBlockedSnakeCells(
   return blocked;
 }
 
-/** Parent cells whose footprint intersects the configured timer text safe zone. */
+/** The one parent cell reserved for the countdown timer. */
 export function countdownSnakeTextSafeCells(
   { columns, rows },
   cellIndex,
-  textSafeZone,
 ) {
   const columnCount = requirePositiveInteger(columns, "Countdown snake columns");
   const rowCount = requirePositiveInteger(rows, "Countdown snake rows");
@@ -562,31 +561,7 @@ export function countdownSnakeTextSafeCells(
   if (textCellIndex >= columnCount * rowCount) {
     throw new RangeError("Countdown snake text cell must be inside the parent grid.");
   }
-  const safeZone = requireObject(textSafeZone, "Countdown snake text safe zone");
-  const width = requireFinitePositive(
-    safeZone.widthInCells,
-    "Countdown snake text safe-zone width",
-  );
-  const height = requireFinitePositive(
-    safeZone.heightInCells,
-    "Countdown snake text safe-zone height",
-  );
-  const textColumn = textCellIndex % columnCount;
-  const textRow = Math.floor(textCellIndex / columnCount);
-  const left = textColumn + 0.5 - width / 2;
-  const right = textColumn + 0.5 + width / 2;
-  const top = textRow + 0.5 - height / 2;
-  const bottom = textRow + 0.5 + height / 2;
-
-  return Array.from({ length: columnCount * rowCount }, (_, index) => index)
-    .filter(index => {
-      const column = index % columnCount;
-      const row = Math.floor(index / columnCount);
-      return column < right
-        && column + 1 > left
-        && row < bottom
-        && row + 1 > top;
-    });
+  return [textCellIndex];
 }
 
 /** A seeded shortest cardinal path, rerouted only when it crosses blocked cells. */

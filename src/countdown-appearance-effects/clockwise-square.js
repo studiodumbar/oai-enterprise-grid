@@ -1,11 +1,12 @@
 import { cubicBezierAt } from "../core/cubic-bezier.js";
 
-export function clockwiseGridDots(
+function rotatingGridDots(
   topLeftColumn,
   topLeftRow,
   size,
   gridColumns,
-  squareIndex = 0,
+  squareIndex,
+  direction,
 ) {
   const positions = [];
   let left = 0;
@@ -34,16 +35,56 @@ export function clockwiseGridDots(
       left += 1;
     }
   }
-  return positions.map((position, clockwiseIndex) => ({
-    column: topLeftColumn + position.column,
-    row: topLeftRow + position.row,
-    index: (topLeftRow + position.row) * gridColumns
-      + topLeftColumn + position.column,
+  return positions.map((position, clockwiseIndex) => {
+    const rotated = direction === "counter-clockwise"
+      ? { column: position.row, row: position.column }
+      : position;
+    return {
+      column: topLeftColumn + rotated.column,
+      row: topLeftRow + rotated.row,
+      index: (topLeftRow + rotated.row) * gridColumns
+        + topLeftColumn + rotated.column,
+      squareIndex,
+      clockwiseIndex,
+      palettePosition: clockwiseIndex / Math.max(1, positions.length - 1),
+      sizeInSubdivisions: 1,
+      rotationDirection: direction,
+    };
+  });
+}
+
+export function clockwiseGridDots(
+  topLeftColumn,
+  topLeftRow,
+  size,
+  gridColumns,
+  squareIndex = 0,
+) {
+  return rotatingGridDots(
+    topLeftColumn,
+    topLeftRow,
+    size,
+    gridColumns,
     squareIndex,
-    clockwiseIndex,
-    palettePosition: clockwiseIndex / Math.max(1, positions.length - 1),
-    sizeInSubdivisions: 1,
-  }));
+    "clockwise",
+  );
+}
+
+export function counterClockwiseGridDots(
+  topLeftColumn,
+  topLeftRow,
+  size,
+  gridColumns,
+  squareIndex = 0,
+) {
+  return rotatingGridDots(
+    topLeftColumn,
+    topLeftRow,
+    size,
+    gridColumns,
+    squareIndex,
+    "counter-clockwise",
+  );
 }
 
 export function clockwiseSquareDots(
