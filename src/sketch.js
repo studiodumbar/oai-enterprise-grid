@@ -51,6 +51,7 @@ new window.p5(p => {
   let interactiveFlockPanel = null;
   let lastPanelSyncTime = -Infinity;
   let compositionTimingOverrides = new Map();
+  let paletteOverride = null;
   let projectSeed = createProjectSeed();
   const pointer = { active: false, x: 0, y: 0 };
   const exportState = createExportState({
@@ -96,14 +97,17 @@ new window.p5(p => {
   }
 
   function resolvedRuntimeConfig(overrides = compositionTimingOverrides) {
-    if (overrides.size === 0) {
+    if (overrides.size === 0 && paletteOverride === null) {
       return {
         settings: SETTINGS,
         generatorDefinitions: GENERATOR_DEFINITIONS,
         compositionDefinitions: COMPOSITION_DEFINITIONS,
       };
     }
-    return createRuntimeConfig({ compositionTimingOverrides: overrides });
+    return createRuntimeConfig({
+      compositionTimingOverrides: overrides,
+      paletteOverride,
+    });
   }
 
   function createDirectorForRuntime(
@@ -171,6 +175,49 @@ new window.p5(p => {
     syncCompositionUi();
     renderPreview();
     return coreDuration;
+  }
+
+  function activePalette() {
+    return paletteOverride ?? GLOBAL_CONFIG.palette;
+  }
+
+  function usePaletteFromUi(name) {
+    if (inputLocked) return activePalette();
+    const previousPalette = paletteOverride;
+    const saved = director.snapshotProjectState();
+    let next = null;
+    paletteOverride = name;
+    try {
+      next = createDirectorForRuntime(runtime);
+      next.restoreProjectState(saved);
+      next.update(currentFrame(0));
+      next.seek(elapsed);
+    } catch (error) {
+      paletteOverride = previousPalette;
+      next?.dispose();
+      debug.config(
+        "palette-override state=failed palette=%s error=%s",
+        name,
+        error?.name ?? "Error",
+      );
+      throw error;
+    }
+
+    const previous = director;
+    director = next;
+    try {
+      previous.dispose();
+    } catch (error) {
+      debug.config(
+        "palette-override state=dispose-failed palette=%s error=%s",
+        name,
+        error?.name ?? "Error",
+      );
+    }
+    debug.config("palette-override state=applied palette=%s", name);
+    syncCompositionUi();
+    renderPreview();
+    return activePalette();
   }
 
   function currentFrame(dt = 0) {
@@ -558,6 +605,9 @@ new window.p5(p => {
       compositions: canonicalCompositions(),
       current: canonicalCompositionInspection,
       use: useCompositionFromConsole,
+      palettes: GLOBAL_CONFIG.palettes,
+      currentPalette: activePalette,
+      usePalette: usePaletteFromUi,
       noisePreviewVisible: () => noisePreviewPanel?.isVisible() ?? false,
       setNoisePreviewVisible,
     });
@@ -679,7 +729,7 @@ new window.p5(p => {
         ? director.generator("noiseGrid").noisePreviewSnapshot(options)
         : (director.inspect().compositionId === "countdown-framed"
           ? director.generator("countdownFramedGrid")
-            .countdownNoisePreviewSnapshot(options)
+            .countdownFieldPreviewSnapshot(options)
           : null),
     });
     flockPreviewPanel = createFlockPreviewPanel({

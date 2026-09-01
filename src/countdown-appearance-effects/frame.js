@@ -9,7 +9,7 @@ import { resolveCountdownBubblesDebugSettings } from "./bubbles-debug.js";
 const FRAME_TARGET_SALT = 2203;
 const FRAME_DIRECTION_SALT = 2207;
 const FRAME_CANDIDATE_SALT = 2213;
-const FRAME_VISIBILITY_SALT = 2219;
+const PROGRESS_EPSILON = 1e-9;
 
 function requireObject(value, label) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -42,6 +42,13 @@ function requireFinitePositive(value, label) {
 function requireFiniteNonNegative(value, label) {
   if (!Number.isFinite(value) || value < 0) {
     throw new RangeError(`${label} must be a finite non-negative number.`);
+  }
+  return value;
+}
+
+function requireFraction(value, label) {
+  if (!Number.isFinite(value) || value < 0 || value > 1) {
+    throw new RangeError(`${label} must be from zero to one.`);
   }
   return value;
 }
@@ -123,6 +130,33 @@ export function resolveCountdownFrameSettings(appearance) {
       "countdownFramed.appearance.effects.frame.avoidance.durationBeats must be at least one.",
     );
   }
+  const finalWipe = requireObject(
+    avoidance.finalWipe,
+    "countdownFramed.appearance.effects.frame.avoidance.finalWipe",
+  );
+  if (typeof finalWipe.enabled !== "boolean") {
+    throw new TypeError(
+      "countdownFramed.appearance.effects.frame.avoidance.finalWipe.enabled must be a boolean.",
+    );
+  }
+  const finalWipeStartProgress = requireFraction(
+    finalWipe.startProgress,
+    "countdownFramed.appearance.effects.frame.avoidance.finalWipe.startProgress",
+  );
+  const finalWipeEndProgress = requireFraction(
+    finalWipe.endProgress,
+    "countdownFramed.appearance.effects.frame.avoidance.finalWipe.endProgress",
+  );
+  if (finalWipeEndProgress <= finalWipeStartProgress) {
+    throw new RangeError(
+      "countdownFramed.appearance.effects.frame.avoidance.finalWipe.endProgress "
+      + "must be greater than startProgress.",
+    );
+  }
+  const finalWipeCenter = requireObject(
+    finalWipe.center,
+    "countdownFramed.appearance.effects.frame.avoidance.finalWipe.center",
+  );
   const numberSpacingInSubdivisions = requireFinitePositive(
     frame.numberSpacingInSubdivisions,
     "countdownFramed.appearance.effects.frame.numberSpacingInSubdivisions",
@@ -137,13 +171,50 @@ export function resolveCountdownFrameSettings(appearance) {
       "countdownFramed.appearance.effects.frame.dotMargin must be from zero up to one.",
     );
   }
-  const noiseFields = requireObject(
-    frame.noiseFields,
-    "countdownFramed.appearance.effects.frame.noiseFields",
+  const visibilityMap = requireObject(
+    frame.visibilityMap,
+    "countdownFramed.appearance.effects.frame.visibilityMap",
   );
+  if (typeof visibilityMap.enabled !== "boolean") {
+    throw new TypeError(
+      "countdownFramed.appearance.effects.frame.visibilityMap.enabled must be a boolean.",
+    );
+  }
   const beatWiggle = requireObject(
-    noiseFields.beatWiggle,
-    "countdownFramed.appearance.effects.frame.noiseFields.beatWiggle",
+    visibilityMap.beatWiggle,
+    "countdownFramed.appearance.effects.frame.visibilityMap.beatWiggle",
+  );
+  const displacement = requireObject(
+    visibilityMap.displacement,
+    "countdownFramed.appearance.effects.frame.visibilityMap.displacement",
+  );
+  const displacementMinimumInCells = requireFiniteNonNegative(
+    displacement.minimumInCells,
+    "countdownFramed.appearance.effects.frame.visibilityMap.displacement.minimumInCells",
+  );
+  const displacementRadiusRatio = requireFiniteNonNegative(
+    displacement.radiusRatio,
+    "countdownFramed.appearance.effects.frame.visibilityMap.displacement.radiusRatio",
+  );
+  if (displacementRadiusRatio > 1) {
+    throw new RangeError(
+      "countdownFramed.appearance.effects.frame.visibilityMap.displacement.radiusRatio "
+      + "must be from zero to one.",
+    );
+  }
+  const displacementMaximumInCells = requireFiniteNonNegative(
+    displacement.maximumInCells,
+    "countdownFramed.appearance.effects.frame.visibilityMap.displacement.maximumInCells",
+  );
+  if (displacementMaximumInCells < displacementMinimumInCells) {
+    throw new RangeError(
+      "countdownFramed.appearance.effects.frame.visibilityMap.displacement.maximumInCells "
+      + "cannot be smaller than minimumInCells.",
+    );
+  }
+  const refillOffset = requireObject(
+    displacement.refillOffset,
+    "countdownFramed.appearance.effects.frame.visibilityMap.displacement.refillOffset",
   );
 
   return Object.freeze({
@@ -170,16 +241,51 @@ export function resolveCountdownFrameSettings(appearance) {
         avoidance.radiusGrowthTimingCurve,
         "countdownFramed.appearance.effects.frame.avoidance.radiusGrowthTimingCurve",
       )),
+      finalWipe: Object.freeze({
+        enabled: finalWipe.enabled,
+        startProgress: finalWipeStartProgress,
+        endProgress: finalWipeEndProgress,
+        timingCurve: Object.freeze(normalizeBezierCurve(
+          finalWipe.timingCurve,
+          "countdownFramed.appearance.effects.frame.avoidance.finalWipe.timingCurve",
+        )),
+        center: Object.freeze({
+          xProgress: requireFraction(
+            finalWipeCenter.xProgress,
+            "countdownFramed.appearance.effects.frame.avoidance.finalWipe.center.xProgress",
+          ),
+          yProgress: requireFraction(
+            finalWipeCenter.yProgress,
+            "countdownFramed.appearance.effects.frame.avoidance.finalWipe.center.yProgress",
+          ),
+        }),
+      }),
     }),
-    visibilityNoiseMotion: Object.freeze({
+    visibilityMap: Object.freeze({
+      enabled: visibilityMap.enabled,
       beatWiggleDistance: requireFiniteNonNegative(
         beatWiggle.distance,
-        "countdownFramed.appearance.effects.frame.noiseFields.beatWiggle.distance",
+        "countdownFramed.appearance.effects.frame.visibilityMap.beatWiggle.distance",
       ),
       timingCurve: Object.freeze(normalizeBezierCurve(
         beatWiggle.timingCurve,
-        "countdownFramed.appearance.effects.frame.noiseFields.beatWiggle.timingCurve",
+        "countdownFramed.appearance.effects.frame.visibilityMap.beatWiggle.timingCurve",
       )),
+      displacement: Object.freeze({
+        minimumInCells: displacementMinimumInCells,
+        radiusRatio: displacementRadiusRatio,
+        maximumInCells: displacementMaximumInCells,
+        refillOffset: Object.freeze({
+          columns: requireNonNegativeInteger(
+            refillOffset.columns,
+            "countdownFramed.appearance.effects.frame.visibilityMap.displacement.refillOffset.columns",
+          ),
+          rows: requireNonNegativeInteger(
+            refillOffset.rows,
+            "countdownFramed.appearance.effects.frame.visibilityMap.displacement.refillOffset.rows",
+          ),
+        }),
+      }),
     }),
     growTowardZero: frame.growTowardZero,
     growthTimingCurve: Object.freeze(normalizeBezierCurve(
@@ -749,16 +855,80 @@ export function countdownFrameAvoidanceRadiusAt(linearProgress, avoidance) {
   return start + (end - start) * eased;
 }
 
-export function countdownFrameNoiseBeatOffsetAt(linearProgress, motion) {
+export function countdownFrameFieldBeatOffsetAt(linearProgress, motion) {
   const progress = Math.max(0, Math.min(1, Number(linearProgress) || 0));
   const distance = requireFiniteNonNegative(
     motion?.beatWiggleDistance,
-    "Countdown frame visibility-noise beat wiggle distance",
+    "Countdown frame visibility-map beat wiggle distance",
   );
   const rampProgress = progress < 0.5
     ? progress * 2
     : (1 - progress) * 2;
   return distance * cubicBezierAt(rampProgress, motion.timingCurve);
+}
+
+export function countdownFrameFinalWipeAt({
+  layout,
+  progress,
+  subdivisionLevel,
+  finalWipe,
+  timingCurve,
+  displacementMaximumInCells = 0,
+}) {
+  if (finalWipe?.enabled !== true) return null;
+  const linearProgress = Math.max(0, Math.min(1, Number(progress) || 0));
+  if (linearProgress + PROGRESS_EPSILON < finalWipe.startProgress) return null;
+  const span = finalWipe.endProgress - finalWipe.startProgress;
+  if (!Number.isFinite(span) || span <= 0) {
+    throw new RangeError("Countdown frame final wipe requires an increasing progress range.");
+  }
+  const rawWipeProgress = Math.max(
+    0,
+    (linearProgress - finalWipe.startProgress) / span,
+  );
+  const wipeProgress = rawWipeProgress + PROGRESS_EPSILON >= 1
+    ? 1
+    : rawWipeProgress;
+  const easedProgress = cubicBezierAt(wipeProgress, timingCurve);
+  const columns = requirePositiveInteger(
+    layout?.columns,
+    "Countdown final-wipe columns",
+  );
+  const rows = requirePositiveInteger(layout?.rows, "Countdown final-wipe rows");
+  const level = requireNonNegativeInteger(
+    subdivisionLevel,
+    "Countdown final-wipe subdivision level",
+  );
+  const maximumDisplacement = requireFiniteNonNegative(
+    displacementMaximumInCells,
+    "Countdown final-wipe displacement maximum",
+  );
+  const subdivisions = 1 << level;
+  const width = columns * subdivisions;
+  const height = rows * subdivisions;
+  const x = width * finalWipe.center.xProgress;
+  const y = height * finalWipe.center.yProgress;
+  const maximumRadius = Math.max(
+    Math.hypot(x, y),
+    Math.hypot(width - x, y),
+    Math.hypot(x, height - y),
+    Math.hypot(width - x, height - y),
+  )
+    + (maximumDisplacement + 0.25) * subdivisions;
+  return {
+    progress: wipeProgress,
+    easedProgress,
+    phase: wipeProgress < 1 ? "emptying" : "holding",
+    radiusInCells: maximumRadius / subdivisions,
+    circle: {
+      digitIndex: null,
+      x,
+      y,
+      radius: maximumRadius * easedProgress,
+      refillRadius: 0,
+      finalWipe: true,
+    },
+  };
 }
 
 export function countdownFrameDigitCircles({
@@ -848,12 +1018,144 @@ export function countdownFrameTextSafeRectangle({
   };
 }
 
+function resolveFrameVisibilityMap(plan, visibilityMap) {
+  if (visibilityMap?.enabled !== true) return null;
+  const {
+    data,
+    width,
+    height,
+    layer,
+    subdivisions,
+    displacement,
+  } = visibilityMap;
+  if (!ArrayBuffer.isView(data) || data.length !== width * height) {
+    throw new TypeError(
+      "Countdown frame visibility map requires a complete sample plane.",
+    );
+  }
+  if (width !== plan.gridColumns || height !== plan.gridRows) {
+    throw new RangeError(
+      "Countdown frame visibility map must match the frame dot grid.",
+    );
+  }
+  requirePositiveInteger(subdivisions, "Countdown frame visibility-map subdivisions");
+  const displacementSettings = requireObject(
+    displacement,
+    "Countdown frame visibility-map displacement",
+  );
+  const minimum = requireFiniteNonNegative(
+    displacementSettings.minimumInCells,
+    "Countdown frame visibility-map minimum displacement",
+  );
+  const ratio = requireFiniteNonNegative(
+    displacementSettings.radiusRatio,
+    "Countdown frame visibility-map radius displacement ratio",
+  );
+  const maximum = requireFiniteNonNegative(
+    displacementSettings.maximumInCells,
+    "Countdown frame visibility-map maximum displacement",
+  );
+  if (maximum < minimum) {
+    throw new RangeError(
+      "Countdown frame visibility-map maximum displacement cannot be smaller than its minimum.",
+    );
+  }
+  const refillOffset = requireObject(
+    displacementSettings.refillOffset,
+    "Countdown frame visibility-map refill offset",
+  );
+  return {
+    data,
+    width,
+    height,
+    layer,
+    subdivisions,
+    displacement: {
+      minimum,
+      ratio,
+      maximum,
+      refillColumns: requireNonNegativeInteger(
+        refillOffset.columns,
+        "Countdown frame visibility-map refill column offset",
+      ),
+      refillRows: requireNonNegativeInteger(
+        refillOffset.rows,
+        "Countdown frame visibility-map refill row offset",
+      ),
+    },
+  };
+}
+
+function frameFieldSampleAt(field, dot, columnOffset = 0, rowOffset = 0) {
+  if (field === null) return 0.5;
+  const column = (dot.column + columnOffset) % field.width;
+  const row = (dot.row + rowOffset) % field.height;
+  return field.data[row * field.width + column] / 255;
+}
+
+function displacedFrameRadius(field, radius, sample) {
+  if (field === null || radius <= 0) return radius;
+  const { minimum, ratio, maximum } = field.displacement;
+  const amplitude = Math.min(
+    maximum * field.subdivisions,
+    Math.max(minimum * field.subdivisions, radius * ratio),
+  );
+  return Math.max(0, radius + (sample * 2 - 1) * amplitude);
+}
+
+function frameAvoidedSquareIndices(plan, avoidanceCircles, field) {
+  return plan.squares
+    .filter(square => square.dots.some(dot => avoidanceCircles.some(circle => {
+      const distance = Math.hypot(
+        dot.column + 0.5 - circle.x,
+        dot.row + 0.5 - circle.y,
+      );
+      const outerRadius = displacedFrameRadius(
+        field,
+        circle.radius,
+        frameFieldSampleAt(field, dot),
+      );
+      const refillRadius = displacedFrameRadius(
+        field,
+        circle.refillRadius ?? 0,
+        frameFieldSampleAt(
+          field,
+          dot,
+          field?.displacement.refillColumns ?? 0,
+          field?.displacement.refillRows ?? 0,
+        ),
+      );
+      return outerRadius > 0
+        && distance < outerRadius
+        && distance >= refillRadius;
+    })))
+    .map(square => square.squareIndex);
+}
+
+export function countdownFrameAvoidedSquareIndices(
+  plan,
+  avoidanceCircles = [],
+  visibilityMap = null,
+) {
+  if (!plan || !Array.isArray(plan.squares)) {
+    throw new TypeError("Countdown frame avoidance requires a generated plan.");
+  }
+  if (!Array.isArray(avoidanceCircles)) {
+    throw new TypeError("Countdown frame avoidance circles must be an array.");
+  }
+  return frameAvoidedSquareIndices(
+    plan,
+    avoidanceCircles,
+    resolveFrameVisibilityMap(plan, visibilityMap),
+  );
+}
+
 export function countdownFrameAt(
   plan,
   linearProgress,
   settings,
   avoidanceCircles = [],
-  visibilityNoise = null,
+  visibilityMap = null,
   dotExclusionCircles = [],
   squareExclusionRectangles = [],
 ) {
@@ -897,17 +1199,10 @@ export function countdownFrameAt(
     }
   }
   const progress = Math.max(0, Math.min(1, Number(linearProgress) || 0));
-  const circleAvoidedSquares = new Set(plan.squares
-    .filter(square => square.dots.some(dot => avoidanceCircles.some(circle => {
-      const distance = Math.hypot(
-        dot.column + 0.5 - circle.x,
-        dot.row + 0.5 - circle.y,
-      );
-      return circle.radius > 0
-        && distance < circle.radius
-        && distance >= (circle.refillRadius ?? 0);
-    })))
-    .map(square => square.squareIndex));
+  const field = resolveFrameVisibilityMap(plan, visibilityMap);
+  const circleAvoidedSquares = new Set(
+    frameAvoidedSquareIndices(plan, avoidanceCircles, field),
+  );
   const rectangleAvoidedSquares = new Set(plan.squares
     .filter(square => square.dots.some(dot => (
       squareExclusionRectangles.some(rectangle => (
@@ -932,28 +1227,10 @@ export function countdownFrameAt(
     ) < circle.radius,
   ));
   let dots = eligibleDots;
-  if (visibilityNoise?.enabled === true) {
-    const { data, width, height, layer, edgeWidthInSquares, seed } = visibilityNoise;
-    if (!ArrayBuffer.isView(data) || data.length !== width * height) {
-      throw new TypeError("Countdown frame visibility noise requires a complete sample plane.");
-    }
-    if (width !== plan.gridColumns || height !== plan.gridRows) {
-      throw new RangeError("Countdown frame visibility noise must match the frame dot grid.");
-    }
-    requirePositiveInteger(edgeWidthInSquares, "Countdown frame noise edge width");
-    const visibilitySeed = requireNonNegativeInteger(
-      seed,
-      "Countdown frame visibility seed",
-    ) >>> 0;
+  if (field !== null) {
     dots = eligibleDots.filter(dot => {
-      if (dot.edgeDistance === null || dot.edgeDistance >= edgeWidthInSquares) {
-        return true;
-      }
-      const edgeInfluence = 1 - dot.edgeDistance / edgeWidthInSquares;
-      const sample = data[dot.row * width + dot.column] / 255;
-      const noiseFill = noiseVisibilityFill(sample, layer);
-      const fill = 1 - (1 - noiseFill) * edgeInfluence;
-      return hashUnit(visibilitySeed, dot.index, FRAME_VISIBILITY_SALT) < fill;
+      const sample = frameFieldSampleAt(field, dot);
+      return noiseVisibilityFill(sample, field.layer) >= 0.5;
     });
   }
   dots = dots.map(dot => ({ ...dot }));
@@ -965,7 +1242,7 @@ export function countdownFrameAt(
     rectangleAvoidedSquareCount: rectangleAvoidedSquares.size,
     eligibleVisibleCount: eligibleDots.length,
     snakeHiddenCount: timerEligibleDots.length - eligibleDots.length,
-    noiseHiddenCount: eligibleDots.length - dots.length,
+    fieldHiddenCount: eligibleDots.length - dots.length,
     dots,
   };
 }

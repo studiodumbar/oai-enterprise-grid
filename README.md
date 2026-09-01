@@ -722,7 +722,14 @@ may cross itself without ending the run; crossings are deterministic telemetry
 events. During the final half-beat the meal completes full coverage and pulses
 with the head while the registered `strobe-stack` flicker runs across the body.
 At `2T/3`, the meal and complete body atomically become
-the bubbles track's body-derived noise field, which persists through `T`.
+the bubbles track's body-derived dot field, which persists through `T`.
+
+The bubbles background is gated and contour-displaced by the deterministic
+`ink-shards` visibility field. Its regular spots use a faster reference
+ease-out, while a dense four-scale shard collage exposes more background dots.
+One off-centre final wipe reaches full coverage only at the loop boundary. Set
+`countdownFramed.ui.noisePreview` to `true` to open its opacity, displacement,
+and flicker-color previews automatically.
 
 The resolved lane is exclusive: clock `[0, T/6)`, clock→snake `[T/6, T/3)`,
 snake `[T/3, 2T/3 - 3s)`, snake→bubbles `[2T/3 - 3s, 2T/3)`, then bubbles `[2T/3, T)`.

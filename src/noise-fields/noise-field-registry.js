@@ -14,7 +14,7 @@
 //     defaults: { ... },                 // mode-owned settings, frozen
 //     loopable: true,                    // can it close a seamless loop?
 //     normalize(settings) -> settings,   // throws on invalid authored values
-//     createField({ settings, loopPeriod, seed }) -> field,
+//     createField({ settings, loopPeriod, seed, seedBits }) -> field,
 //   }
 //
 // A field:

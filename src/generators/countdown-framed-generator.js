@@ -22,12 +22,14 @@ import {
 } from "../countdown-effect-synth/index.js";
 import {
   countdownFrameAt,
+  countdownFrameAvoidedSquareIndices,
   countdownFrameAvoidanceEnvelopesAt,
   countdownFrameAvoidanceRadiusAt,
   countdownFrameDigitCircles,
   countdownFrameDotColors,
   countdownFrameGrowthAt,
-  countdownFrameNoiseBeatOffsetAt,
+  countdownFrameFieldBeatOffsetAt,
+  countdownFrameFinalWipeAt,
   countdownFramePlan,
   countdownFramePlanWithSnakeTrail,
   countdownFrameRadiusAt,
@@ -464,45 +466,47 @@ export class CountdownFramedGenerator {
     this.frameSettings = this.hasBubblesTrack
       ? resolveCountdownFrameSettings(effectAppearance("bubbles", "frame"))
       : null;
-    this.frameNoiseEdgeWidth = 0;
-    this.frameNoiseModes = null;
-    this.frameNoiseSettings = null;
-    this.frameNoiseSampler = null;
+    this.frameFieldModes = null;
+    this.frameFieldSettings = null;
+    this.frameFieldSampler = null;
     this.framePalette = null;
     this.frameFlicker = null;
     if (this.frameSettings !== null) {
-      const authoredFrameNoise = effectSettings("bubbles", "frame")?.noiseFields;
+      const authoredVisibilityMap = effectSettings(
+        "bubbles",
+        "frame",
+      )?.visibilityMap;
       if (
-        !authoredFrameNoise
-        || typeof authoredFrameNoise !== "object"
-        || Array.isArray(authoredFrameNoise)
+        !authoredVisibilityMap
+        || typeof authoredVisibilityMap !== "object"
+        || Array.isArray(authoredVisibilityMap)
       ) {
         throw new TypeError(
-          "countdownFramed.appearance.effects.frame.noiseFields must be an object.",
+          "countdownFramed.appearance.effects.frame.visibilityMap must be an object.",
         );
       }
-      this.frameNoiseEdgeWidth = requireNonNegativeInteger(
-        authoredFrameNoise.edgeWidthInSquares,
-        "countdownFramed.appearance.effects.frame.noiseFields.edgeWidthInSquares",
-      );
-      if (this.frameNoiseEdgeWidth === 0) {
-        throw new RangeError(
-          "countdownFramed.appearance.effects.frame.noiseFields.edgeWidthInSquares must be positive.",
+      const authoredField = authoredVisibilityMap.field;
+      if (!authoredField || typeof authoredField !== "object" || Array.isArray(authoredField)) {
+        throw new TypeError(
+          "countdownFramed.appearance.effects.frame.visibilityMap.field must be an object.",
         );
       }
-      this.frameNoiseModes = noiseFieldModes ?? createNoiseFieldRegistry();
-      this.frameNoiseSettings = resolveNoiseFieldSettings(
+      this.frameFieldModes = noiseFieldModes ?? createNoiseFieldRegistry();
+      this.frameFieldSettings = resolveNoiseFieldSettings(
         settings?.noiseFields ?? {},
-        authoredFrameNoise,
-        { modeRegistry: this.frameNoiseModes, timing: options.timing },
+        {
+          enabled: authoredVisibilityMap.enabled,
+          layers: { visibility: authoredField },
+        },
+        { modeRegistry: this.frameFieldModes, timing: options.timing },
       );
-      if (this.frameNoiseSettings.layers.visibility.holdSeconds !== 0) {
+      if (this.frameFieldSettings.layers.visibility.holdSeconds !== 0) {
         throw new RangeError(
-          "Countdown framed frame visibility noise requires holdSeconds to be zero.",
+          "Countdown framed frame visibility map requires holdSeconds to be zero.",
         );
       }
-      this.frameNoiseSampler = new NoiseFieldSampler({
-        modeRegistry: this.frameNoiseModes,
+      this.frameFieldSampler = new NoiseFieldSampler({
+        modeRegistry: this.frameFieldModes,
       });
       this.framePalette = countdownPalette(
         { palette: this.frameSettings.palette },
@@ -656,9 +660,9 @@ export class CountdownFramedGenerator {
         this.frameSettings.growthTimingCurve,
       );
       debug.config(
-        "countdown-effect mode=bubbles-noise-motion beatWiggleDistance=%.3f curve=%j",
-        this.frameSettings.visibilityNoiseMotion.beatWiggleDistance,
-        this.frameSettings.visibilityNoiseMotion.timingCurve,
+        "countdown-effect mode=bubbles-field-motion beatWiggleDistance=%.3f curve=%j",
+        this.frameSettings.visibilityMap.beatWiggleDistance,
+        this.frameSettings.visibilityMap.timingCurve,
       );
       debug.config(
         "countdown-effect mode=bubbles-debug visualize=%s opacity=%.3f",
@@ -675,16 +679,21 @@ export class CountdownFramedGenerator {
         frameFlicker.modeSettings.speed,
         frameFlicker.modeSettings.spatialScale,
       );
-      const visibilityNoise = this.frameNoiseSettings.layers.visibility;
+      const visibilityField = this.frameFieldSettings.layers.visibility;
       debug.config(
-        "countdown-effect mode=bubbles-visibility-noise enabled=%s field=%s edgeWidth=%d scale=%.3f threshold=%.3f softness=%.3f seed=%d",
-        this.frameNoiseSettings.enabled ? "yes" : "no",
-        visibilityNoise.mode,
-        this.frameNoiseEdgeWidth,
-        visibilityNoise.scale,
-        visibilityNoise.threshold,
-        visibilityNoise.softness,
-        visibilityNoise.seed,
+        "countdown-effect mode=bubbles-visibility-map enabled=%s field=%s scale=%.3f threshold=%.3f softness=%.3f seed=%d displacementMinCells=%.3f displacementRatio=%.3f displacementMaxCells=%.3f finalWipeStart=%.3f finalWipeEnd=%.3f finalWipeCurve=%j",
+        this.frameFieldSettings.enabled ? "yes" : "no",
+        visibilityField.mode,
+        visibilityField.scale,
+        visibilityField.threshold,
+        visibilityField.softness,
+        visibilityField.seed,
+        this.frameSettings.visibilityMap.displacement.minimumInCells,
+        this.frameSettings.visibilityMap.displacement.radiusRatio,
+        this.frameSettings.visibilityMap.displacement.maximumInCells,
+        this.frameSettings.avoidance.finalWipe.startProgress,
+        this.frameSettings.avoidance.finalWipe.endProgress,
+        this.frameSettings.avoidance.finalWipe.timingCurve,
       );
     } else {
       debug.config("countdown-effect mode=bubbles enabled=no reason=no-track");
@@ -734,9 +743,10 @@ export class CountdownFramedGenerator {
     this.frameAvoidanceCircles = [];
     this.frameTextSafeRectangle = null;
     this.frameAvoidanceRadiusInCells = this.frameSettings?.avoidance.radiusInCells ?? 0;
-    this.frameVisibilityPlane = null;
-    this.frameNoiseTemporalOffset = 0;
-    this.frameNoiseWigglePhase = "out";
+    this.frameVisibilityMap = null;
+    this.frameFieldTemporalOffset = 0;
+    this.frameFieldWigglePhase = "out";
+    this.frameFieldPlanSignature = null;
     this.frameGrowthProgress = 0;
     this.birthRippleDebugState = {
       primaryActive: false,
@@ -753,6 +763,9 @@ export class CountdownFramedGenerator {
       dead: false,
       committed: false,
       beatIndex: -1,
+    };
+    this.bubblesFieldDebugState = {
+      phases: new Map(),
     };
     this.resize(runtime.viewport());
   }
@@ -896,14 +909,14 @@ export class CountdownFramedGenerator {
           this.tick,
           localTime - this.tick * this.tickSeconds,
         );
-        this.sampleFrameVisibility(this.elapsed);
+        this.sampleFrameVisibilityMap(this.elapsed);
         this.prepareSnakeBubbleRenderPlan();
         this.frameFrame = countdownFrameAt(
           this.frameRenderPlan,
           this.frameFrame?.linearProgress ?? 0,
           this.frameSettings,
           this.frameAvoidanceCircles,
-          this.frameVisibilityPlane,
+          this.frameVisibilityMap,
           [],
         );
       }
@@ -1571,6 +1584,10 @@ export class CountdownFramedGenerator {
       0,
       Math.min(1, beatElapsed / this.tickSeconds),
     );
+    const ownedBeatCount = effectTicks.endTick - effectTicks.startTick + 1;
+    const trackProgress = Math.max(0, Math.min(1, (
+      tick - effectTicks.startTick + beatFraction
+    ) / ownedBeatCount));
     const bubbles = [];
     const lifetime = this.frameSettings.avoidance.durationBeats;
     const historyLength = Math.ceil(lifetime);
@@ -1579,6 +1596,13 @@ export class CountdownFramedGenerator {
       if (ageBeats >= lifetime) continue;
       const sourceTick = tick - tickOffset;
       if (sourceTick < effectTicks.startTick) continue;
+      const sourceProgress = (
+        sourceTick - effectTicks.startTick
+      ) / ownedBeatCount;
+      if (
+        this.frameSettings.avoidance.finalWipe.enabled
+        && sourceProgress >= this.frameSettings.avoidance.finalWipe.startProgress
+      ) continue;
       const sourceCellIndex = countdownCellIndex(
         this.projectSeed,
         sourceTick,
@@ -1586,9 +1610,8 @@ export class CountdownFramedGenerator {
         this.minimumCellDistance,
         this.countFromSeconds,
       );
-      const sourceEvolution = this.effectTicks("bubbles", sourceTick);
       const radiusInCells = countdownFrameAvoidanceRadiusAt(
-        sourceEvolution.evolutionProgress,
+        sourceProgress,
         this.frameSettings.avoidance,
       );
       const envelopes = countdownFrameAvoidanceEnvelopesAt(
@@ -1605,6 +1628,7 @@ export class CountdownFramedGenerator {
         refillEnvelope: envelopes.refillEnvelope,
       }).map(circle => ({ ...circle, sourceTick }));
       bubbles.push({
+        kind: "ink-spot",
         sourceTick,
         sourceCellIndex,
         ageBeats,
@@ -1613,33 +1637,85 @@ export class CountdownFramedGenerator {
         circles,
       });
     }
+    const finalWipe = countdownFrameFinalWipeAt({
+      layout: this.layout,
+      progress: trackProgress,
+      subdivisionLevel: this.frameSettings.subdivisionLevel,
+      finalWipe: this.frameSettings.avoidance.finalWipe,
+      timingCurve: this.frameSettings.avoidance.finalWipe.timingCurve,
+      displacementMaximumInCells:
+        this.frameSettings.visibilityMap.displacement.maximumInCells,
+    });
+    if (finalWipe !== null) {
+      bubbles.push({
+        kind: "final-wipe",
+        sourceTick: effectTicks.endTick,
+        sourceCellIndex: null,
+        ageBeats: (
+          trackProgress - this.frameSettings.avoidance.finalWipe.startProgress
+        ) * ownedBeatCount,
+        radiusInCells: finalWipe.radiusInCells,
+        phase: finalWipe.phase,
+        emptyEnvelope: finalWipe.easedProgress,
+        refillEnvelope: 0,
+        progress: finalWipe.progress,
+        circles: [{ ...finalWipe.circle, sourceTick: effectTicks.endTick }],
+      });
+    }
     this.frameAvoidanceBubbles = bubbles;
     this.frameAvoidanceCircles = bubbles.flatMap(bubble => bubble.circles);
   }
 
-  sampleFrameVisibility(time) {
-    if (!this.framePlan || !this.frameNoiseSettings.enabled) {
-      this.frameVisibilityPlane = null;
+  sampleFrameVisibilityMap(time) {
+    if (!this.framePlan || !this.frameFieldSettings.enabled) {
+      this.frameVisibilityMap = null;
       return;
     }
     const localTime = time % this.durationSeconds;
-    const plane = this.frameNoiseSampler.samplePlane({
+    const plane = this.frameFieldSampler.samplePlane({
       name: "visibility",
       width: this.framePlan.gridColumns,
       height: this.framePlan.gridRows,
       progress: localTime / this.durationSeconds,
       timeSeconds: localTime,
-      temporalOffset: this.frameNoiseTemporalOffset,
+      temporalOffset: this.frameFieldTemporalOffset,
       projectSeed: this.projectSeed,
-      settings: this.frameNoiseSettings,
+      settings: this.frameFieldSettings,
     });
-    this.frameVisibilityPlane = {
+    this.frameVisibilityMap = {
       enabled: true,
       ...plane,
-      layer: this.frameNoiseSettings.layers.visibility,
-      edgeWidthInSquares: this.frameNoiseEdgeWidth,
-      seed: (this.projectSeed ^ this.frameNoiseSettings.layers.visibility.seed) >>> 0,
+      subdivisions: 1 << this.frameSettings.subdivisionLevel,
+      layer: this.frameFieldSettings.layers.visibility,
+      displacement: this.frameSettings.visibilityMap.displacement,
     };
+    const signature = [
+      plane.width,
+      plane.height,
+      this.projectSeed,
+      this.frameFieldSettings.layers.visibility.mode,
+    ].join(":");
+    if (signature !== this.frameFieldPlanSignature) {
+      let minimum = 255;
+      let maximum = 0;
+      for (const value of plane.data) {
+        minimum = Math.min(minimum, value);
+        maximum = Math.max(maximum, value);
+      }
+      debug.plan(
+        "countdown-bubbles-field state=created field=%s columns=%d rows=%d seed=%d minimum=%d maximum=%d displacementMinCells=%.3f displacementRatio=%.3f displacementMaxCells=%.3f",
+        this.frameFieldSettings.layers.visibility.mode,
+        plane.width,
+        plane.height,
+        this.frameFieldSettings.layers.visibility.seed,
+        minimum,
+        maximum,
+        this.frameSettings.visibilityMap.displacement.minimumInCells,
+        this.frameSettings.visibilityMap.displacement.radiusRatio,
+        this.frameSettings.visibilityMap.displacement.maximumInCells,
+      );
+      this.frameFieldPlanSignature = signature;
+    }
   }
 
   enter(frame = {}) {
@@ -1705,18 +1781,18 @@ export class CountdownFramedGenerator {
       );
     const beatElapsed = localTime - nextTick * this.tickSeconds;
     const beatProgress = beatElapsed / this.tickSeconds;
-    const previousNoiseWigglePhase = this.frameNoiseWigglePhase;
-    this.frameNoiseWigglePhase = this.frameSettings === null
+    const previousFieldWigglePhase = this.frameFieldWigglePhase;
+    this.frameFieldWigglePhase = this.frameSettings === null
       ? "out"
       : (beatProgress < 0.5 ? "out" : "back");
-    this.frameNoiseTemporalOffset = this.frameSettings === null
+    this.frameFieldTemporalOffset = this.frameSettings === null
       ? 0
-      : countdownFrameNoiseBeatOffsetAt(
+      : countdownFrameFieldBeatOffsetAt(
         beatProgress,
-        this.frameSettings.visibilityNoiseMotion,
+        this.frameSettings.visibilityMap,
       );
-    const noiseWiggleChanged = this.frameNoiseWigglePhase
-      !== previousNoiseWigglePhase;
+    const fieldWiggleChanged = this.frameFieldWigglePhase
+      !== previousFieldWigglePhase;
     const nextRevealStep = Math.min(
       this.revealStepCount,
       Math.floor(beatElapsed / this.revealStepSeconds),
@@ -1799,16 +1875,17 @@ export class CountdownFramedGenerator {
     const clockDebugChanged = nextClockFrame?.birthRipple === null
       && clockChanged;
     const previousAvoidancePhases = this.frameAvoidanceBubbles
-      .map(bubble => `${bubble.sourceTick}:${bubble.phase}`)
+      .map(bubble => `${bubble.kind}:${bubble.sourceTick}:${bubble.phase}`)
       .join(",");
     if (this.hasBubblesTrack) this.prepareFrameAvoidance(nextTick, beatElapsed);
     this.emitBubblesDebugTransition();
+    this.emitBubblesFieldTransitions();
     const avoidancePhases = this.frameAvoidanceBubbles
-      .map(bubble => `${bubble.sourceTick}:${bubble.phase}`)
+      .map(bubble => `${bubble.kind}:${bubble.sourceTick}:${bubble.phase}`)
       .join(",");
     const avoidanceChanged = avoidancePhases !== previousAvoidancePhases;
     if (this.hasBubblesTrack) {
-      this.sampleFrameVisibility(time);
+      this.sampleFrameVisibilityMap(time);
       this.prepareSnakeBubbleRenderPlan();
     }
     const snakeBubbleChanged = (this.snakeBubblePlan?.squares.length ?? 0)
@@ -1820,7 +1897,7 @@ export class CountdownFramedGenerator {
         beatElapsed / this.tickSeconds,
         this.frameSettings,
         this.frameAvoidanceCircles,
-        this.frameVisibilityPlane,
+        this.frameVisibilityMap,
         [],
       );
       this.frameFrame = nextFrameFrame;
@@ -1837,7 +1914,7 @@ export class CountdownFramedGenerator {
       && !snakeBubbleChanged
       && !clockDebugChanged
       && !avoidanceChanged
-      && !noiseWiggleChanged
+      && !fieldWiggleChanged
     ) return;
 
     this.revealStep = nextRevealStep;
@@ -1934,7 +2011,7 @@ export class CountdownFramedGenerator {
         || orderChanged
         || tickChanged
         || avoidanceChanged
-        || noiseWiggleChanged
+        || fieldWiggleChanged
       )
     ) {
       const maximumEmptyRadius = Math.max(
@@ -1946,20 +2023,20 @@ export class CountdownFramedGenerator {
         ...this.frameAvoidanceCircles.map(circle => circle.refillRadius),
       );
       debug.transition(
-        "countdown-bubbles tick=%d visible=%d/%d snakeHidden=%d noiseHidden=%d avoided=%d bubbles=%d wipe=%s emptyRadius=%.3f refillRadius=%.3f pushRadiusCells=%.3f noiseWiggle=%s noiseOffset=%.3f progress=%.3f",
+        "countdown-bubbles tick=%d visible=%d/%d snakeHidden=%d fieldHidden=%d avoided=%d bubbles=%d wipe=%s emptyRadius=%.3f refillRadius=%.3f pushRadiusCells=%.3f fieldWiggle=%s fieldOffset=%.3f progress=%.3f",
         this.tick,
         nextFrameFrame.visibleCount,
         this.frameRenderPlan.squares.length * this.frameSettings.dotsPerSquare,
         nextFrameFrame.snakeHiddenCount,
-        nextFrameFrame.noiseHiddenCount,
+        nextFrameFrame.fieldHiddenCount,
         nextFrameFrame.avoidedSquareCount,
         this.frameAvoidanceBubbles.length,
         avoidancePhases || "none",
         maximumEmptyRadius,
         maximumRefillRadius,
         this.frameAvoidanceRadiusInCells,
-        this.frameNoiseWigglePhase,
-        this.frameNoiseTemporalOffset,
+        this.frameFieldWigglePhase,
+        this.frameFieldTemporalOffset,
         nextFrameFrame.progress,
       );
     }
@@ -2219,6 +2296,35 @@ export class CountdownFramedGenerator {
     }
   }
 
+  emitBubblesFieldTransitions() {
+    const nextPhases = new Map();
+    for (const bubble of this.frameAvoidanceBubbles) {
+      const key = `${bubble.kind}:${bubble.sourceTick}`;
+      nextPhases.set(key, bubble.phase);
+      if (this.bubblesFieldDebugState.phases.get(key) === bubble.phase) continue;
+      debug.transition(
+        "countdown-bubbles-ink state=%s kind=%s sourceTick=%d radiusCells=%.3f empty=%.3f refill=%.3f circles=%d",
+        bubble.phase,
+        bubble.kind,
+        bubble.sourceTick,
+        bubble.radiusInCells,
+        bubble.emptyEnvelope,
+        bubble.refillEnvelope,
+        bubble.circles.length,
+      );
+    }
+    for (const [key] of this.bubblesFieldDebugState.phases) {
+      if (nextPhases.has(key)) continue;
+      const separator = key.lastIndexOf(":");
+      debug.transition(
+        "countdown-bubbles-ink state=complete kind=%s sourceTick=%d",
+        key.slice(0, separator),
+        Number(key.slice(separator + 1)),
+      );
+    }
+    this.bubblesFieldDebugState.phases = nextPhases;
+  }
+
   emitEngorgementTransitions(localTime) {
     if (this.snakeEngorgementPlan === null) return;
     const state = this.snakeEngorgementAt(localTime);
@@ -2349,13 +2455,27 @@ export class CountdownFramedGenerator {
       if (layer.band === "above-timer") this.drawCountdownRenderLayer(layer, context);
     }
     if (this.frameSettings !== null) {
+      const debugBubbles = (
+        this.frameSettings.debug.visualizeBubbles
+        && this.frameRenderPlan !== null
+      )
+        ? this.frameAvoidanceBubbles.map(bubble => ({
+          ...bubble,
+          avoidedSquareIndices: countdownFrameAvoidedSquareIndices(
+            this.frameRenderPlan,
+            bubble.circles,
+            this.frameVisibilityMap,
+          ),
+        }))
+        : this.frameAvoidanceBubbles;
       drawCountdownBubblesDebug(
         context,
         this.layout,
-        this.frameAvoidanceBubbles,
+        debugBubbles,
         this.frameSettings.debug,
         this.frameSettings.subdivisionLevel,
         this.framePalette.at(-1),
+        this.frameRenderPlan,
       );
     }
     if (frame?.showCellGrid === true) drawCellGridGuides(context, this.layout);
@@ -2383,8 +2503,8 @@ export class CountdownFramedGenerator {
     };
   }
 
-  countdownNoisePreviewSnapshot({ previewWidth, previewHeight } = {}) {
-    if (!this.framePlan || !this.frameNoiseSettings.enabled) return null;
+  countdownFieldPreviewSnapshot({ previewWidth, previewHeight } = {}) {
+    if (!this.framePlan || !this.frameFieldSettings.enabled) return null;
     const dense = Number.isFinite(previewWidth) && Number.isFinite(previewHeight);
     const width = dense
       ? Math.max(2, Math.trunc(previewWidth))
@@ -2393,19 +2513,24 @@ export class CountdownFramedGenerator {
       ? Math.max(2, Math.trunc(previewHeight))
       : this.framePlan.gridRows;
     const localTime = this.elapsed % this.durationSeconds;
-    const visibility = dense
-      ? this.frameNoiseSampler.samplePlane({
+    const displacement = dense
+      ? this.frameFieldSampler.samplePlane({
         name: "visibility",
         width,
         height,
         progress: localTime / this.durationSeconds,
         timeSeconds: localTime,
-        temporalOffset: this.frameNoiseTemporalOffset,
+        temporalOffset: this.frameFieldTemporalOffset,
         projectSeed: this.projectSeed,
-        settings: this.frameNoiseSettings,
+        settings: this.frameFieldSettings,
       }).data
-      : this.frameVisibilityPlane?.data.slice();
-    if (!visibility) return null;
+      : this.frameVisibilityMap?.data.slice();
+    if (!displacement) return null;
+    const threshold = this.frameFieldSettings.layers.visibility.threshold * 255;
+    const opacity = Uint8Array.from(
+      displacement,
+      value => value >= threshold ? 255 : 0,
+    );
     const flicker = new Uint8Array(width * height);
     for (let row = 0; row < height; row += 1) {
       for (let column = 0; column < width; column += 1) {
@@ -2423,9 +2548,16 @@ export class CountdownFramedGenerator {
       },
       fields: [
         {
-          id: "frame-visibility",
-          label: "frame visibility",
-          data: visibility,
+          id: "ink-opacity",
+          label: "ink field opacity",
+          data: opacity,
+          width,
+          height,
+        },
+        {
+          id: "ink-displacement",
+          label: "ink shard displacement",
+          data: displacement,
           width,
           height,
         },
@@ -2442,6 +2574,12 @@ export class CountdownFramedGenerator {
   }
 
   inspect() {
+    const fieldData = this.frameVisibilityMap?.data ?? null;
+    const fieldSummary = fieldData === null ? null : {
+      minimum: fieldData.reduce((minimum, value) => Math.min(minimum, value), 255),
+      maximum: fieldData.reduce((maximum, value) => Math.max(maximum, value), 0),
+      mean: fieldData.reduce((sum, value) => sum + value, 0) / fieldData.length,
+    };
     return {
       generatorInstanceId: this.generatorInstanceId,
       generatorType: "countdown-framed",
@@ -2787,6 +2925,7 @@ export class CountdownFramedGenerator {
           debug: {
             visualizeBubbles: this.frameSettings.debug.visualizeBubbles,
             opacity: this.frameSettings.debug.opacity,
+            renderMode: "displaced-squares",
             active: this.bubblesDebugActive,
             bubbleCount: this.frameAvoidanceBubbles.length,
             circleCount: this.frameAvoidanceCircles.length,
@@ -2822,7 +2961,17 @@ export class CountdownFramedGenerator {
             radiusGrowthTimingCurve: [
               ...this.frameSettings.avoidance.radiusGrowthTimingCurve,
             ],
+            finalWipe: {
+              ...this.frameSettings.avoidance.finalWipe,
+              timingCurve: [
+                ...this.frameSettings.avoidance.finalWipe.timingCurve,
+              ],
+              phase: this.frameAvoidanceBubbles.find(
+                bubble => bubble.kind === "final-wipe",
+              )?.phase ?? "inactive",
+            },
             bubbles: this.frameAvoidanceBubbles.map(bubble => ({
+              kind: bubble.kind,
               sourceTick: bubble.sourceTick,
               sourceCellIndex: bubble.sourceCellIndex,
               ageBeats: bubble.ageBeats,
@@ -2830,6 +2979,7 @@ export class CountdownFramedGenerator {
               phase: bubble.phase,
               emptyEnvelope: bubble.emptyEnvelope,
               refillEnvelope: bubble.refillEnvelope,
+              progress: bubble.progress ?? null,
               circles: bubble.circles.map(circle => ({ ...circle })),
             })),
           },
@@ -2842,26 +2992,32 @@ export class CountdownFramedGenerator {
             this.frameGrowthProgress,
           ),
           flicker: this.frameFlicker.inspect(),
-          visibilityNoise: {
-            enabled: this.frameNoiseSettings.enabled,
-            edgeWidthInSquares: this.frameNoiseEdgeWidth,
-            mode: this.frameNoiseSettings.layers.visibility.mode,
-            scale: this.frameNoiseSettings.layers.visibility.scale,
-            contrast: this.frameNoiseSettings.layers.visibility.contrast,
-            seed: this.frameNoiseSettings.layers.visibility.seed,
-            threshold: this.frameNoiseSettings.layers.visibility.threshold,
-            softness: this.frameNoiseSettings.layers.visibility.softness,
-            cyclesPerLoop: this.frameNoiseSettings.layers.visibility.cyclesPerLoop,
-            beatWiggleDistance: this.frameSettings.visibilityNoiseMotion
+          visibilityMap: {
+            enabled: this.frameFieldSettings.enabled,
+            mode: this.frameFieldSettings.layers.visibility.mode,
+            scale: this.frameFieldSettings.layers.visibility.scale,
+            contrast: this.frameFieldSettings.layers.visibility.contrast,
+            seed: this.frameFieldSettings.layers.visibility.seed,
+            threshold: this.frameFieldSettings.layers.visibility.threshold,
+            softness: this.frameFieldSettings.layers.visibility.softness,
+            cyclesPerLoop: this.frameFieldSettings.layers.visibility.cyclesPerLoop,
+            beatWiggleDistance: this.frameSettings.visibilityMap
               .beatWiggleDistance,
             beatWiggleTimingCurve: [
-              ...this.frameSettings.visibilityNoiseMotion.timingCurve,
+              ...this.frameSettings.visibilityMap.timingCurve,
             ],
-            beatWigglePhase: this.frameNoiseWigglePhase,
-            temporalOffset: this.frameNoiseTemporalOffset,
-            dimensions: this.frameVisibilityPlane === null ? null : {
-              width: this.frameVisibilityPlane.width,
-              height: this.frameVisibilityPlane.height,
+            beatWigglePhase: this.frameFieldWigglePhase,
+            temporalOffset: this.frameFieldTemporalOffset,
+            displacement: {
+              ...this.frameSettings.visibilityMap.displacement,
+              refillOffset: {
+                ...this.frameSettings.visibilityMap.displacement.refillOffset,
+              },
+            },
+            summary: fieldSummary,
+            dimensions: this.frameVisibilityMap === null ? null : {
+              width: this.frameVisibilityMap.width,
+              height: this.frameVisibilityMap.height,
             },
           },
           merge: {
@@ -2944,7 +3100,7 @@ export class CountdownFramedGenerator {
             avoidedSquareCount: this.frameFrame.avoidedSquareCount,
             eligibleVisibleCount: this.frameFrame.eligibleVisibleCount,
             snakeHiddenCount: this.frameFrame.snakeHiddenCount,
-            noiseHiddenCount: this.frameFrame.noiseHiddenCount,
+            fieldHiddenCount: this.frameFrame.fieldHiddenCount,
             dots: this.frameFrame.dots.map(dot => ({ ...dot })),
           },
         },

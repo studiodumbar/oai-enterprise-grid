@@ -5,6 +5,7 @@ import {
   canonicalCompositionChoices,
   compositionPanelTelemetry,
   createCompositionPanel,
+  paletteChoices,
 } from "../src/ui/composition-panel.js";
 
 test("composition choices keep canonical ids and produce concise labels", () => {
@@ -29,6 +30,17 @@ test("composition choices keep canonical ids and produce concise labels", () => 
     ]),
     /unique label/,
   );
+});
+
+test("palette choices expose every available palette with readable labels", () => {
+  assert.deepEqual(paletteChoices({
+    blue: ["#0000ff"],
+    "warm-gray": ["#777777"],
+  }), [
+    { id: "blue", label: "Blue" },
+    { id: "warm-gray", label: "Warm Gray" },
+  ]);
+  assert.throws(() => paletteChoices({}), /at least one palette/);
 });
 
 test("composition telemetry formats the shared timeline and interactive hint", () => {

@@ -55,7 +55,7 @@ export function createNoisePreviewPanel({
   root.open = true;
   root.hidden = true;
   root.className = "noise-preview-panel";
-  root.innerHTML = `<summary>Noise fields</summary><div class="noise-preview-grid">${LABELS.map(label => `<figure><canvas data-field="${label}"></canvas><figcaption>${label}</figcaption></figure>`).join("")}</div>`;
+  root.innerHTML = `<summary>Field previews</summary><div class="noise-preview-grid">${LABELS.map(label => `<figure><canvas data-field="${label}"></canvas><figcaption>${label}</figcaption></figure>`).join("")}</div>`;
   const floatingStyles = { position: "fixed", right: "12px", bottom: "12px", width: "320px", maxHeight: "calc(100vh - 24px)", overflow: "auto", padding: "10px", color: "white", background: "#111e", zIndex: "20", font: "12px sans-serif" };
   const grid = root.querySelector(".noise-preview-grid");
   const figures = [...root.querySelectorAll("figure")];

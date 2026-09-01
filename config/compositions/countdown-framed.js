@@ -1,5 +1,5 @@
 // Timeline editing guide: docs/countdown-timeline.md
-const COUNT_FROM_SECONDS = 30;
+const COUNT_FROM_SECONDS = 180;
 const APPEARANCE_SLOT_SECONDS = COUNT_FROM_SECONDS / 3;
 const BUBBLES_START_SECONDS = APPEARANCE_SLOT_SECONDS * 2;
 const SNAKE_TO_BUBBLES_DURATION_SECONDS = 3;
@@ -83,7 +83,7 @@ const BUBBLES_SETTINGS = Object.freeze({
   enabled: true,
   palette: "flicker",
   debug: Object.freeze({
-    visualizeBubbles: true,
+    visualizeBubbles: false,
     opacity: 0.12,
   }),
   subdivisionLevel: 3,
@@ -93,29 +93,42 @@ const BUBBLES_SETTINGS = Object.freeze({
   numberSpacingInSubdivisions: 1.25,
   avoidance: Object.freeze({
     radiusInCells: 1,
-    radiusAtEndInCells: 3,
+    radiusAtEndInCells: 6,
     durationBeats: 2.5,
-    timingCurve: Object.freeze([0.42, 0, 0.58, 1]),
-    radiusGrowthTimingCurve: Object.freeze([0.42, 0, 0.58, 1]),
+    timingCurve: Object.freeze([0.08, 0.82, 0.22, 1]),
+    radiusGrowthTimingCurve: Object.freeze([0.42, 0, 1, 1]),
+    finalWipe: Object.freeze({
+      enabled: true,
+      startProgress: 0.9766666667,
+      endProgress: 1,
+      timingCurve: Object.freeze([0.8, 0, 1, 0]),
+      center: Object.freeze({ xProgress: 0.18, yProgress: 0.55 }),
+    }),
   }),
-  noiseFields: Object.freeze({
+  visibilityMap: Object.freeze({
     enabled: true,
-    edgeWidthInSquares: 20,
     beatWiggle: Object.freeze({
       distance: 0.08,
-      timingCurve: Object.freeze([0.42, 0, 0.58, 1]),
+      timingCurve: Object.freeze([0.08, 0.82, 0.22, 1]),
     }),
-    layers: Object.freeze({
-      visibility: Object.freeze({
-        mode: "simplex",
-        cyclesPerLoop: 0,
-        speed: null,
-        holdSeconds: 0,
-        scale: 8,
-        contrast: 12,
-        seed: 83,
-        threshold: 0.6,
-        softness: 0.2,
+    displacement: Object.freeze({
+      minimumInCells: 0.1,
+      radiusRatio: 0.16,
+      maximumInCells: 1.1,
+      refillOffset: Object.freeze({ columns: 7, rows: 5 }),
+    }),
+    field: Object.freeze({
+      mode: "ink-shards",
+      cyclesPerLoop: 0,
+      speed: null,
+      holdSeconds: 0,
+      scale: 6.5,
+      contrast: 2,
+      seed: 83,
+      threshold: 0.25,
+      softness: 0,
+      modes: Object.freeze({
+        "ink-shards": Object.freeze({ crawl: 0.9 }),
       }),
     }),
   }),
@@ -124,29 +137,23 @@ const BUBBLES_SETTINGS = Object.freeze({
   dotMargin: 0,
 });
 
-// Appearance-tuning timeline: snake growth, bubble handoff, then bubbles.
+// The complete effect score; defaultTiming resolves every exclusive window.
 const COUNTDOWN_SYNTH_TRACKS = Object.freeze([
+  Object.freeze({
+    id: "clock-main",
+    use: "clock",
+    zIndex: 10,
+    settings: CLOCK_SETTINGS,
+  }),
   Object.freeze({
     id: "snake-main",
     use: "snake",
-    startSeconds: 0,
-    durationSeconds: SNAKE_BUBBLES_START_SECONDS,
-    evolution: Object.freeze({
-      startSeconds: SNAKE_BUBBLES_START_SECONDS,
-      durationSeconds: SNAKE_TO_BUBBLES_DURATION_SECONDS,
-    }),
     zIndex: 20,
     settings: SNAKE_SETTINGS,
   }),
   Object.freeze({
     id: "bubbles-main",
     use: "bubbles",
-    startSeconds: BUBBLES_START_SECONDS,
-    durationSeconds: APPEARANCE_SLOT_SECONDS,
-    evolution: Object.freeze({
-      startSeconds: BUBBLES_START_SECONDS,
-      durationSeconds: APPEARANCE_SLOT_SECONDS,
-    }),
     zIndex: 30,
     settings: BUBBLES_SETTINGS,
   }),
@@ -154,9 +161,15 @@ const COUNTDOWN_SYNTH_TRACKS = Object.freeze([
 
 const COUNTDOWN_SYNTH_CONNECTIONS = Object.freeze([
   Object.freeze({
-    id: "snake-bubbles",
+    id: "clock-snake",
     from: COUNTDOWN_SYNTH_TRACKS[0].id,
     to: COUNTDOWN_SYNTH_TRACKS[1].id,
+    use: "auto",
+  }),
+  Object.freeze({
+    id: "snake-bubbles",
+    from: COUNTDOWN_SYNTH_TRACKS[1].id,
+    to: COUNTDOWN_SYNTH_TRACKS[2].id,
     use: "auto",
     startSeconds: SNAKE_BUBBLES_START_SECONDS,
     durationSeconds: SNAKE_TO_BUBBLES_DURATION_SECONDS,
@@ -170,6 +183,9 @@ const COUNTDOWN_SYNTH_CONNECTIONS = Object.freeze([
 export const COUNTDOWN_FRAMED_CONFIG = {
   settings: {
     countdownFramed: {
+      ui: {
+        noisePreview: false,
+      },
       palette: "countdown",
       longSideCells: 12,
       // This composition has no center-cell endpoint, so even short sides can

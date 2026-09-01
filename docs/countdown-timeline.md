@@ -93,7 +93,7 @@ connector is only the state transition. By its final half-beat the body occupies
 every parent cell except a reserved level-0 meal. The meal appears beside the
 head, completes full coverage, and pulses with the head while movement freezes
 and the registered `strobe-stack` flicker runs across the body. At `2T/3`, the meal joins the complete body and that death snapshot is
-atomically committed into the bubbles track's body-derived field. The connector
+atomically committed into the bubbles track's body-derived dot field. The connector
 never exposes bubbles early.
 
 For `T = 30`, the important boundaries are:
@@ -107,20 +107,30 @@ For `T = 30`, the important boundaries are:
 | 20 | snake dies atomically; bubble-only phase begins at `00:10` |
 | 30 | loop returns to time 0 |
 
-### Current appearance-tuning loop
+### Current 180-second loop
 
-The checked-in track list temporarily isolates the final three states for
-visual refinement. With the 30-second countdown it plays snake growth on
-`[0, 17)`, the snake→bubbles transition on `[17, 20)`, and bubbles on
-`[20, 30)`. The death flicker occupies `[19.5, 20)`. The countdown labels at
-the major boundaries are `00:30`, `00:13`, and `00:10`. Clock settings remain authored for later
-restoration, but the clock has no active synth track in this tuning loop.
+The checked-in track list exposes the complete score: clock `[0, 30)`,
+clock→snake `[30, 60)`, snake `[60, 117)`, snake→bubbles `[117, 120)`, and
+bubbles `[120, 180)`. The death flicker occupies `[119.5, 120)`. The countdown
+labels at those boundaries are `03:00`, `02:30`, `02:00`, `01:03`, and
+`01:00`.
 
 `BUBBLES_SETTINGS.debug.visualizeBubbles` enables a translucent diagnostic
 overlay for every live timer-avoidance bubble. Each circle is drawn separately
 with `debug.opacity`, so intersections accumulate opacity and remain easy to
 spot. The overlay follows the actual emptying and refilling annulus and does not
 change which production dots are visible.
+
+The bubbles background uses `visibilityMap.field` with the registered
+`ink-shards` mode. Its four-scale rectilinear matte exposes a denser field of
+background squares and independently displaces the emptying and refilling
+contours. New spots continue through nearly the complete track. One off-centre
+wipe starts during the final 1.4 seconds and reaches full coverage only at the
+exact loop boundary, so bubbles never sit on an empty hold. Set
+`countdownFramed.ui.noisePreview` to a boolean to auto-open or close the shared
+field panel; the shipped value is `false`. For this composition the panel previews the opacity matte, contour
+displacement, and flicker color; `cg\`noise-preview toggle\`` remains the runtime
+override.
 
 ## Choose one timing mode
 

@@ -18,11 +18,11 @@ export const GLOBAL_CONFIG = {
     },
 
     ui: {
-        showCompositionPanel: false,
-        showCellGrid: true,
-        showExportPanel: false,
-        noisePreview: false,
-        flockPreview: false,
+        showCompositionPanel: true,
+        showCellGrid: false,
+        showExportPanel: true,
+        noisePreview: true,
+        flockPreview: true,
     },
 
     // Machine-readable tracing. Channels: timeline, transition, plan, cells,

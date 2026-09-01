@@ -254,7 +254,7 @@ function withGlobalFlickerDefaults(settingsGroups) {
 // A composition settings group inherits the app-wide palette, cell transition,
 // intro, and outro. It can override them locally; authored modules stay
 // unmutated.
-function withGlobalCompositionDefaults(settingsGroups) {
+function withGlobalCompositionDefaults(settingsGroups, paletteOverride = null) {
   const resolved = {};
   for (const [name, group] of Object.entries(settingsGroups ?? {})) {
     const cellTransitions = resolveCellTransitionSettings(
@@ -268,6 +268,7 @@ function withGlobalCompositionDefaults(settingsGroups) {
     resolved[name] = {
       palette: GLOBAL_CONFIG.palette,
       ...group,
+      ...(paletteOverride === null ? {} : { palette: paletteOverride }),
       cellTransitions,
       intro,
       // A local outro overrides the app-wide outro. It never accidentally
@@ -361,7 +362,7 @@ function withResolvedCompositionTiming(settingsGroups, timingByKey) {
   return resolved;
 }
 
-function resolveRuntimeConfig(configs) {
+function resolveRuntimeConfig(configs, paletteOverride = null) {
   const timing = timingBySettingsKey(configs);
   const settings = withResolvedCompositionTiming(
     withGlobalFlickerDefaults(mergeUnique("settings group", [
@@ -372,7 +373,10 @@ function resolveRuntimeConfig(configs) {
         noiseFields: GLOBAL_CONFIG.noiseFields,
       },
       SHARED_CONFIG.settings,
-      ...configs.map(config => withGlobalCompositionDefaults(config.settings)),
+      ...configs.map(config => withGlobalCompositionDefaults(
+        config.settings,
+        paletteOverride,
+      )),
     ])),
     timing,
   );
@@ -389,9 +393,28 @@ function resolveRuntimeConfig(configs) {
   };
 }
 
-export function createRuntimeConfig({ compositionTimingOverrides } = {}) {
+function normalizedPaletteOverride(value) {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new TypeError("Palette override must be a non-empty string.");
+  }
+  const name = value.trim();
+  if (!Object.hasOwn(GLOBAL_CONFIG.palettes, name)) {
+    throw new Error(
+      `Unknown palette override "${name}". Available palettes: `
+      + `${Object.keys(GLOBAL_CONFIG.palettes).join(", ")}.`,
+    );
+  }
+  return name;
+}
+
+export function createRuntimeConfig({
+  compositionTimingOverrides,
+  paletteOverride,
+} = {}) {
   return resolveRuntimeConfig(
     withCompositionTimingOverrides(compositionConfigs, compositionTimingOverrides),
+    normalizedPaletteOverride(paletteOverride),
   );
 }
 

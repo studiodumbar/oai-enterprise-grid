@@ -183,6 +183,26 @@ const LEGACY_PUBLIC_COMPOSITION_IDS = Object.freeze([
   "flock-circles",
 ]);
 
+test("runtime palette override recolors composition settings without mutating authored config", () => {
+  const authoredPalette = COMPOSITION_BUNDLES["countdown-framed"]
+    .settings.countdownFramed.palette;
+  const runtime = createRuntimeConfig({ paletteOverride: "green" });
+
+  for (const bundle of Object.values(COMPOSITION_BUNDLES)) {
+    for (const settingsKey of Object.keys(bundle.settings)) {
+      assert.equal(runtime.settings[settingsKey].palette, "green");
+    }
+  }
+  assert.equal(
+    COMPOSITION_BUNDLES["countdown-framed"].settings.countdownFramed.palette,
+    authoredPalette,
+  );
+  assert.throws(
+    () => createRuntimeConfig({ paletteOverride: "missing" }),
+    /Unknown palette override "missing"/,
+  );
+});
+
 function ownKeys(value) {
   return Object.keys(value).sort();
 }

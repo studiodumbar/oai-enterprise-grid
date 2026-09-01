@@ -4,6 +4,7 @@ import { VORONOI_NOISE_MODE } from "./voronoi-mode.js";
 import { GRADIENT_NOISE_MODE } from "./gradient-mode.js";
 import { SIMPLEX_NOISE_MODE } from "./simplex-mode.js";
 import { LIFE_NOISE_MODE } from "./life-mode.js";
+import { INK_SHARDS_MODE } from "./ink-shards-mode.js";
 
 export function createNoiseFieldRegistry() {
   return new NoiseFieldModeRegistry()
@@ -11,6 +12,7 @@ export function createNoiseFieldRegistry() {
     .register(VORONOI_NOISE_MODE)
     .register(GRADIENT_NOISE_MODE)
     .register(SIMPLEX_NOISE_MODE)
+    .register(INK_SHARDS_MODE)
     .register(LIFE_NOISE_MODE);
 }
 

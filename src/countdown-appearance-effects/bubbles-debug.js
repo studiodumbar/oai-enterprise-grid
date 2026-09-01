@@ -34,6 +34,7 @@ export function drawCountdownBubblesDebug(
   settings,
   subdivisionLevel,
   color,
+  framePlan = null,
 ) {
   if (!settings.visualizeBubbles || bubbles.length === 0) return;
   const subdivisions = 1 << subdivisionLevel;
@@ -42,7 +43,26 @@ export function drawCountdownBubblesDebug(
   context.save();
   context.globalAlpha *= settings.opacity;
   context.fillStyle = color;
+  const squareByIndex = framePlan === null
+    ? null
+    : new Map(framePlan.squares.map(square => [square.squareIndex, square]));
   for (const bubble of bubbles) {
+    if (framePlan !== null && Array.isArray(bubble.avoidedSquareIndices)) {
+      for (const squareIndex of bubble.avoidedSquareIndices) {
+        const square = squareByIndex.get(squareIndex);
+        if (!square) continue;
+        const columns = square.dots.map(dot => dot.column);
+        const rows = square.dots.map(dot => dot.row);
+        const left = layout.offsetX + Math.min(...columns) * slot;
+        const top = layout.offsetY + Math.min(...rows) * slot;
+        const width = (Math.max(...columns) - Math.min(...columns) + 1) * slot;
+        const height = (Math.max(...rows) - Math.min(...rows) + 1) * slot;
+        context.beginPath();
+        context.rect(left, top, width, height);
+        context.fill();
+      }
+      continue;
+    }
     for (const circle of bubble.circles) {
       const outerRadius = circle.radius * slot;
       const innerRadius = (circle.refillRadius ?? 0) * slot;

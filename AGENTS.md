@@ -313,7 +313,12 @@ final half-beat the body occupies every parent cell except its reserved level-0
 meal; the meal appears, completes full canvas coverage, and pulses with the
 head while the registered `strobe-stack` flicker runs across the complete body. At the connector end, the
 meal joins the body and the complete death snapshot is atomically committed
-into the bubbles track's body-derived field.
+into the bubbles track's body-derived dot field. The bubbles background uses
+the deterministic `ink-shards` visibility map for both near-binary square
+gating and independent outer/refill contour displacement. Its regular spots
+stop before one off-centre final wipe clears and holds the board. The boolean
+`countdownFramed.ui.noisePreview` controls the opacity, displacement, and
+flicker-color field previews; the shipped value is `false`.
 Numeric `startSeconds`, `durationSeconds`, and `evolution` remain
 explicit per-item overrides. `COUNTDOWN_SYNTH_TRACKS` is the visual timeline:
 one untimed entry fills the complete countdown, while any reduced or reordered

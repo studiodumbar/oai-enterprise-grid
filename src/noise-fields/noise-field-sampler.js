@@ -6,6 +6,13 @@ const TWO32 = 4294967296;
 
 function clamp01(value) { return Math.max(0, Math.min(1, value)); }
 function quantize(value) { return Math.round(clamp01(value) * 255); }
+function seedBits(projectSeed, layerSeed) {
+  let value = (Number(projectSeed) >>> 0)
+    ^ Math.imul(Number(layerSeed) >>> 0, 0x9e3779b1);
+  value = Math.imul(value ^ (value >>> 16), 0x45d9f3b);
+  value = Math.imul(value ^ (value >>> 16), 0x45d9f3b);
+  return (value ^ (value >>> 16)) >>> 0;
+}
 function curve(value, contrast) {
   const v = clamp01((value - 0.5) * contrast + 0.5);
   return v * v * (3 - 2 * v);
@@ -85,9 +92,15 @@ export class NoiseFieldSampler {
     const layer = settings.layers[name];
     const effectiveSeedBase = Math.fround((Number(projectSeed) >>> 0) / TWO32);
     const effectiveSeed = Math.fround(layer.seed + effectiveSeedBase);
+    const effectiveSeedBits = seedBits(projectSeed, layer.seed);
     const loopPeriod = layer.cyclesPerLoop === 0 ? null : Math.abs(layer.cyclesPerLoop);
     const mode = this.modeRegistry.get(layer.mode);
-    const field = mode.createField({ settings: layer.modes[layer.mode], loopPeriod, seed: effectiveSeed });
+    const field = mode.createField({
+      settings: layer.modes[layer.mode],
+      loopPeriod,
+      seed: effectiveSeed,
+      seedBits: effectiveSeedBits,
+    });
     const layerProgress = ((progress % 1) + 1) % 1;
     const direction = Math.sign(layer.cyclesPerLoop);
     const z = (layer.speed !== null

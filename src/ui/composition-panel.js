@@ -22,6 +22,20 @@ function compositionLabel(id) {
     .join(" ");
 }
 
+export function paletteChoices(palettes) {
+  if (!palettes || typeof palettes !== "object" || Array.isArray(palettes)) {
+    throw new TypeError("Composition panel palettes must be an object.");
+  }
+  const names = Object.keys(palettes);
+  if (names.length === 0) {
+    throw new TypeError("Composition panel needs at least one palette.");
+  }
+  return Object.freeze(names.map(name => Object.freeze({
+    id: name,
+    label: compositionLabel(name),
+  })));
+}
+
 export function canonicalCompositionChoices(compositions) {
   if (!Array.isArray(compositions) || compositions.length === 0) {
     throw new TypeError("Composition panel needs at least one canonical composition.");
@@ -85,6 +99,9 @@ export function createCompositionPanel({
   compositions,
   current,
   use,
+  palettes,
+  currentPalette,
+  usePalette,
   noisePreviewVisible = () => false,
   setNoisePreviewVisible = () => false,
 } = {}) {
@@ -93,6 +110,11 @@ export function createCompositionPanel({
   }
   if (typeof current !== "function" || typeof use !== "function") {
     throw new TypeError("Composition panel needs current() and use(id) functions.");
+  }
+  if (typeof currentPalette !== "function" || typeof usePalette !== "function") {
+    throw new TypeError(
+      "Composition panel needs currentPalette() and usePalette(name) functions.",
+    );
   }
   if (
     typeof noisePreviewVisible !== "function"
@@ -104,15 +126,25 @@ export function createCompositionPanel({
   const choices = canonicalCompositionChoices(compositions);
   const knownIds = new Set(choices.map(choice => choice.id));
   const options = Object.fromEntries(choices.map(choice => [choice.label, choice.id]));
+  const availablePalettes = paletteChoices(palettes);
+  const knownPalettes = new Set(availablePalettes.map(choice => choice.id));
+  const paletteOptions = Object.fromEntries(
+    availablePalettes.map(choice => [choice.label, choice.id]),
+  );
   const initial = compositionPanelTelemetry(current());
   if (!knownIds.has(initial.compositionId)) {
     throw new RangeError(
       `Current composition "${initial.compositionId}" is not in the canonical composition list.`,
     );
   }
+  const initialPalette = currentPalette();
+  if (!knownPalettes.has(initialPalette)) {
+    throw new RangeError(`Current palette "${initialPalette}" is not available.`);
+  }
 
   const values = {
     composition: initial.compositionId,
+    palette: initialPalette,
     phase: initial.phase,
     cycle: initial.cycle,
     coreDuration: initial.coreDuration,
@@ -127,6 +159,10 @@ export function createCompositionPanel({
   const compositionBinding = pane.addBinding(values, "composition", {
     label: "Composition",
     options,
+  });
+  const paletteBinding = pane.addBinding(values, "palette", {
+    label: "Palette",
+    options: paletteOptions,
   });
   pane.addBinding(values, "phase", { label: "Phase", readonly: true });
   pane.addBinding(values, "cycle", { label: "Cycle", readonly: true });
@@ -150,6 +186,7 @@ export function createCompositionPanel({
     syncing = true;
     try {
       values.composition = telemetry.compositionId;
+      values.palette = currentPalette();
       values.phase = telemetry.phase;
       values.cycle = telemetry.cycle;
       values.coreDuration = telemetry.coreDuration;
@@ -167,6 +204,14 @@ export function createCompositionPanel({
     if (syncing || event.last === false || event.value === current().compositionId) return;
     try {
       use(event.value);
+    } finally {
+      sync();
+    }
+  });
+  paletteBinding.on("change", event => {
+    if (syncing || event.last === false || event.value === currentPalette()) return;
+    try {
+      usePalette(event.value);
     } finally {
       sync();
     }

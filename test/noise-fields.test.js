@@ -6,6 +6,7 @@ import { createNoiseFieldRegistry, NoiseFieldSampler, resolveNoiseFieldSettings 
 import { createHeadlessDirector } from "../src/debug/headless.js";
 import { diogoniseNoiseSettings } from "../src/export/diogonisator.js";
 import { GradientNoiseField } from "../src/noise-fields/gradient-mode.js";
+import { InkShardsField } from "../src/noise-fields/ink-shards-mode.js";
 import { legacyHash33 } from "../src/noise-fields/voronoi-mode.js";
 
 function settings(overrides = {}) {
@@ -19,10 +20,72 @@ function settings(overrides = {}) {
 test("noise registry ships isolated field modes including color-only life", () => {
   const first = createNoiseFieldRegistry();
   const second = createNoiseFieldRegistry();
-  assert.deepEqual(first.list(), ["value", "voronoi", "gradient", "simplex", "life"]);
+  assert.deepEqual(first.list(), [
+    "value",
+    "voronoi",
+    "gradient",
+    "simplex",
+    "ink-shards",
+    "life",
+  ]);
   first.register({ name: "local", defaults: {}, loopable: true, minimumLoopCycles: 1, shaderMode: "unsupported", createField: () => ({ sampleAt: () => 0 }) });
   assert.equal(second.has("local"), false);
   assert.throws(() => second.get("missing"), /Available noise field modes/);
+});
+
+test("ink-shards field is a deterministic, crawling multi-scale collage", () => {
+  const field = new InkShardsField({ crawl: 0.7 }, 83.25);
+  const coordinates = [
+    [0, 0, 0],
+    [0.25, 0, 0],
+    [0, 0.25, 0],
+    [0.25, 0.25, 0.08],
+    [1.1, -0.7, 0.08],
+  ];
+  assert.deepEqual(
+    coordinates.map(point => Number(field.sampleAt(...point).toFixed(6))),
+    [0.76, 0.72375, 0.4725, 0.51185, 0.6271],
+  );
+  assert.deepEqual(
+    coordinates.map(point => field.sampleAt(...point)),
+    coordinates.map(point => new InkShardsField({ crawl: 0.7 }, 83.25)
+      .sampleAt(...point)),
+  );
+  assert.doesNotThrow(() => settings({
+    layers: {
+      visibility: {
+        mode: "ink-shards",
+        cyclesPerLoop: 0,
+        speed: null,
+        holdSeconds: 0,
+      },
+    },
+  }));
+  assert.throws(
+    () => settings({ layers: { size: { mode: "ink-shards", cyclesPerLoop: 0 } } }),
+    /supports only these layers: visibility/,
+  );
+  const configured = settings({
+    layers: {
+      visibility: {
+        mode: "ink-shards",
+        cyclesPerLoop: 0,
+        speed: null,
+        holdSeconds: 0,
+      },
+    },
+  });
+  const sampler = new NoiseFieldSampler({ modeRegistry: configured.registry });
+  const sample = projectSeed => sampler.samplePlane({
+    name: "visibility",
+    width: 96,
+    height: 56,
+    progress: 0,
+    timeSeconds: 0,
+    projectSeed,
+    settings: configured.resolved,
+  }).data;
+  assert.notDeepEqual(sample(0), sample(91));
 });
 
 test("gradient timing and Voronoi hashing retain the legacy shader units", () => {
