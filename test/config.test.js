@@ -724,7 +724,10 @@ test("effect palettes follow one selected five-color family", () => {
     /exactly five colors/,
   );
   assert.equal(PALETTES.blue.length, 5);
-  assert.equal(PALETTES.orange.length, 5);
+  assert.deepEqual(
+    PALETTES.daybreak,
+    ["#FF8201", "#FF9610", "#FFAF2F", "#FFC454", "#FFDC87"],
+  );
   assert.deepEqual(
     PALETTES.mono,
     ["#303030", "#666666", "#aaaaaa", "#d5d5d5", "#ffffff"],

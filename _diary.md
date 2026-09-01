@@ -9,7 +9,9 @@
 [ === wip === ]
 
 [] single circle grow
-[] last seconds video input
+
+
+[] overlap
 
 ## snake -> bubbles
 [] adjust decay transition

@@ -3,7 +3,7 @@ import { populatePalettes } from "./palettes.js";
 const PALETTE_FAMILIES = {
     blue: ["#013566", "#004F99", "#0169CC", "#0285FF", "#48AAFF"],
     green: ["#003415", "#00692a", "#00a240", "#04b84c", "#8cdfad"],
-    orange: ["#B9480D", "#E25507", "#FF7417", "#FF8549", "#FF9E6C"],
+    daybreak: ["#FF8201", "#FF9610", "#FFAF2F", "#FFC454", "#FFDC87"],
     mono: ["#303030", "#666666", "#aaaaaa", "#d5d5d5", "#ffffff"],
 };
 // Change this one value to recolor the app and every effect palette.
