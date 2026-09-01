@@ -353,6 +353,20 @@ export function resolveCountdownSnakeSettings(appearance, beatSeconds) {
   const disappearanceVariations = resolveSnakeDisappearanceVariations(
     snake.disappearanceVariations,
   );
+  const selfCollision = requireObject(
+    snake.selfCollision,
+    "countdownFramed.appearance.effects.snake.selfCollision",
+  );
+  if (typeof selfCollision.enabled !== "boolean") {
+    throw new TypeError(
+      "countdownFramed.appearance.effects.snake.selfCollision.enabled "
+      + "must be a boolean.",
+    );
+  }
+  const collisionFlickerMode = requireString(
+    selfCollision.flickerMode,
+    "countdownFramed.appearance.effects.snake.selfCollision.flickerMode",
+  );
   const secondaryMovement = resolveSnakeSecondaryMovement(snake.secondaryMovement);
 
   return Object.freeze({
@@ -387,6 +401,10 @@ export function resolveCountdownSnakeSettings(appearance, beatSeconds) {
     maximumSubdivisionLevel: maximumLevel,
     colorVariations,
     disappearanceVariations,
+    selfCollision: Object.freeze({
+      enabled: selfCollision.enabled,
+      flickerMode: collisionFlickerMode,
+    }),
     secondaryMovement,
     dotMargin: snake.dotMargin,
     timingCurve: Object.freeze(normalizeBezierCurve(
@@ -700,10 +718,10 @@ export function countdownSnakeWrappedPath(
     const exitIndex = exitRow * columnCount + exitColumn;
     const entryIndex = entryRow * columnCount + exitColumn;
     for (let attempt = 0; attempt < pathAttempts; attempt += 1) {
-      const attemptSeed = pathSeed ^ Math.imul(
+      const attemptSeed = (pathSeed ^ Math.imul(
         attempt + 1,
         SNAKE_SECONDARY_EXIT_SALT,
-      );
+      )) >>> 0;
       try {
         const pathToExit = countdownSnakePath(
           { columns: columnCount, rows: rowCount },
@@ -716,7 +734,7 @@ export function countdownSnakeWrappedPath(
           { columns: columnCount, rows: rowCount },
           entryIndex,
           target,
-          attemptSeed ^ SNAKE_SECONDARY_DIRECTION_SALT,
+          (attemptSeed ^ SNAKE_SECONDARY_DIRECTION_SALT) >>> 0,
           [...blockedCellIndices, ...pathToExit],
         );
         return routeFrom(
@@ -735,7 +753,7 @@ export function countdownSnakeWrappedPath(
           { columns: columnCount, rows: rowCount },
           entryIndex,
           target,
-          attemptSeed ^ SNAKE_SECONDARY_DIRECTION_SALT,
+          (attemptSeed ^ SNAKE_SECONDARY_DIRECTION_SALT) >>> 0,
           [...blockedCellIndices, source, exitIndex],
         );
         const pathToExit = countdownSnakePath(
@@ -770,14 +788,14 @@ export function countdownSnakeWrappedPath(
         { columns: columnCount, rows: rowCount },
         source,
         exitIndex,
-        pathSeed ^ SNAKE_SECONDARY_EXIT_SALT,
+        (pathSeed ^ SNAKE_SECONDARY_EXIT_SALT) >>> 0,
         [...blockedCellIndices, target, entryIndex],
       );
       const pathFromEntry = countdownSnakePath(
         { columns: columnCount, rows: rowCount },
         entryIndex,
         target,
-        pathSeed ^ SNAKE_SECONDARY_DIRECTION_SALT,
+        (pathSeed ^ SNAKE_SECONDARY_DIRECTION_SALT) >>> 0,
         [...blockedCellIndices, source, exitIndex],
       );
       return routeFrom(
@@ -832,6 +850,13 @@ export function countdownSnakeFrame(plan, linearProgress, settings) {
     Math.floor(easedProgress * path.length),
   );
   const firstStep = Math.max(0, headStep - settings.lengthCells + 1);
+  const desiredBodyPath = path.slice(firstStep, headStep + 1);
+  const visitedBodyCells = new Set();
+  const collisionCellIndices = [];
+  for (const index of desiredBodyPath) {
+    if (visitedBodyCells.has(index)) collisionCellIndices.push(index);
+    visitedBodyCells.add(index);
+  }
   const bodyPath = [];
   const bodyCells = new Set();
   for (let step = headStep; step >= firstStep; step -= 1) {
@@ -845,6 +870,7 @@ export function countdownSnakeFrame(plan, linearProgress, settings) {
     exitColumn: null,
     wrapStep: null,
   };
+  const hiddenCellIndices = new Set(plan.hiddenCellIndices ?? []);
   return {
     linearProgress: progress,
     progress: easedProgress,
@@ -855,6 +881,10 @@ export function countdownSnakeFrame(plan, linearProgress, settings) {
       wrapped: secondaryMovement.enabled
         && headStep >= secondaryMovement.wrapStep,
     },
+    selfCollision: {
+      active: collisionCellIndices.length > 0,
+      cellIndices: [...new Set(collisionCellIndices)],
+    },
     cells: bodyPath.map((index, bodyIndex) => ({
       index,
       level: countdownSnakeSubdivisionLevel(
@@ -862,7 +892,41 @@ export function countdownSnakeFrame(plan, linearProgress, settings) {
         bodyPath.length,
         settings.maximumSubdivisionLevel,
       ),
+      ...(hiddenCellIndices.has(index) ? { opacity: 0 } : {}),
     })),
+  };
+}
+
+export function countdownSnakeDisappearanceFrame(completedFrame, mode, linearProgress) {
+  if (!SNAKE_DISAPPEARANCE_VARIATION_MODES.has(mode)) {
+    throw new RangeError(
+      "Countdown snake disappearance variation must be one of: "
+      + `${[...SNAKE_DISAPPEARANCE_VARIATION_MODES].join(", ")}.`,
+    );
+  }
+  if (!Array.isArray(completedFrame?.cells)) {
+    throw new TypeError("Countdown snake disappearance requires completed cells.");
+  }
+  const progress = Math.max(0, Math.min(1, Number(linearProgress) || 0));
+  const acceleratedProgress = progress * progress;
+  const removedCellCount = mode === "instant"
+    ? completedFrame.cells.length
+    : Math.min(
+      completedFrame.cells.length,
+      Math.floor(acceleratedProgress * completedFrame.cells.length),
+    );
+  return {
+    mode,
+    linearProgress: progress,
+    progress: acceleratedProgress,
+    removedCellCount,
+    totalCellCount: completedFrame.cells.length,
+    colorVariation: completedFrame.colorVariation ?? "vertical-stripes",
+    selfCollision: completedFrame.selfCollision ?? {
+      active: false,
+      cellIndices: [],
+    },
+    cells: completedFrame.cells.slice(removedCellCount).map(cell => ({ ...cell })),
   };
 }
 
@@ -1485,7 +1549,10 @@ export function countdownSnakeGlyphColors(
       return palette[paletteStartIndex + stripeIndex % paletteBandSize];
     },
   );
-  const canFlicker = frame.deathFlicker?.active === true
+  const canFlicker = (
+    frame.deathFlicker?.active === true
+    || frame.selfCollision?.active === true
+  )
     && cell.food !== true
     && typeof flicker?.sampleAt === "function"
     && Array.isArray(flicker?.paletteColors);
@@ -1540,7 +1607,10 @@ export function drawCountdownSnake(
       time,
       settings.maximumSubdivisionLevel,
     );
-    const flickerActive = frame.deathFlicker?.active === true
+    const flickerActive = (
+      frame.deathFlicker?.active === true
+      || frame.selfCollision?.active === true
+    )
       && cell.food !== true
       && flicker !== null;
     const glyphColorsVary = glyphColors.some(color => color !== glyphColors[0]);

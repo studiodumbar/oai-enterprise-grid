@@ -291,6 +291,17 @@ field is documented as supporting automatic duration syntax. A public alias
 recipe inherits the timing of its canonical recipe instead of declaring a
 second root.
 
+In the browser Composition panel, `noise-grid` replaces the read-only **Core
+loop** value with an editable **Core loop (s)** control. Changing it applies a
+runtime `bodyDurationSeconds` override, rebuilds the resolved timing graph, and
+preserves the noise generator's current settings and playhead. The control
+accepts values of 0.1 seconds or more and currently appears only for
+`noise-grid`; other compositions remain read-only. It changes the body/core
+loop; enabled intro and outro endpoints still wrap that body when total export
+duration is calculated. The authored default is still
+`compositionDefinitions["noise-grid"].timing.bodyDurationSeconds`, so a plain
+page reload without restored project state returns to that value.
+
 For quick comparisons, the same choice can be made without editing:
 
 ```text
@@ -415,6 +426,9 @@ comes from `ui.showExportPanel` in `config/global.js`. The Composition panel's
 checked-in visibility comes from `ui.showCompositionPanel`; composition-local
 `ui` settings may override it. `ui.showCellGrid` adds parent-cell guides to the
 browser preview across compositions; exported output never includes the guides.
+The Composition panel does not include a Noise preview checkbox. Noise-field
+preview visibility remains controlled by the resolved `ui.noisePreview` setting
+and the `noise-preview show|hide|toggle` console command.
 
 ## Architecture
 
@@ -432,6 +446,7 @@ p5js/
 │       ├── l-tree.js             branch-prune settings and recipe
 │       ├── game-of-life.js       cellular-automaton settings and recipe
 │       ├── interactive-grid.js   interactive settings, generator, and recipe
+│       ├── noise-grid.js         layered-noise settings, generator, and recipe
 │       └── flock-grid.js         flock-grid settings, generator, and recipes
 ├── sketch.js                     stable browser entry point
 ├── src/

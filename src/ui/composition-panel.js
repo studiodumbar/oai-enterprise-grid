@@ -102,6 +102,14 @@ export function normalizeLongSideCells(value) {
   return cells;
 }
 
+export function normalizeAnimationDuration(value) {
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    throw new RangeError("Animation duration must be a finite positive number.");
+  }
+  return seconds;
+}
+
 export function createCompositionPanel({
   container,
   compositions,
@@ -112,8 +120,8 @@ export function createCompositionPanel({
   usePalette,
   currentLongSideCells = () => null,
   setLongSideCells = () => null,
-  noisePreviewVisible = () => false,
-  setNoisePreviewVisible = () => false,
+  currentAnimationDuration = () => null,
+  setAnimationDuration = () => null,
 } = {}) {
   if (!container?.append) {
     throw new TypeError("Composition panel needs a DOM container.");
@@ -133,10 +141,10 @@ export function createCompositionPanel({
     throw new TypeError("Composition panel long-side cell hooks must be functions.");
   }
   if (
-    typeof noisePreviewVisible !== "function"
-    || typeof setNoisePreviewVisible !== "function"
+    typeof currentAnimationDuration !== "function"
+    || typeof setAnimationDuration !== "function"
   ) {
-    throw new TypeError("Composition panel noise preview hooks must be functions.");
+    throw new TypeError("Composition panel animation-duration hooks must be functions.");
   }
 
   const choices = canonicalCompositionChoices(compositions);
@@ -159,6 +167,10 @@ export function createCompositionPanel({
   }
   const initialLongSideCells = currentLongSideCells();
   if (initialLongSideCells !== null) normalizeLongSideCells(initialLongSideCells);
+  const initialAnimationDuration = currentAnimationDuration();
+  if (initialAnimationDuration !== null) {
+    normalizeAnimationDuration(initialAnimationDuration);
+  }
 
   const values = {
     composition: initial.compositionId,
@@ -168,7 +180,7 @@ export function createCompositionPanel({
     cycle: initial.cycle,
     coreDuration: initial.coreDuration,
     instruction: initial.instruction,
-    noisePreview: Boolean(noisePreviewVisible()),
+    durationSeconds: initialAnimationDuration ?? 1,
   };
   const pane = new Pane({ container });
   pane.element.setAttribute("aria-label", "Composition controls and timeline status");
@@ -191,9 +203,14 @@ export function createCompositionPanel({
   });
   pane.addBinding(values, "phase", { label: "Phase", readonly: true });
   pane.addBinding(values, "cycle", { label: "Cycle", readonly: true });
-  pane.addBinding(values, "coreDuration", { label: "Core loop", readonly: true });
-  const noisePreviewBinding = pane.addBinding(values, "noisePreview", {
-    label: "Noise preview",
+  const coreDurationBinding = pane.addBinding(values, "coreDuration", {
+    label: "Core loop",
+    readonly: true,
+  });
+  const durationBinding = pane.addBinding(values, "durationSeconds", {
+    label: "Core loop (s)",
+    min: 0.1,
+    step: 0.1,
   });
   const instructionBinding = pane.addBinding(values, "instruction", {
     label: "How to add a beat",
@@ -220,8 +237,13 @@ export function createCompositionPanel({
       values.cycle = telemetry.cycle;
       values.coreDuration = telemetry.coreDuration;
       values.instruction = telemetry.instruction;
-      values.noisePreview = Boolean(noisePreviewVisible());
+      const animationDuration = currentAnimationDuration();
+      if (animationDuration !== null) {
+        values.durationSeconds = normalizeAnimationDuration(animationDuration);
+      }
       longSideCellsBinding.hidden = longSideCells === null;
+      coreDurationBinding.hidden = animationDuration !== null;
+      durationBinding.hidden = animationDuration === null;
       instructionBinding.hidden = telemetry.instruction === "";
       pane.refresh();
     } finally {
@@ -256,10 +278,15 @@ export function createCompositionPanel({
       sync();
     }
   });
-  noisePreviewBinding.on("change", event => {
+  durationBinding.on("change", event => {
     if (syncing || event.last === false) return;
-    setNoisePreviewVisible(event.value === true);
-    sync();
+    const seconds = normalizeAnimationDuration(event.value);
+    if (seconds === currentAnimationDuration()) return;
+    try {
+      setAnimationDuration(seconds);
+    } finally {
+      sync();
+    }
   });
 
   sync();

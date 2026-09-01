@@ -299,6 +299,18 @@ director's core/export duration still comes from the active generator's legacy
 exact field documents automatic syntax. Alias recipes inherit their canonical
 recipe's timing instead of declaring another root.
 
+**Noise-grid browser duration.** The Composition panel exposes an editable
+`Core loop (s)` only while `noise-grid` is active; all other composition loop
+values remain read-only for now. The edit goes through
+`createRuntimeConfig({ compositionTimingOverrides })`, so it replaces
+`bodyDurationSeconds` and re-resolves beat-anchored settings without mutating
+authored config. Rebuilding must preserve the current noise settings and
+playhead while replacing the snapshot's legacy `durationSeconds` with the new
+composition root. Emit the existing `config` channel
+`timing-override state=<...>` transition lines. The Composition panel has no
+Noise preview checkbox; preview visibility remains owned by `ui.noisePreview`
+and the console command.
+
 **Countdown synth timing.** `appearance.synth.defaultTiming.merges` authors
 `startProgress` and `endProgress` for `clock-to-snake` and
 `snake-to-bubbles`. Clock→snake is normalized to the complete countdown; the

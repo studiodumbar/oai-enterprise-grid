@@ -41,6 +41,8 @@ import {
 import {
   countdownAppearanceSeed,
   countdownSnakeColorVariation,
+  countdownSnakeDisappearanceFrame,
+  countdownSnakeDisappearanceVariation,
   countdownSnakeEngorgementFrame,
   countdownSnakeFrame,
   countdownSnakeGlyphColors,
@@ -810,7 +812,19 @@ test("snake selects top or bottom secondary movement one third of the time", () 
       )).length,
       1,
     );
+    assert.deepEqual(
+      countdownSnakeWrappedPath(layout, 6, 18, 0x80000000, [], direction),
+      countdownSnakeWrappedPath(layout, 6, 18, 0x80000000, [], direction),
+    );
   }
+
+  const highBitSeedGenerator = createGenerator({ seed: 0xffffffff });
+  highBitSeedGenerator.enter({ time: 1 });
+  assert.equal(
+    highBitSeedGenerator.inspect().appearance.snake.plan.seed,
+    0xffffffff,
+  );
+  highBitSeedGenerator.dispose();
 
   const generator = createGenerator();
   generator.enter({ time: 0 });
@@ -943,6 +957,37 @@ test("snake tapers its body and engorgement reveals one pulsing meal", () => {
   assert.equal(frame.headStep, 11);
   assert.deepEqual(frame.cells.map(cell => cell.index), [5, 6, 7, 8, 9, 10, 11]);
   assert.deepEqual(frame.cells.map(cell => cell.level), [0, 1, 2, 3, 2, 1, 0]);
+  const collisionFrame = countdownSnakeFrame(
+    { path: [0, 1, 2, 1, 3] },
+    1,
+    { ...settings, lengthCells: 5 },
+  );
+  assert.deepEqual(collisionFrame.selfCollision, {
+    active: true,
+    cellIndices: [1],
+  });
+  assert.equal(
+    new Set(collisionFrame.cells.map(cell => cell.index)).size,
+    collisionFrame.cells.length,
+  );
+  const collisionColors = countdownSnakeGlyphColors(
+    { index: 1, level: 1 },
+    collisionFrame,
+    { columns: 4 },
+    ["dark", "light"],
+    {
+      amount: 1,
+      scope: "cell",
+      distribution: "level",
+      paletteColors: ["flicker-dark", "flicker-light"],
+      sampleAt: () => 1,
+      spreadsRankAcrossCell: () => false,
+      paletteIndexFromSample: () => 1,
+    },
+    0,
+    3,
+  );
+  assert.deepEqual(collisionColors, Array(4).fill("flicker-light"));
   const engorgementSettings = {
     maximumSubdivisionLevel: 3,
     engorgement: {
@@ -1335,6 +1380,112 @@ test("snake color variations are equally weighted and deterministically striped"
   assert.throws(
     () => countdownSnakeColorVariation([{ use: "none", weight: 0 }], 123, 0),
     /weight must be a finite positive number/,
+  );
+});
+
+test("snake disappearance equally selects instant removal or an accelerating tail dive", () => {
+  const variations = SETTINGS.countdownFramed.appearance.effects.snake
+    .disappearanceVariations;
+  assert.deepEqual(variations.map(({ use, weight }) => [use, weight]), [
+    ["instant", 1],
+    ["tail-dive", 1],
+  ]);
+  const selected = Array.from(
+    { length: 100 },
+    (_, tick) => countdownSnakeDisappearanceVariation(variations, 123, tick),
+  );
+  assert.deepEqual(
+    selected,
+    Array.from(
+      { length: 100 },
+      (_, tick) => countdownSnakeDisappearanceVariation(variations, 123, tick),
+    ),
+  );
+  assert.deepEqual(new Set(selected), new Set(["instant", "tail-dive"]));
+
+  const completedFrame = {
+    colorVariation: "horizontal-stripes",
+    cells: Array.from({ length: 7 }, (_, index) => ({ index, level: index % 4 })),
+  };
+  assert.equal(
+    countdownSnakeDisappearanceFrame(completedFrame, "instant", 0).cells.length,
+    0,
+  );
+  const diveStart = countdownSnakeDisappearanceFrame(
+    completedFrame,
+    "tail-dive",
+    0,
+  );
+  const diveMiddle = countdownSnakeDisappearanceFrame(
+    completedFrame,
+    "tail-dive",
+    0.5,
+  );
+  const diveEnd = countdownSnakeDisappearanceFrame(
+    completedFrame,
+    "tail-dive",
+    1,
+  );
+  assert.deepEqual(diveStart.cells, completedFrame.cells);
+  assert.equal(diveMiddle.progress, 0.25);
+  assert.deepEqual(diveMiddle.cells, completedFrame.cells.slice(1));
+  assert.deepEqual(diveEnd.cells, []);
+
+  const instantGenerator = createGenerator();
+  instantGenerator.enter({ time: 1 });
+  assert.equal(
+    instantGenerator.inspect().appearance.snake.disappearance.mode,
+    "instant",
+  );
+  assert.deepEqual(
+    instantGenerator.inspect().appearance.snake.disappearance.cells,
+    [],
+  );
+  instantGenerator.dispose();
+
+  const diveGenerator = createGenerator();
+  diveGenerator.enter({ time: 3 });
+  const initialDiveSnake = diveGenerator.inspect().appearance.snake;
+  const initialDive = initialDiveSnake.disappearance;
+  assert.equal(initialDive.sourceTick, 2);
+  assert.equal(initialDive.selectedMode, "tail-dive");
+  assert.equal(initialDive.phase, "dive");
+  assert.equal(initialDive.mode, "tail-dive");
+  assert.equal(initialDive.cells.length, initialDive.totalCellCount);
+  assert.deepEqual(initialDiveSnake.frame.cells, []);
+  assert.deepEqual(initialDiveSnake.renderFrame.cells, []);
+  assert.equal(initialDive.cells.at(-1).opacity, 0);
+  diveGenerator.update({ time: 3.75 });
+  const acceleratedDive = diveGenerator.inspect().appearance.snake.disappearance;
+  assert.ok(acceleratedDive.cells.length < initialDive.cells.length);
+  assert.deepEqual(
+    acceleratedDive.cells.at(-1),
+    initialDive.cells.at(-1),
+  );
+  diveGenerator.dispose();
+
+  const emergeGenerator = createGenerator();
+  emergeGenerator.enter({ time: 4 });
+  const emergeSnake = emergeGenerator.inspect().appearance.snake;
+  assert.equal(emergeSnake.disappearance.phase, "emerge");
+  assert.deepEqual(emergeSnake.disappearance.cells, []);
+  assert.equal(emergeSnake.plan.routeTick, 3);
+  assert.equal(emergeSnake.plan.path[0], initialDive.cells.at(-1).index);
+  assert.equal(emergeSnake.frame.cells[0].index, initialDive.cells.at(-1).index);
+  assert.equal(emergeSnake.frame.cells[0].opacity, 0);
+  emergeGenerator.update({ time: 4.5 });
+  const emergedSnake = emergeGenerator.inspect().appearance.snake;
+  assert.ok(emergedSnake.frame.cells.some(cell => cell.opacity !== 0));
+  assert.deepEqual(emergedSnake.disappearance.cells, []);
+  emergeGenerator.dispose();
+
+  assert.throws(
+    () => countdownSnakeDisappearanceVariation(
+      [{ use: "fade", weight: 1 }],
+      123,
+      0,
+    ),
+    /must be one of: instant, tail-dive/,
   );
 });
 

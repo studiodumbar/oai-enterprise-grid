@@ -32,3 +32,26 @@ test("a rebuilt director applies the core-duration override and preserves projec
   original.dispose();
   rebuilt.dispose();
 });
+
+test("noise-grid timing overrides remain authoritative over restored generator state", () => {
+  const original = createHeadlessDirector({ composition: "noise-grid" }).director;
+  original.update(FRAME_ZERO);
+  const snapshot = original.snapshotProjectState();
+  snapshot.generators.noiseGrid.settings.durationSeconds = 9;
+
+  const config = createRuntimeConfig({
+    compositionTimingOverrides: { "noise-grid": 9 },
+  });
+  const rebuilt = createHeadlessDirector({
+    composition: "noise-grid",
+    settings: config.settings,
+    compositionDefinitions: config.compositionDefinitions,
+  }).director;
+  rebuilt.restoreProjectState(snapshot);
+  rebuilt.update(FRAME_ZERO);
+
+  assert.equal(rebuilt.inspect().timeline.coreDuration, 9);
+  assert.equal(rebuilt.generator("noiseGrid").animationDuration(), 9);
+  original.dispose();
+  rebuilt.dispose();
+});

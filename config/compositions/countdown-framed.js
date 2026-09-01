@@ -89,6 +89,10 @@ const SNAKE_SETTINGS = Object.freeze({
     Object.freeze({ use: "instant", weight: 1 }),
     Object.freeze({ use: "tail-dive", weight: 1 }),
   ]),
+  selfCollision: Object.freeze({
+    enabled: true,
+    flickerMode: "strobe-stack",
+  }),
   dotMargin: 0.0,
   timingCurve: Object.freeze([0.42, 0, 0.58, 1]),
 });

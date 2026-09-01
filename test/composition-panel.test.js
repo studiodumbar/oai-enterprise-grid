@@ -5,6 +5,7 @@ import {
   canonicalCompositionChoices,
   compositionPanelTelemetry,
   createCompositionPanel,
+  normalizeAnimationDuration,
   normalizeLongSideCells,
   paletteChoices,
 } from "../src/ui/composition-panel.js";
@@ -50,6 +51,13 @@ test("long-side cell controls accept the supported integer range", () => {
   assert.throws(() => normalizeLongSideCells(1), /between 2 and 200/);
   assert.throws(() => normalizeLongSideCells(8.5), /between 2 and 200/);
   assert.throws(() => normalizeLongSideCells(201), /between 2 and 200/);
+});
+
+test("animation duration controls accept finite positive seconds", () => {
+  assert.equal(normalizeAnimationDuration(6), 6);
+  assert.equal(normalizeAnimationDuration("2.5"), 2.5);
+  assert.throws(() => normalizeAnimationDuration(0), /finite positive number/);
+  assert.throws(() => normalizeAnimationDuration(Infinity), /finite positive number/);
 });
 
 test("composition telemetry formats the shared timeline and interactive hint", () => {

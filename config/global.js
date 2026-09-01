@@ -44,7 +44,7 @@ export const GLOBAL_CONFIG = {
         // game-of-life
         // voronoi,
         // noise-grid
-        active: "interactive-flock",
+        active: "noise-grid",
         // Legacy phase defaults stay flat while compositions are migrated one by
         // one. A migrated composition overrides them through circleEndpoints.
         startWithCircle: true,

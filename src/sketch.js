@@ -142,6 +142,12 @@ new window.p5(p => {
     nextOverrides.set(compositionId, seconds);
     const config = resolvedRuntimeConfig(nextOverrides);
     const saved = director.snapshotProjectState();
+    // Noise-grid snapshots carry their imported duration as generator state.
+    // Keep the newly authored composition clock authoritative during the rebuild.
+    if (compositionId === "noise-grid") {
+      const settings = saved.generators?.noiseGrid?.settings;
+      if (settings) settings.durationSeconds = seconds;
+    }
     let next = null;
     try {
       next = createDirectorForRuntime(runtime, config);
@@ -208,6 +214,18 @@ new window.p5(p => {
     }
     const group = SETTINGS[settingsKey];
     return group.longSideCells ?? group.grid.longSideCells;
+  }
+
+  function currentNoiseGridDuration() {
+    const inspection = director?.inspect();
+    return inspection?.compositionId === "noise-grid"
+      ? inspection.timeline.coreDuration
+      : null;
+  }
+
+  function setNoiseGridDurationFromUi(seconds) {
+    if (director.inspect().compositionId !== "noise-grid") return null;
+    return setCoreDurationFromConsole(seconds);
   }
 
   function setLongSideCellsFromUi(cells) {
@@ -690,8 +708,8 @@ new window.p5(p => {
       usePalette: usePaletteFromUi,
       currentLongSideCells,
       setLongSideCells: setLongSideCellsFromUi,
-      noisePreviewVisible: () => noisePreviewPanel?.isVisible() ?? false,
-      setNoisePreviewVisible,
+      currentAnimationDuration: currentNoiseGridDuration,
+      setAnimationDuration: setNoiseGridDurationFromUi,
     });
     interactiveFlockPanel = createInteractiveFlockPanel({
       container: panelWorkspace.body("interactive-flock"),
