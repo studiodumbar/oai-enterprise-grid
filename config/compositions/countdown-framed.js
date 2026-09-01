@@ -1,5 +1,5 @@
 // Timeline editing guide: docs/countdown-timeline.md
-const COUNT_FROM_SECONDS = 180;
+const COUNT_FROM_SECONDS = 30;
 const APPEARANCE_SLOT_SECONDS = COUNT_FROM_SECONDS / 3;
 const BUBBLES_START_SECONDS = APPEARANCE_SLOT_SECONDS * 2;
 const SNAKE_TO_BUBBLES_DURATION_SECONDS = 3;
@@ -75,6 +75,20 @@ const SNAKE_SETTINGS = Object.freeze({
     }),
   }),
   maximumSubdivisionLevel: 3,
+  colorVariations: Object.freeze([
+    Object.freeze({ use: "none", weight: 1 }),
+    Object.freeze({ use: "vertical-stripes", weight: 1 }),
+    Object.freeze({ use: "horizontal-stripes", weight: 1 }),
+  ]),
+  secondaryMovement: Object.freeze({
+    enabled: true,
+    probability: 0.33,
+    directions: Object.freeze(["top", "bottom"]),
+  }),
+  disappearanceVariations: Object.freeze([
+    Object.freeze({ use: "instant", weight: 1 }),
+    Object.freeze({ use: "tail-dive", weight: 1 }),
+  ]),
   dotMargin: 0.0,
   timingCurve: Object.freeze([0.42, 0, 0.58, 1]),
 });
@@ -140,45 +154,14 @@ const BUBBLES_SETTINGS = Object.freeze({
 // The complete effect score; defaultTiming resolves every exclusive window.
 const COUNTDOWN_SYNTH_TRACKS = Object.freeze([
   Object.freeze({
-    id: "clock-main",
-    use: "clock",
-    zIndex: 10,
-    settings: CLOCK_SETTINGS,
-  }),
-  Object.freeze({
     id: "snake-main",
     use: "snake",
     zIndex: 20,
     settings: SNAKE_SETTINGS,
   }),
-  Object.freeze({
-    id: "bubbles-main",
-    use: "bubbles",
-    zIndex: 30,
-    settings: BUBBLES_SETTINGS,
-  }),
 ]);
 
-const COUNTDOWN_SYNTH_CONNECTIONS = Object.freeze([
-  Object.freeze({
-    id: "clock-snake",
-    from: COUNTDOWN_SYNTH_TRACKS[0].id,
-    to: COUNTDOWN_SYNTH_TRACKS[1].id,
-    use: "auto",
-  }),
-  Object.freeze({
-    id: "snake-bubbles",
-    from: COUNTDOWN_SYNTH_TRACKS[1].id,
-    to: COUNTDOWN_SYNTH_TRACKS[2].id,
-    use: "auto",
-    startSeconds: SNAKE_BUBBLES_START_SECONDS,
-    durationSeconds: SNAKE_TO_BUBBLES_DURATION_SECONDS,
-    evolution: Object.freeze({
-      startSeconds: SNAKE_BUBBLES_START_SECONDS,
-      durationSeconds: SNAKE_TO_BUBBLES_DURATION_SECONDS,
-    }),
-  }),
-]);
+const COUNTDOWN_SYNTH_CONNECTIONS = Object.freeze([]);
 
 export const COUNTDOWN_FRAMED_CONFIG = {
   settings: {

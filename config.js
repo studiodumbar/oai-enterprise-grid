@@ -235,6 +235,53 @@ function withCompositionTimingOverrides(configs, authoredOverrides) {
   });
 }
 
+function normalizedLongSideCellsOverrides(value) {
+  const entries = value instanceof Map ? [...value] : Object.entries(value ?? {});
+  const overrides = new Map();
+  for (const [settingsKey, cells] of entries) {
+    if (typeof settingsKey !== "string" || settingsKey.trim() === "") {
+      throw new TypeError("Long-side cell override keys must be non-empty strings.");
+    }
+    if (!Number.isSafeInteger(cells) || cells < 2 || cells > 200) {
+      throw new RangeError(
+        `Long-side cell override for "${settingsKey}" must be an integer between 2 and 200.`,
+      );
+    }
+    overrides.set(settingsKey, cells);
+  }
+  return overrides;
+}
+
+// Grid generators predate one shared settings shape: most keep density at the
+// root, while flock keeps it under `grid`. The UI targets the settings group
+// and this boundary preserves that authored distinction without mutation.
+function withLongSideCellsOverrides(settingsGroups, authoredOverrides) {
+  const overrides = normalizedLongSideCellsOverrides(authoredOverrides);
+  if (overrides.size === 0) return settingsGroups;
+  const resolved = { ...settingsGroups };
+  for (const [settingsKey, cells] of overrides) {
+    const group = settingsGroups[settingsKey];
+    if (!group || typeof group !== "object" || Array.isArray(group)) {
+      throw new Error(`Unknown long-side cell settings group "${settingsKey}".`);
+    }
+    if (Object.hasOwn(group, "longSideCells")) {
+      resolved[settingsKey] = { ...group, longSideCells: cells };
+      continue;
+    }
+    if (group.grid && Object.hasOwn(group.grid, "longSideCells")) {
+      resolved[settingsKey] = {
+        ...group,
+        grid: { ...group.grid, longSideCells: cells },
+      };
+      continue;
+    }
+    throw new Error(
+      `SETTINGS.${settingsKey} does not declare a longSideCells parameter.`,
+    );
+  }
+  return resolved;
+}
+
 // A settings group that declares `flicker` inherits the app-wide flicker
 // defaults and overrides only the keys it authored. Groups without flicker are
 // untouched, and the composition config modules stay unmutated.
@@ -362,22 +409,29 @@ function withResolvedCompositionTiming(settingsGroups, timingByKey) {
   return resolved;
 }
 
-function resolveRuntimeConfig(configs, paletteOverride = null) {
+function resolveRuntimeConfig(
+  configs,
+  paletteOverride = null,
+  longSideCellsOverrides = null,
+) {
   const timing = timingBySettingsKey(configs);
   const settings = withResolvedCompositionTiming(
-    withGlobalFlickerDefaults(mergeUnique("settings group", [
-      {
-        canvas: GLOBAL_CONFIG.canvas,
-        composition: GLOBAL_CONFIG.composition,
-        cellTransitions: GLOBAL_CONFIG.cellTransitions,
-        noiseFields: GLOBAL_CONFIG.noiseFields,
-      },
-      SHARED_CONFIG.settings,
-      ...configs.map(config => withGlobalCompositionDefaults(
-        config.settings,
-        paletteOverride,
-      )),
-    ])),
+    withLongSideCellsOverrides(
+      withGlobalFlickerDefaults(mergeUnique("settings group", [
+        {
+          canvas: GLOBAL_CONFIG.canvas,
+          composition: GLOBAL_CONFIG.composition,
+          cellTransitions: GLOBAL_CONFIG.cellTransitions,
+          noiseFields: GLOBAL_CONFIG.noiseFields,
+        },
+        SHARED_CONFIG.settings,
+        ...configs.map(config => withGlobalCompositionDefaults(
+          config.settings,
+          paletteOverride,
+        )),
+      ])),
+      longSideCellsOverrides,
+    ),
     timing,
   );
   return {
@@ -411,10 +465,12 @@ function normalizedPaletteOverride(value) {
 export function createRuntimeConfig({
   compositionTimingOverrides,
   paletteOverride,
+  longSideCellsOverrides,
 } = {}) {
   return resolveRuntimeConfig(
     withCompositionTimingOverrides(compositionConfigs, compositionTimingOverrides),
     normalizedPaletteOverride(paletteOverride),
+    longSideCellsOverrides,
   );
 }
 

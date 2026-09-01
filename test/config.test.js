@@ -927,6 +927,41 @@ test("runtime core-duration overrides rebuild timing without mutating authored c
   );
 });
 
+test("runtime long-side cell overrides support root and flock grid settings", () => {
+  const runtime = createRuntimeConfig({
+    longSideCellsOverrides: new Map([
+      ["voronoi", 18],
+      ["flock", 27],
+    ]),
+  });
+
+  assert.equal(runtime.settings.voronoi.longSideCells, 18);
+  assert.equal(runtime.settings.flock.grid.longSideCells, 27);
+  assert.equal(SETTINGS.voronoi.longSideCells, 12);
+  assert.equal(SETTINGS.flock.grid.longSideCells, 22);
+  const boundaries = createRuntimeConfig({
+    longSideCellsOverrides: { voronoi: 2, flock: 200 },
+  });
+  assert.equal(boundaries.settings.voronoi.longSideCells, 2);
+  assert.equal(boundaries.settings.flock.grid.longSideCells, 200);
+  assert.throws(
+    () => createRuntimeConfig({ longSideCellsOverrides: { missing: 12 } }),
+    /Unknown long-side cell settings group/,
+  );
+  assert.throws(
+    () => createRuntimeConfig({ longSideCellsOverrides: { base: 12 } }),
+    /does not declare a longSideCells parameter/,
+  );
+  assert.throws(
+    () => createRuntimeConfig({ longSideCellsOverrides: { voronoi: 1 } }),
+    /integer between 2 and 200/,
+  );
+  assert.throws(
+    () => createRuntimeConfig({ longSideCellsOverrides: { voronoi: 201 } }),
+    /integer between 2 and 200/,
+  );
+});
+
 test("inference-loop runs as four one-second composition beats", () => {
   assert.deepEqual(SETTINGS.inferenceLoop.timing, {
     bodyDurationSeconds: 4,

@@ -10,8 +10,19 @@ const SNAKE_PATH_SALT = 2089;
 const SNAKE_SAFE_PATH_SALT = 4099;
 const SNAKE_GLYPH_FILL_SALT = 4127;
 const SNAKE_ENGORGEMENT_MOVE_SALT = 4201;
+const SNAKE_COLOR_VARIATION_SALT = 4219;
+const SNAKE_SECONDARY_DIRECTION_SALT = 4231;
+const SNAKE_SECONDARY_EXIT_SALT = 4241;
+const SNAKE_DISAPPEARANCE_VARIATION_SALT = 4253;
 const SNAKE_ENGORGEMENT_PLAN_CACHE = new Map();
 const SNAKE_ENGORGEMENT_PLAN_CACHE_LIMIT = 32;
+const SNAKE_COLOR_VARIATION_MODES = new Set([
+  "none",
+  "vertical-stripes",
+  "horizontal-stripes",
+]);
+const SNAKE_SECONDARY_DIRECTIONS = new Set(["top", "bottom"]);
+const SNAKE_DISAPPEARANCE_VARIATION_MODES = new Set(["instant", "tail-dive"]);
 
 function requireObject(value, label) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -53,6 +64,167 @@ function requireString(value, label) {
     throw new TypeError(`${label} must be a non-empty string.`);
   }
   return value;
+}
+
+function resolveWeightedSnakeVariations(value, label, supportedModes, kind) {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new TypeError(`${label} must be a non-empty array.`);
+  }
+  const seen = new Set();
+  return Object.freeze(value.map((authored, index) => {
+    const entryLabel = `${label}[${index}]`;
+    const variation = requireObject(authored, entryLabel);
+    const use = requireString(variation.use, `${entryLabel}.use`);
+    if (!supportedModes.has(use)) {
+      throw new RangeError(
+        `${entryLabel}.use must be one of: ${[...supportedModes].join(", ")}.`,
+      );
+    }
+    if (seen.has(use)) {
+      throw new Error(`Duplicate countdown snake ${kind} "${use}".`);
+    }
+    seen.add(use);
+    const weight = requireFinitePositive(variation.weight, `${entryLabel}.weight`);
+    return Object.freeze({ use, weight });
+  }));
+}
+
+function resolveSnakeColorVariations(value) {
+  return resolveWeightedSnakeVariations(
+    value,
+    "countdownFramed.appearance.effects.snake.colorVariations",
+    SNAKE_COLOR_VARIATION_MODES,
+    "color variation",
+  );
+}
+
+function resolveSnakeDisappearanceVariations(value) {
+  return resolveWeightedSnakeVariations(
+    value,
+    "countdownFramed.appearance.effects.snake.disappearanceVariations",
+    SNAKE_DISAPPEARANCE_VARIATION_MODES,
+    "disappearance variation",
+  );
+}
+
+function weightedSnakeVariationAt(variations, seed, tick, salt) {
+  const totalWeight = variations.reduce((sum, variation) => sum + variation.weight, 0);
+  const target = hashUnit(seed, tick, salt) * totalWeight;
+  let cursor = 0;
+  for (const variation of variations) {
+    cursor += variation.weight;
+    if (target < cursor) return variation.use;
+  }
+  return variations.at(-1).use;
+}
+
+function resolveSnakeSecondaryMovement(value) {
+  const movement = requireObject(
+    value,
+    "countdownFramed.appearance.effects.snake.secondaryMovement",
+  );
+  if (typeof movement.enabled !== "boolean") {
+    throw new TypeError(
+      "countdownFramed.appearance.effects.snake.secondaryMovement.enabled "
+      + "must be a boolean.",
+    );
+  }
+  if (
+    !Number.isFinite(movement.probability)
+    || movement.probability < 0
+    || movement.probability > 1
+  ) {
+    throw new RangeError(
+      "countdownFramed.appearance.effects.snake.secondaryMovement.probability "
+      + "must be from zero to one.",
+    );
+  }
+  if (!Array.isArray(movement.directions) || movement.directions.length === 0) {
+    throw new TypeError(
+      "countdownFramed.appearance.effects.snake.secondaryMovement.directions "
+      + "must be a non-empty array.",
+    );
+  }
+  const directions = movement.directions.map((authored, index) => {
+    const direction = requireString(
+      authored,
+      `countdownFramed.appearance.effects.snake.secondaryMovement.directions[${index}]`,
+    );
+    if (!SNAKE_SECONDARY_DIRECTIONS.has(direction)) {
+      throw new RangeError(
+        "countdownFramed.appearance.effects.snake.secondaryMovement.directions "
+        + `must only contain: ${[...SNAKE_SECONDARY_DIRECTIONS].join(", ")}.`,
+      );
+    }
+    return direction;
+  });
+  if (new Set(directions).size !== directions.length) {
+    throw new Error(
+      "countdownFramed.appearance.effects.snake.secondaryMovement.directions "
+      + "cannot contain duplicates.",
+    );
+  }
+  return Object.freeze({
+    enabled: movement.enabled,
+    probability: movement.probability,
+    directions: Object.freeze(directions),
+  });
+}
+
+export function countdownSnakeColorVariation(variations, seed, tick) {
+  const resolved = resolveSnakeColorVariations(variations);
+  const variationSeed = requireNonNegativeInteger(seed, "Countdown snake variation seed");
+  const variationTick = requireNonNegativeInteger(tick, "Countdown snake variation tick");
+  return weightedSnakeVariationAt(
+    resolved,
+    variationSeed,
+    variationTick,
+    SNAKE_COLOR_VARIATION_SALT,
+  );
+}
+
+export function countdownSnakeDisappearanceVariation(variations, seed, tick) {
+  const resolved = resolveSnakeDisappearanceVariations(variations);
+  const variationSeed = requireNonNegativeInteger(
+    seed,
+    "Countdown snake disappearance variation seed",
+  );
+  const variationTick = requireNonNegativeInteger(
+    tick,
+    "Countdown snake disappearance variation tick",
+  );
+  return weightedSnakeVariationAt(
+    resolved,
+    variationSeed,
+    variationTick,
+    SNAKE_DISAPPEARANCE_VARIATION_SALT,
+  );
+}
+
+export function countdownSnakeSecondaryDirection(movement, seed, tick) {
+  const resolved = resolveSnakeSecondaryMovement(movement);
+  if (!resolved.enabled) return "none";
+  const directionSeed = requireNonNegativeInteger(
+    seed,
+    "Countdown snake secondary movement seed",
+  );
+  const directionTick = requireNonNegativeInteger(
+    tick,
+    "Countdown snake secondary movement tick",
+  );
+  const selection = hashUnit(
+    directionSeed,
+    directionTick,
+    SNAKE_SECONDARY_DIRECTION_SALT,
+  );
+  if (selection >= resolved.probability) return "none";
+  const directionIndex = Math.min(
+    resolved.directions.length - 1,
+    Math.floor(
+      selection / resolved.probability * resolved.directions.length,
+    ),
+  );
+  return resolved.directions[directionIndex];
 }
 
 export function resolveCountdownSnakeSettings(appearance, beatSeconds) {
@@ -177,6 +349,11 @@ export function resolveCountdownSnakeSettings(appearance, beatSeconds) {
       "countdownFramed.appearance.effects.snake.dotMargin must be from zero up to one.",
     );
   }
+  const colorVariations = resolveSnakeColorVariations(snake.colorVariations);
+  const disappearanceVariations = resolveSnakeDisappearanceVariations(
+    snake.disappearanceVariations,
+  );
+  const secondaryMovement = resolveSnakeSecondaryMovement(snake.secondaryMovement);
 
   return Object.freeze({
     enabled: snake.enabled,
@@ -208,6 +385,9 @@ export function resolveCountdownSnakeSettings(appearance, beatSeconds) {
       }),
     }),
     maximumSubdivisionLevel: maximumLevel,
+    colorVariations,
+    disappearanceVariations,
+    secondaryMovement,
     dotMargin: snake.dotMargin,
     timingCurve: Object.freeze(normalizeBezierCurve(
       snake.timingCurve,
@@ -436,6 +616,199 @@ export function countdownSnakePath(
   );
 }
 
+/** A deliberately indirect route that exits through one vertical edge and wraps once. */
+export function countdownSnakeWrappedPath(
+  { columns, rows },
+  sourceIndex,
+  targetIndex,
+  seed,
+  blockedCellIndices = [],
+  direction = "top",
+) {
+  const columnCount = requirePositiveInteger(columns, "Countdown snake columns");
+  const rowCount = requirePositiveInteger(rows, "Countdown snake rows");
+  if (rowCount < 2) {
+    throw new RangeError(
+      "Countdown snake secondary movement requires at least two rows.",
+    );
+  }
+  const cellCount = columnCount * rowCount;
+  const source = requireNonNegativeInteger(sourceIndex, "Countdown snake source cell");
+  const target = requireNonNegativeInteger(targetIndex, "Countdown snake target cell");
+  const pathSeed = requireNonNegativeInteger(seed, "Countdown snake seed") >>> 0;
+  if (source >= cellCount || target >= cellCount) {
+    throw new RangeError("Countdown snake cells must be inside the parent grid.");
+  }
+  if (!Array.isArray(blockedCellIndices)) {
+    throw new TypeError("Countdown snake blocked cells must be an array.");
+  }
+  if (!SNAKE_SECONDARY_DIRECTIONS.has(direction)) {
+    throw new RangeError(
+      `Countdown snake secondary direction must be one of: ${[
+        ...SNAKE_SECONDARY_DIRECTIONS,
+      ].join(", ")}.`,
+    );
+  }
+  const blocked = normalizedBlockedSnakeCells(
+    blockedCellIndices,
+    cellCount,
+    source,
+    target,
+  );
+  const exitRow = direction === "top" ? 0 : rowCount - 1;
+  const entryRow = direction === "top" ? rowCount - 1 : 0;
+  const candidateColumns = Array.from(
+    { length: columnCount },
+    (_, column) => column,
+  ).filter(column => (
+    exitRow * columnCount + column !== source
+    && exitRow * columnCount + column !== target
+    && entryRow * columnCount + column !== source
+    && entryRow * columnCount + column !== target
+    && !blocked.has(exitRow * columnCount + column)
+    && !blocked.has(entryRow * columnCount + column)
+  )).sort((first, second) => (
+    hashUnit(pathSeed, first, SNAKE_SECONDARY_EXIT_SALT)
+      - hashUnit(pathSeed, second, SNAKE_SECONDARY_EXIT_SALT)
+    || first - second
+  ));
+
+  const routeFrom = (
+    resolvedDirection,
+    exitColumn,
+    exitIndex,
+    entryIndex,
+    pathToExit,
+    pathFromEntry,
+    avoidance = "strict",
+  ) => Object.freeze({
+    direction: resolvedDirection,
+    avoidance,
+    exitColumn,
+    exitIndex,
+    entryIndex,
+    wrapStep: pathToExit.length,
+    path: Object.freeze([
+      ...pathToExit,
+      entryIndex,
+      ...pathFromEntry.slice(1),
+    ]),
+  });
+  const pathAttempts = 8;
+
+  for (const exitColumn of candidateColumns) {
+    const exitIndex = exitRow * columnCount + exitColumn;
+    const entryIndex = entryRow * columnCount + exitColumn;
+    for (let attempt = 0; attempt < pathAttempts; attempt += 1) {
+      const attemptSeed = pathSeed ^ Math.imul(
+        attempt + 1,
+        SNAKE_SECONDARY_EXIT_SALT,
+      );
+      try {
+        const pathToExit = countdownSnakePath(
+          { columns: columnCount, rows: rowCount },
+          source,
+          exitIndex,
+          attemptSeed,
+          [...blockedCellIndices, target, entryIndex],
+        );
+        const pathFromEntry = countdownSnakePath(
+          { columns: columnCount, rows: rowCount },
+          entryIndex,
+          target,
+          attemptSeed ^ SNAKE_SECONDARY_DIRECTION_SALT,
+          [...blockedCellIndices, ...pathToExit],
+        );
+        return routeFrom(
+          direction,
+          exitColumn,
+          exitIndex,
+          entryIndex,
+          pathToExit,
+          pathFromEntry,
+        );
+      } catch (error) {
+        if (!/cannot avoid the blocked cells/.test(error?.message ?? "")) throw error;
+      }
+      try {
+        const pathFromEntry = countdownSnakePath(
+          { columns: columnCount, rows: rowCount },
+          entryIndex,
+          target,
+          attemptSeed ^ SNAKE_SECONDARY_DIRECTION_SALT,
+          [...blockedCellIndices, source, exitIndex],
+        );
+        const pathToExit = countdownSnakePath(
+          { columns: columnCount, rows: rowCount },
+          source,
+          exitIndex,
+          attemptSeed,
+          [...blockedCellIndices, target, entryIndex, ...pathFromEntry],
+        );
+        return routeFrom(
+          direction,
+          exitColumn,
+          exitIndex,
+          entryIndex,
+          pathToExit,
+          pathFromEntry,
+        );
+      } catch (error) {
+        if (!/cannot avoid the blocked cells/.test(error?.message ?? "")) throw error;
+      }
+    }
+  }
+
+  // Narrow boards can make the two route halves intersect even though a
+  // wrapped route still exists. Keep the wrap and let frame extraction retain
+  // only the longest self-avoiding body suffix around that crossing.
+  for (const exitColumn of candidateColumns) {
+    const exitIndex = exitRow * columnCount + exitColumn;
+    const entryIndex = entryRow * columnCount + exitColumn;
+    try {
+      const pathToExit = countdownSnakePath(
+        { columns: columnCount, rows: rowCount },
+        source,
+        exitIndex,
+        pathSeed ^ SNAKE_SECONDARY_EXIT_SALT,
+        [...blockedCellIndices, target, entryIndex],
+      );
+      const pathFromEntry = countdownSnakePath(
+        { columns: columnCount, rows: rowCount },
+        entryIndex,
+        target,
+        pathSeed ^ SNAKE_SECONDARY_DIRECTION_SALT,
+        [...blockedCellIndices, source, exitIndex],
+      );
+      return routeFrom(
+        direction,
+        exitColumn,
+        exitIndex,
+        entryIndex,
+        pathToExit,
+        pathFromEntry,
+        "relaxed",
+      );
+    } catch (error) {
+      if (!/cannot avoid the blocked cells/.test(error?.message ?? "")) throw error;
+    }
+  }
+  if (blockedCellIndices.length > 0) {
+    const unblockedRoute = countdownSnakeWrappedPath(
+      { columns: columnCount, rows: rowCount },
+      source,
+      target,
+      pathSeed,
+      [],
+      direction,
+    );
+    return Object.freeze({ ...unblockedRoute, avoidance: "behind-timer" });
+  }
+  throw new RangeError(
+    `Countdown snake cannot reach a ${direction} wrap without crossing blocked cells.`,
+  );
+}
+
 export function countdownSnakeSubdivisionLevel(bodyIndex, bodyCellCount, maximumLevel = 3) {
   const index = requireNonNegativeInteger(bodyIndex, "Countdown snake body index");
   const count = requirePositiveInteger(bodyCellCount, "Countdown snake body cell count");
@@ -459,11 +832,29 @@ export function countdownSnakeFrame(plan, linearProgress, settings) {
     Math.floor(easedProgress * path.length),
   );
   const firstStep = Math.max(0, headStep - settings.lengthCells + 1);
-  const bodyPath = path.slice(firstStep, headStep + 1);
+  const bodyPath = [];
+  const bodyCells = new Set();
+  for (let step = headStep; step >= firstStep; step -= 1) {
+    if (bodyCells.has(path[step])) break;
+    bodyCells.add(path[step]);
+    bodyPath.unshift(path[step]);
+  }
+  const secondaryMovement = plan.secondaryMovement ?? {
+    enabled: false,
+    direction: "none",
+    exitColumn: null,
+    wrapStep: null,
+  };
   return {
     linearProgress: progress,
     progress: easedProgress,
     headStep,
+    colorVariation: plan.colorVariation ?? "vertical-stripes",
+    secondaryMovement: {
+      ...secondaryMovement,
+      wrapped: secondaryMovement.enabled
+        && headStep >= secondaryMovement.wrapStep,
+    },
     cells: bodyPath.map((index, bodyIndex) => ({
       index,
       level: countdownSnakeSubdivisionLevel(
@@ -508,9 +899,12 @@ function normalizedSnakeBody(cells, columns, cellCount) {
   if (new Set(body).size !== body.length) {
     throw new RangeError("Countdown snake engorgement entry body must be self-avoiding.");
   }
+  const rows = cellCount / columns;
   for (let index = 1; index < body.length; index += 1) {
-    if (snakeCellDistance(columns, body[index - 1], body[index]) === 1) continue;
-    throw new RangeError("Countdown snake engorgement entry body must move cardinally.");
+    if (toroidalCellDistance(columns, rows, body[index - 1], body[index]) === 1) continue;
+    throw new RangeError(
+      "Countdown snake engorgement entry body must move cardinally with wrapping.",
+    );
   }
   return body;
 }
@@ -713,11 +1107,22 @@ export function createCountdownSnakeEngorgementPlan({
   tickSeconds,
   growthStartProgress,
   mealRevealBeforeEndBeats,
+  colorVariation = "vertical-stripes",
 }) {
   const columns = requirePositiveInteger(layout?.columns, "Countdown snake engorgement columns");
   const rows = requirePositiveInteger(layout?.rows, "Countdown snake engorgement rows");
   const cellCount = columns * rows;
   const planSeed = requireNonNegativeInteger(seed, "Countdown snake engorgement seed") >>> 0;
+  const resolvedColorVariation = requireString(
+    colorVariation,
+    "Countdown snake engorgement color variation",
+  );
+  if (!SNAKE_COLOR_VARIATION_MODES.has(resolvedColorVariation)) {
+    throw new RangeError(
+      "Countdown snake engorgement color variation must be one of: "
+      + `${[...SNAKE_COLOR_VARIATION_MODES].join(", ")}.`,
+    );
+  }
   const start = requireFiniteNonNegative(startSeconds, "Countdown snake engorgement start");
   const end = requireFinitePositive(endSeconds, "Countdown snake engorgement end");
   const beatSeconds = requireFinitePositive(tickSeconds, "Countdown snake engorgement beat");
@@ -772,6 +1177,7 @@ export function createCountdownSnakeEngorgementPlan({
     entryBody,
     safeCellsByBeat: normalizedSafeCells,
     seed: planSeed,
+    colorVariation: resolvedColorVariation,
     start,
     end,
     beatSeconds,
@@ -875,6 +1281,7 @@ export function createCountdownSnakeEngorgementPlan({
   });
   const plan = {
     seed: planSeed,
+    colorVariation: resolvedColorVariation,
     columns,
     rows,
     startSeconds: start,
@@ -997,6 +1404,7 @@ export function countdownSnakeEngorgementFrame(plan, linearProgress, settings) {
   return {
     linearProgress: progress,
     progress,
+    colorVariation: plan.colorVariation ?? "vertical-stripes",
     routeStep,
     currentLength: body.length + (foodVisible || progress >= 1 ? 1 : 0),
     targetLength: plan.targetLength,
@@ -1049,13 +1457,39 @@ export function countdownSnakeGlyphColors(
   }
   const subdivisions = 1 << cell.level;
   const glyphCount = subdivisions * subdivisions;
-  const paletteIndex = Math.min(cell.level, palette.length - 1);
-  const baseColor = palette[paletteIndex];
+  // Keep the biggest parent dot solid; every smaller size alternates an
+  // adjacent pair that moves from the dark end toward the light end.
+  const levelProgress = maximumSubdivisionLevel === 0
+    ? 0
+    : Math.max(0, Math.min(1, cell.level / maximumSubdivisionLevel));
+  const paletteEndIndex = cell.level === 0
+    ? 0
+    : Math.round(levelProgress * (palette.length - 1));
+  const paletteStartIndex = cell.level === 0
+    ? 0
+    : Math.max(0, paletteEndIndex - 1);
+  const paletteBandSize = paletteEndIndex - paletteStartIndex + 1;
+  const colorVariation = frame.colorVariation ?? "vertical-stripes";
+  if (!SNAKE_COLOR_VARIATION_MODES.has(colorVariation)) {
+    throw new RangeError(
+      `Countdown snake color variation "${colorVariation}" is unsupported.`,
+    );
+  }
+  const baseColors = Array.from(
+    { length: glyphCount },
+    (_, glyphIndex) => {
+      if (colorVariation === "none") return palette[paletteEndIndex];
+      const stripeIndex = colorVariation === "horizontal-stripes"
+        ? Math.floor(glyphIndex / subdivisions)
+        : glyphIndex % subdivisions;
+      return palette[paletteStartIndex + stripeIndex % paletteBandSize];
+    },
+  );
   const canFlicker = frame.deathFlicker?.active === true
     && cell.food !== true
     && typeof flicker?.sampleAt === "function"
     && Array.isArray(flicker?.paletteColors);
-  if (!canFlicker) return Array(glyphCount).fill(baseColor);
+  if (!canFlicker) return baseColors;
   const parentColumn = cell.index % layout.columns;
   const parentRow = Math.floor(cell.index / layout.columns);
   const indices = flickerPaletteIndicesForCell({
@@ -1064,7 +1498,8 @@ export function countdownSnakeGlyphColors(
     time,
     parentColumn,
     parentRow,
-    basePosition: paletteIndex / Math.max(1, palette.length - 1),
+    basePosition: (paletteStartIndex + paletteEndIndex) * 0.5
+      / Math.max(1, palette.length - 1),
     dotsPerCellAxis: 1 << maximumSubdivisionLevel,
   });
   return Array.from(indices, index => flicker.paletteColors[index]);
@@ -1108,7 +1543,9 @@ export function drawCountdownSnake(
     const flickerActive = frame.deathFlicker?.active === true
       && cell.food !== true
       && flicker !== null;
-    if (!flickerActive) {
+    const glyphColorsVary = glyphColors.some(color => color !== glyphColors[0]);
+    const fillEachGlyph = flickerActive || glyphColorsVary;
+    if (!fillEachGlyph) {
       context.fillStyle = glyphColors[0];
       context.beginPath();
     }
@@ -1139,17 +1576,17 @@ export function drawCountdownSnake(
         const x = layout.offsetX + column * layout.cellSize + (subColumn + 0.5) * slot;
         const y = layout.offsetY + row * layout.cellSize + (subRow + 0.5) * slot;
         const glyphIndex = subRow * subdivisions + subColumn;
-        if (flickerActive) {
+        if (fillEachGlyph) {
           context.fillStyle = glyphColors[glyphIndex];
           context.beginPath();
         }
         context.moveTo(x + radius, y);
         context.arc(x, y, radius, 0, Math.PI * 2);
-        if (flickerActive) context.fill();
+        if (fillEachGlyph) context.fill();
         hasVisibleGlyph = true;
       }
     }
-    if (hasVisibleGlyph && !flickerActive) context.fill();
+    if (hasVisibleGlyph && !fillEachGlyph) context.fill();
   }
   context.globalAlpha = baseAlpha;
   context.restore();

@@ -94,6 +94,14 @@ export function compositionPanelTelemetry(inspection) {
   });
 }
 
+export function normalizeLongSideCells(value) {
+  const cells = Number(value);
+  if (!Number.isSafeInteger(cells) || cells < 2 || cells > 200) {
+    throw new RangeError("Long side cells must be an integer between 2 and 200.");
+  }
+  return cells;
+}
+
 export function createCompositionPanel({
   container,
   compositions,
@@ -102,6 +110,8 @@ export function createCompositionPanel({
   palettes,
   currentPalette,
   usePalette,
+  currentLongSideCells = () => null,
+  setLongSideCells = () => null,
   noisePreviewVisible = () => false,
   setNoisePreviewVisible = () => false,
 } = {}) {
@@ -115,6 +125,12 @@ export function createCompositionPanel({
     throw new TypeError(
       "Composition panel needs currentPalette() and usePalette(name) functions.",
     );
+  }
+  if (
+    typeof currentLongSideCells !== "function"
+    || typeof setLongSideCells !== "function"
+  ) {
+    throw new TypeError("Composition panel long-side cell hooks must be functions.");
   }
   if (
     typeof noisePreviewVisible !== "function"
@@ -141,10 +157,13 @@ export function createCompositionPanel({
   if (!knownPalettes.has(initialPalette)) {
     throw new RangeError(`Current palette "${initialPalette}" is not available.`);
   }
+  const initialLongSideCells = currentLongSideCells();
+  if (initialLongSideCells !== null) normalizeLongSideCells(initialLongSideCells);
 
   const values = {
     composition: initial.compositionId,
     palette: initialPalette,
+    longSideCells: initialLongSideCells ?? 2,
     phase: initial.phase,
     cycle: initial.cycle,
     coreDuration: initial.coreDuration,
@@ -163,6 +182,12 @@ export function createCompositionPanel({
   const paletteBinding = pane.addBinding(values, "palette", {
     label: "Palette",
     options: paletteOptions,
+  });
+  const longSideCellsBinding = pane.addBinding(values, "longSideCells", {
+    label: "Long side cells",
+    min: 2,
+    max: 200,
+    step: 1,
   });
   pane.addBinding(values, "phase", { label: "Phase", readonly: true });
   pane.addBinding(values, "cycle", { label: "Cycle", readonly: true });
@@ -187,11 +212,16 @@ export function createCompositionPanel({
     try {
       values.composition = telemetry.compositionId;
       values.palette = currentPalette();
+      const longSideCells = currentLongSideCells();
+      if (longSideCells !== null) {
+        values.longSideCells = normalizeLongSideCells(longSideCells);
+      }
       values.phase = telemetry.phase;
       values.cycle = telemetry.cycle;
       values.coreDuration = telemetry.coreDuration;
       values.instruction = telemetry.instruction;
       values.noisePreview = Boolean(noisePreviewVisible());
+      longSideCellsBinding.hidden = longSideCells === null;
       instructionBinding.hidden = telemetry.instruction === "";
       pane.refresh();
     } finally {
@@ -212,6 +242,16 @@ export function createCompositionPanel({
     if (syncing || event.last === false || event.value === currentPalette()) return;
     try {
       usePalette(event.value);
+    } finally {
+      sync();
+    }
+  });
+  longSideCellsBinding.on("change", event => {
+    if (syncing || event.last === false) return;
+    const cells = normalizeLongSideCells(event.value);
+    if (cells === currentLongSideCells()) return;
+    try {
+      setLongSideCells(cells);
     } finally {
       sync();
     }

@@ -5,6 +5,7 @@ import {
   canonicalCompositionChoices,
   compositionPanelTelemetry,
   createCompositionPanel,
+  normalizeLongSideCells,
   paletteChoices,
 } from "../src/ui/composition-panel.js";
 
@@ -41,6 +42,14 @@ test("palette choices expose every available palette with readable labels", () =
     { id: "warm-gray", label: "Warm Gray" },
   ]);
   assert.throws(() => paletteChoices({}), /at least one palette/);
+});
+
+test("long-side cell controls accept the supported integer range", () => {
+  assert.equal(normalizeLongSideCells(2), 2);
+  assert.equal(normalizeLongSideCells("200"), 200);
+  assert.throws(() => normalizeLongSideCells(1), /between 2 and 200/);
+  assert.throws(() => normalizeLongSideCells(8.5), /between 2 and 200/);
+  assert.throws(() => normalizeLongSideCells(201), /between 2 and 200/);
 });
 
 test("composition telemetry formats the shared timeline and interactive hint", () => {

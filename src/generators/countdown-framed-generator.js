@@ -44,11 +44,14 @@ import { drawCountdownBubblesDebug } from "../countdown-appearance-effects/bubbl
 import { createFlicker } from "../visuals/flicker/index.js";
 import {
   countdownAppearanceSeed,
+  countdownSnakeColorVariation,
   countdownSnakeEngorgementFrame,
   countdownSnakeFrame,
   countdownSnakeLengthAt,
   countdownSnakePath,
+  countdownSnakeSecondaryDirection,
   countdownSnakeTextSafeCells,
+  countdownSnakeWrappedPath,
   createCountdownSnakeEngorgementPlan,
   drawCountdownSnake,
   resolveCountdownSnakeSettings,
@@ -575,12 +578,18 @@ export class CountdownFramedGenerator {
     );
     if (this.snakeSettings !== null) {
       debug.config(
-        "countdown-effect mode=snake enabled=%s seed=%d evolve=%s distance=%d palette=%s duration=%.3f cells=%d grow=%s mergeBubbles=%s engorgement=%s growthMode=%s growthStartProgress=%.3f mealRevealBeats=%.3f mealPulseScale=%.3f mealPulseCurve=%j deathFlicker=%s deathFlickerBeats=%.3f deathFlickerMode=%s curve=%j",
+        "countdown-effect mode=snake enabled=%s seed=%d evolve=%s distance=%d palette=%s variations=%s secondaryMovement=%s movementProbability=%.3f directions=%s duration=%.3f cells=%d grow=%s mergeBubbles=%s engorgement=%s growthMode=%s growthStartProgress=%.3f mealRevealBeats=%.3f mealPulseScale=%.3f mealPulseCurve=%j deathFlicker=%s deathFlickerBeats=%.3f deathFlickerMode=%s curve=%j",
         this.snakeSettings.enabled ? "yes" : "no",
         this.snakeSettings.seed,
         this.snakeSettings.evolveSeed ? "yes" : "no",
         this.snakeSettings.minimumCellDistance,
         this.snakeSettings.palette,
+        this.snakeSettings.colorVariations
+          .map(variation => `${variation.use}:${variation.weight}`)
+          .join(","),
+        this.snakeSettings.secondaryMovement.enabled ? "yes" : "no",
+        this.snakeSettings.secondaryMovement.probability,
+        this.snakeSettings.secondaryMovement.directions.join(","),
         this.snakeSettings.duration.seconds,
         this.snakeSettings.lengthCells,
         this.snakeSettings.growAfterEachTick ? "yes" : "no",
@@ -1081,6 +1090,16 @@ export class CountdownFramedGenerator {
       growthTick,
       this.snakeSettings.evolveSeed && evolution.evolutionEnabled,
     );
+    const colorVariation = countdownSnakeColorVariation(
+      this.snakeSettings.colorVariations,
+      seed,
+      tick,
+    );
+    const secondaryDirection = countdownSnakeSecondaryDirection(
+      this.snakeSettings.secondaryMovement,
+      seed,
+      tick,
+    );
     const textSafeCellIndices = countdownSnakeTextSafeCells(
       this.layout,
       sourceCellIndex,
@@ -1094,7 +1113,36 @@ export class CountdownFramedGenerator {
     const blockedCellIndices = [
       ...new Set([...textSafeCellIndices, ...targetSafeCellIndices]),
     ];
-    const pathBetweenCells = countdownSnakePath(
+    let secondaryRoute = null;
+    let secondaryRouteError = null;
+    if (secondaryDirection !== "none") {
+      const directionAttempts = [
+        secondaryDirection,
+        ...this.snakeSettings.secondaryMovement.directions.filter(
+          direction => direction !== secondaryDirection,
+        ),
+      ];
+      for (const direction of directionAttempts) {
+        try {
+          secondaryRoute = countdownSnakeWrappedPath(
+            this.layout,
+            sourceCellIndex,
+            targetCellIndex,
+            seed,
+            blockedCellIndices,
+            direction,
+          );
+          break;
+        } catch (error) {
+          if (!/cannot reach a .* wrap without crossing blocked cells/.test(
+            error?.message ?? "",
+          )) throw error;
+          secondaryRouteError = error;
+        }
+      }
+      if (secondaryRoute === null) throw secondaryRouteError;
+    }
+    const pathBetweenCells = secondaryRoute?.path ?? countdownSnakePath(
       this.layout,
       sourceCellIndex,
       targetCellIndex,
@@ -1108,6 +1156,15 @@ export class CountdownFramedGenerator {
       frameSettings,
       plan: {
         seed,
+        colorVariation,
+        secondaryMovement: {
+          enabled: secondaryRoute !== null,
+          preferredDirection: secondaryDirection,
+          direction: secondaryRoute?.direction ?? "none",
+          avoidance: secondaryRoute?.avoidance ?? "none",
+          exitColumn: secondaryRoute?.exitColumn ?? null,
+          wrapStep: secondaryRoute === null ? null : secondaryRoute.wrapStep - 1,
+        },
         sourceCellIndex,
         targetCellIndex,
         sourceIndex: path[0],
@@ -1204,6 +1261,7 @@ export class CountdownFramedGenerator {
           this.snakeSettings.engorgement.growthStartProgress,
         mealRevealBeforeEndBeats:
           this.snakeSettings.engorgement.mealRevealBeforeEndBeats,
+        colorVariation: this.snakeHandoff.plan.colorVariation,
       });
     } catch (error) {
       debug.config(
@@ -1298,13 +1356,20 @@ export class CountdownFramedGenerator {
       )
     ) {
       debug.plan(
-        "countdown-effect mode=snake tick=%d evolution=%s evolutionTick=%d growthTick=%d engorgement=%s seed=%d length=%d maximum=%d cellFrom=%d cellTo=%d from=%d to=%d textSafeCells=%s path=%s",
+        "countdown-effect mode=snake tick=%d evolution=%s evolutionTick=%d growthTick=%d engorgement=%s seed=%d variation=%s secondaryMovement=%s preferredDirection=%s direction=%s avoidance=%s exitColumn=%s wrapStep=%s length=%d maximum=%d cellFrom=%d cellTo=%d from=%d to=%d textSafeCells=%s path=%s",
         tick,
         state.evolution.evolutionEnabled ? "yes" : "no",
         state.evolution.evolutionTick,
         this.snakeGrowthTick,
         this.snakeEngorgementAt(tick * this.tickSeconds).connectorActive ? "yes" : "no",
         state.plan.seed,
+        state.plan.colorVariation,
+        state.plan.secondaryMovement.enabled ? "yes" : "no",
+        state.plan.secondaryMovement.preferredDirection,
+        state.plan.secondaryMovement.direction,
+        state.plan.secondaryMovement.avoidance,
+        state.plan.secondaryMovement.exitColumn ?? "none",
+        state.plan.secondaryMovement.wrapStep ?? "none",
         state.frameSettings.lengthCells,
         this.availableSnakeCellCount,
         state.plan.sourceCellIndex,
@@ -1951,10 +2016,13 @@ export class CountdownFramedGenerator {
       && (force || orderChanged || tickChanged || snakeChanged)
     ) {
       debug.transition(
-        "countdown-snake stage=%s tick=%d engorgement=%s head=%d/%d cell=%d levels=%s progress=%.3f",
+        "countdown-snake stage=%s tick=%d engorgement=%s direction=%s wrapped=%s wrapStep=%s head=%d/%d cell=%d levels=%s progress=%.3f",
         this.appearanceStage.effect,
         this.tick,
         this.snakeEngorgementFrame !== null ? "yes" : "no",
+        nextSnakeFrame.secondaryMovement.direction,
+        nextSnakeFrame.secondaryMovement.wrapped ? "yes" : "no",
+        nextSnakeFrame.secondaryMovement.wrapStep ?? "none",
         nextSnakeFrame.headStep,
         this.snakePlan.path.length - 1,
         nextSnakeRenderFrame.headIndex
@@ -2654,6 +2722,14 @@ export class CountdownFramedGenerator {
           enabled: this.snakeSettings.enabled,
           paletteName: this.snakeSettings.palette,
           palette: [...this.snakePalette],
+          colorVariations: this.snakeSettings.colorVariations.map(
+            variation => ({ ...variation }),
+          ),
+          secondaryMovement: {
+            enabled: this.snakeSettings.secondaryMovement.enabled,
+            probability: this.snakeSettings.secondaryMovement.probability,
+            directions: [...this.snakeSettings.secondaryMovement.directions],
+          },
           durationSeconds: this.snakeSettings.duration.seconds,
           durationSource: this.snakeSettings.duration.source,
           timingCurve: [...this.snakeSettings.timingCurve],
@@ -2729,6 +2805,8 @@ export class CountdownFramedGenerator {
           },
           plan: this.snakePlan === null ? null : {
             seed: this.snakePlan.seed,
+            colorVariation: this.snakePlan.colorVariation,
+            secondaryMovement: { ...this.snakePlan.secondaryMovement },
             sourceCellIndex: this.snakePlan.sourceCellIndex,
             targetCellIndex: this.snakePlan.targetCellIndex,
             sourceIndex: this.snakePlan.sourceIndex,
@@ -2741,11 +2819,14 @@ export class CountdownFramedGenerator {
             linearProgress: this.snakeFrame.linearProgress,
             progress: this.snakeFrame.progress,
             headStep: this.snakeFrame.headStep,
+            colorVariation: this.snakeFrame.colorVariation,
+            secondaryMovement: { ...this.snakeFrame.secondaryMovement },
             cells: this.snakeFrame.cells.map(cell => ({ ...cell })),
           },
           renderFrame: this.snakeRenderFrame === null ? null : {
             linearProgress: this.snakeRenderFrame.linearProgress,
             progress: this.snakeRenderFrame.progress,
+            colorVariation: this.snakeRenderFrame.colorVariation,
             headStep: this.snakeRenderFrame.headStep ?? null,
             routeStep: this.snakeRenderFrame.routeStep ?? null,
             headIndex: this.snakeRenderFrame.headIndex

@@ -20,7 +20,7 @@ export const DEFAULT_PANEL_DEFINITIONS = Object.freeze([
     code: "CMP",
     column: "left",
     width: 288,
-    expandedHeight: 272,
+    expandedHeight: 304,
     resetLayout: true,
   }),
   Object.freeze({

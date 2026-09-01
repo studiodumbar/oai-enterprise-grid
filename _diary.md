@@ -1,7 +1,6 @@
 
 [ === tbd== ]
 
-[] snake to always be the full size
 [] throw errors by design if a setting is picked which was not ported for the composition
 
 
@@ -10,8 +9,21 @@
 
 [] single circle grow
 
+## clock
+- variation in terms of block sizes
+- other block to be offset, like in terms of timing 
 
-[] overlap
+## snake
+snake feels too repetitive
+    > more vatiation
+    > secondary movement
+    > interesting details
+
+## bubbles 
+- fill the composition completely
+- blocks feel a bit jumpy / jittery, before the explosion
+- more rhythm in the composition with grid block size
+- end at the center
 
 ## snake -> bubbles
 [] adjust decay transition

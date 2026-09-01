@@ -51,6 +51,7 @@ new window.p5(p => {
   let interactiveFlockPanel = null;
   let lastPanelSyncTime = -Infinity;
   let compositionTimingOverrides = new Map();
+  let longSideCellsOverrides = new Map();
   let paletteOverride = null;
   let projectSeed = createProjectSeed();
   const pointer = { active: false, x: 0, y: 0 };
@@ -97,7 +98,11 @@ new window.p5(p => {
   }
 
   function resolvedRuntimeConfig(overrides = compositionTimingOverrides) {
-    if (overrides.size === 0 && paletteOverride === null) {
+    if (
+      overrides.size === 0
+      && longSideCellsOverrides.size === 0
+      && paletteOverride === null
+    ) {
       return {
         settings: SETTINGS,
         generatorDefinitions: GENERATOR_DEFINITIONS,
@@ -106,6 +111,7 @@ new window.p5(p => {
     }
     return createRuntimeConfig({
       compositionTimingOverrides: overrides,
+      longSideCellsOverrides,
       paletteOverride,
     });
   }
@@ -179,6 +185,80 @@ new window.p5(p => {
 
   function activePalette() {
     return paletteOverride ?? GLOBAL_CONFIG.palette;
+  }
+
+  function activeLongSideCellsSettingsKey() {
+    const inspection = director?.inspect();
+    for (const entry of inspection?.renderPlan ?? []) {
+      const settingsKey = inspection.generators?.[entry.use]?.settingsKey;
+      const group = settingsKey ? SETTINGS[settingsKey] : null;
+      if (
+        Object.hasOwn(group ?? {}, "longSideCells")
+        || Object.hasOwn(group?.grid ?? {}, "longSideCells")
+      ) return settingsKey;
+    }
+    return null;
+  }
+
+  function currentLongSideCells() {
+    const settingsKey = activeLongSideCellsSettingsKey();
+    if (settingsKey === null) return null;
+    if (longSideCellsOverrides.has(settingsKey)) {
+      return longSideCellsOverrides.get(settingsKey);
+    }
+    const group = SETTINGS[settingsKey];
+    return group.longSideCells ?? group.grid.longSideCells;
+  }
+
+  function setLongSideCellsFromUi(cells) {
+    if (inputLocked) return currentLongSideCells();
+    const settingsKey = activeLongSideCellsSettingsKey();
+    if (settingsKey === null) return null;
+    const compositionId = director.inspect().compositionId;
+    const nextOverrides = new Map(longSideCellsOverrides);
+    nextOverrides.set(settingsKey, cells);
+    const savedOverrides = longSideCellsOverrides;
+    let next = null;
+    longSideCellsOverrides = nextOverrides;
+    try {
+      next = createDirectorForRuntime(runtime);
+      next.use(compositionId);
+      next.update(currentFrame(0));
+      next.seek(elapsed);
+    } catch (error) {
+      longSideCellsOverrides = savedOverrides;
+      next?.dispose();
+      debug.config(
+        "long-side-cells state=failed composition=%s settings=%s cells=%d error=%s",
+        compositionId,
+        settingsKey,
+        cells,
+        error?.name ?? "Error",
+      );
+      throw error;
+    }
+
+    const previous = director;
+    director = next;
+    try {
+      previous.dispose();
+    } catch (error) {
+      debug.config(
+        "long-side-cells state=dispose-failed composition=%s settings=%s error=%s",
+        compositionId,
+        settingsKey,
+        error?.name ?? "Error",
+      );
+    }
+    debug.config(
+      "long-side-cells state=applied composition=%s settings=%s cells=%d",
+      compositionId,
+      settingsKey,
+      cells,
+    );
+    syncCompositionUi();
+    renderPreview();
+    return currentLongSideCells();
   }
 
   function usePaletteFromUi(name) {
@@ -608,6 +688,8 @@ new window.p5(p => {
       palettes: GLOBAL_CONFIG.palettes,
       currentPalette: activePalette,
       usePalette: usePaletteFromUi,
+      currentLongSideCells,
+      setLongSideCells: setLongSideCellsFromUi,
       noisePreviewVisible: () => noisePreviewPanel?.isVisible() ?? false,
       setNoisePreviewVisible,
     });

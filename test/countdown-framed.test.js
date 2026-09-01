@@ -40,13 +40,16 @@ import {
 } from "../src/countdown-appearance-effects/frame.js";
 import {
   countdownAppearanceSeed,
+  countdownSnakeColorVariation,
   countdownSnakeEngorgementFrame,
   countdownSnakeFrame,
   countdownSnakeGlyphColors,
   countdownSnakeLengthAt,
   countdownSnakePath,
+  countdownSnakeSecondaryDirection,
   countdownSnakeSubdivisionLevel,
   countdownSnakeTextSafeCells,
+  countdownSnakeWrappedPath,
   createCountdownSnakeEngorgementPlan,
   drawCountdownSnake,
 } from "../src/countdown-appearance-effects/snake.js";
@@ -755,6 +758,125 @@ test("snake builds a deterministic shortest cardinal route", () => {
   assert.notDeepEqual(first, countdownSnakePath(layout, 0, 19, 43));
 });
 
+test("snake selects top or bottom secondary movement one third of the time", () => {
+  const layout = { columns: 5, rows: 4 };
+  const movement = SETTINGS.countdownFramed.appearance.effects.snake.secondaryMovement;
+  assert.equal(movement.probability, 0.33);
+  const directions = Array.from(
+    { length: 3000 },
+    (_, tick) => countdownSnakeSecondaryDirection(movement, 123, tick),
+  );
+  assert.deepEqual(
+    directions,
+    Array.from(
+      { length: 3000 },
+      (_, tick) => countdownSnakeSecondaryDirection(movement, 123, tick),
+    ),
+  );
+  assert.deepEqual(new Set(directions), new Set(["none", "top", "bottom"]));
+  const wrappedRatio = directions.filter(direction => direction !== "none").length
+    / directions.length;
+  assert.ok(Math.abs(wrappedRatio - movement.probability) < 0.02);
+  assert.equal(
+    countdownSnakeSecondaryDirection({ ...movement, enabled: false }, 123, 0),
+    "none",
+  );
+  assert.equal(
+    countdownSnakeSecondaryDirection({ ...movement, probability: 0 }, 123, 1),
+    "none",
+  );
+
+  for (const direction of ["top", "bottom"]) {
+    const route = countdownSnakeWrappedPath(layout, 6, 18, 42, [], direction);
+    const repeated = countdownSnakeWrappedPath(layout, 6, 18, 42, [], direction);
+    assert.deepEqual(route, repeated);
+    assert.equal(route.direction, direction);
+    assert.equal(route.path[0], 6);
+    assert.equal(route.path.at(-1), 18);
+    assert.equal(route.exitIndex % layout.columns, route.entryIndex % layout.columns);
+    assert.equal(
+      Math.floor(route.exitIndex / layout.columns),
+      direction === "top" ? 0 : layout.rows - 1,
+    );
+    assert.equal(
+      Math.floor(route.entryIndex / layout.columns),
+      direction === "top" ? layout.rows - 1 : 0,
+    );
+    assert.equal(route.path[route.wrapStep - 1], route.exitIndex);
+    assert.equal(route.path[route.wrapStep], route.entryIndex);
+    assert.equal(
+      route.path.slice(1).filter((cell, index) => (
+        manhattanGridDistance(layout, route.path[index], cell) !== 1
+      )).length,
+      1,
+    );
+  }
+
+  const generator = createGenerator();
+  generator.enter({ time: 0 });
+  const initialSnake = generator.inspect().appearance.snake;
+  assert.equal(initialSnake.secondaryMovement.enabled, true);
+  assert.equal(initialSnake.secondaryMovement.probability, 0.33);
+  assert.equal(initialSnake.plan.secondaryMovement.enabled, false);
+  assert.equal(initialSnake.plan.secondaryMovement.direction, "none");
+  assert.equal(initialSnake.frame.secondaryMovement.wrapped, false);
+  generator.update({ time: 1 });
+  const wrappedSnake = generator.inspect().appearance.snake;
+  assert.equal(wrappedSnake.plan.secondaryMovement.enabled, true);
+  assert.ok(["top", "bottom"].includes(
+    wrappedSnake.plan.secondaryMovement.direction,
+  ));
+  generator.update({ time: 1.999 });
+  assert.equal(
+    generator.inspect().appearance.snake.frame.secondaryMovement.wrapped,
+    true,
+  );
+  generator.dispose();
+
+  const narrow = createGenerator({
+    seed: 28,
+    viewport: { width: 390, height: 844 },
+  });
+  narrow.enter({ time: 29.999 });
+  const narrowSnake = narrow.inspect().appearance.snake;
+  assert.equal(narrowSnake.plan.secondaryMovement.avoidance, "behind-timer");
+  assert.equal(
+    new Set(narrowSnake.frame.cells.map(cell => cell.index)).size,
+    narrowSnake.frame.cells.length,
+  );
+  narrow.dispose();
+
+  assert.throws(
+    () => countdownSnakeWrappedPath(layout, 6, 18, 42, [], "left"),
+    /secondary direction must be one of: top, bottom/,
+  );
+  const snakeSettings = SETTINGS.countdownFramed.appearance.effects.snake;
+  assert.throws(
+    () => createGenerator({
+      options: withTrackSettings("snake", {
+        ...snakeSettings,
+        secondaryMovement: {
+          ...snakeSettings.secondaryMovement,
+          probability: 1.01,
+        },
+      }),
+    }),
+    /probability must be from zero to one/,
+  );
+  assert.throws(
+    () => createGenerator({
+      options: withTrackSettings("snake", {
+        ...snakeSettings,
+        secondaryMovement: {
+          ...snakeSettings.secondaryMovement,
+          directions: ["left"],
+        },
+      }),
+    }),
+    /directions must only contain: top, bottom/,
+  );
+});
+
 test("snake routes around every parent cell touched by the timer safe zone", () => {
   const layout = { columns: 5, rows: 3 };
   const textSafeCellIndices = countdownSnakeTextSafeCells(
@@ -1141,12 +1263,79 @@ test("snake resolves and renders its independently declared palette", () => {
     beginPath();
   };
   generator.draw({}, {}, context);
-  assert.equal(context.counts.fill, snake.renderFrame.cells.length);
+  assert.ok(context.counts.fill >= snake.renderFrame.cells.length);
   assert.equal(
     pathColors.at(-1),
     countdownPalette({ palette: paletteName }, PALETTES)[0],
   );
   generator.dispose();
+});
+
+test("snake alternates progressively lighter pairs except on its biggest dots", () => {
+  const palette = ["darkest", "dark", "middle", "light", "lightest"];
+  const layout = { columns: 4 };
+  const frame = { deathFlicker: { active: false } };
+  const colorsAtLevel = level => countdownSnakeGlyphColors(
+    { index: level, level },
+    frame,
+    layout,
+    palette,
+    null,
+    0,
+    3,
+  );
+
+  assert.deepEqual(colorsAtLevel(0), ["darkest"]);
+  assert.deepEqual(new Set(colorsAtLevel(1)), new Set(["darkest", "dark"]));
+  assert.deepEqual(new Set(colorsAtLevel(2)), new Set(["middle", "light"]));
+  assert.deepEqual(new Set(colorsAtLevel(3)), new Set(["light", "lightest"]));
+  assert.deepEqual(
+    new Set(Array.from({ length: 4 }, (_, level) => colorsAtLevel(level)).flat()),
+    new Set(palette),
+  );
+});
+
+test("snake color variations are equally weighted and deterministically striped", () => {
+  const variations = SETTINGS.countdownFramed.appearance.effects.snake.colorVariations;
+  assert.deepEqual(variations.map(({ use, weight }) => [use, weight]), [
+    ["none", 1],
+    ["vertical-stripes", 1],
+    ["horizontal-stripes", 1],
+  ]);
+  const selected = Array.from(
+    { length: 30 },
+    (_, tick) => countdownSnakeColorVariation(variations, 123, tick),
+  );
+  assert.deepEqual(
+    selected,
+    Array.from(
+      { length: 30 },
+      (_, tick) => countdownSnakeColorVariation(variations, 123, tick),
+    ),
+  );
+  assert.deepEqual(new Set(selected), new Set(variations.map(({ use }) => use)));
+
+  const palette = ["darkest", "dark", "middle", "light", "lightest"];
+  const colors = colorVariation => countdownSnakeGlyphColors(
+    { index: 0, level: 1 },
+    { colorVariation, deathFlicker: { active: false } },
+    { columns: 4 },
+    palette,
+    null,
+    0,
+    3,
+  );
+  assert.deepEqual(colors("none"), ["dark", "dark", "dark", "dark"]);
+  assert.deepEqual(colors("vertical-stripes"), ["darkest", "dark", "darkest", "dark"]);
+  assert.deepEqual(colors("horizontal-stripes"), ["darkest", "darkest", "dark", "dark"]);
+  assert.throws(
+    () => countdownSnakeColorVariation([{ use: "diagonal", weight: 1 }], 123, 0),
+    /must be one of: none, vertical-stripes, horizontal-stripes/,
+  );
+  assert.throws(
+    () => countdownSnakeColorVariation([{ use: "none", weight: 0 }], 123, 0),
+    /weight must be a finite positive number/,
+  );
 });
 
 test("clock reveals two nearby 2x2 squares clockwise per beat", () => {
